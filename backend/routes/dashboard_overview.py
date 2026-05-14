@@ -188,8 +188,9 @@ async def get_dashboard_overview(
                 JOIN orders o ON ic.order_id = o.order_id
                 WHERE o.status != 'cancelled' 
                 AND o.is_archived = 0
+                AND ic.status IN ('preparation', 'ready', 'ready_for_issue', 'issued', 'partial_return')
                 ORDER BY ic.created_at DESC
-                LIMIT 100
+                LIMIT 500
             """))
             
             for row in cards_result:
