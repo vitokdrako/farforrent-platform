@@ -241,7 +241,7 @@ function PhotoUploader({ item, onUploaded }: { item: any; onUploaded: () => void
 }
 
 /* ─────────── Modal: Tab - Info ─────────── */
-function TabInfo({ item, onMarkAudited, onToggle, onDelete, onShowCondition }: any) {
+function TabInfo({ item, onMarkAudited, onToggle, onDelete, onShowCondition, onDuplicate }: any) {
   const [marking, setMarking] = useState(false)
 
   const handleMark = async () => {
@@ -275,6 +275,9 @@ function TabInfo({ item, onMarkAudited, onToggle, onDelete, onShowCondition }: a
             </PillButton>
             <PillButton tone="ghost" onClick={onShowCondition} data-testid="condition-log-btn">
               <span className="flex items-center gap-1"><History className="w-3.5 h-3.5" />Журнал стану</span>
+            </PillButton>
+            <PillButton tone="ghost" onClick={() => onDuplicate(item)} data-testid="duplicate-product-btn">
+              <span className="flex items-center gap-1"><Plus className="w-3.5 h-3.5" />Дублювати</span>
             </PillButton>
           </div>
           {/* Toggle / Delete */}
@@ -658,7 +661,7 @@ function TabHistory({ item }: any) {
 }
 
 /* ─────────── Product detail modal ─────────── */
-function ProductModal({ item, onClose, categories, subcategoriesMap, hashtags, shapes, colorDict, materialDict, onItemUpdated, onToggle, onDelete }: any) {
+function ProductModal({ item, onClose, categories, subcategoriesMap, hashtags, shapes, colorDict, materialDict, onItemUpdated, onToggle, onDelete, onDuplicate }: any) {
   const [tab, setTab] = useState<'info' | 'edit' | 'damage' | 'history'>('info')
   const [showConditionPanel, setShowConditionPanel] = useState(false)
 
@@ -713,7 +716,7 @@ function ProductModal({ item, onClose, categories, subcategoriesMap, hashtags, s
             ))}
           </div>
           <div className="flex-1 overflow-y-auto p-4">
-            {tab === 'info' && <TabInfo item={item} onMarkAudited={handleMarkAudited} onToggle={onToggle} onDelete={onDelete} onShowCondition={() => setShowConditionPanel(true)} />}
+            {tab === 'info' && <TabInfo item={item} onMarkAudited={handleMarkAudited} onToggle={onToggle} onDelete={onDelete} onShowCondition={() => setShowConditionPanel(true)} onDuplicate={onDuplicate} />}
             {tab === 'edit' && <TabEdit item={item} categories={categories} subcategoriesMap={subcategoriesMap} hashtags={hashtags} shapes={shapes} colorDict={colorDict} materialDict={materialDict} onSave={() => { onItemUpdated(); setTab('info') }} />}
             {tab === 'damage' && <TabDamage item={item} onDone={onItemUpdated} />}
             {tab === 'history' && <TabHistory item={item} />}
@@ -727,7 +730,7 @@ function ProductModal({ item, onClose, categories, subcategoriesMap, hashtags, s
 }
 
 /* ─────────── Create New Product Modal ─────────── */
-function CreateProductModal({ onClose, onCreated, categories, subcategoriesMap, hashtags, shapes, colorDict, materialDict }: any) {
+function CreateProductModal({ onClose, onCreated, categories, subcategoriesMap, hashtags, shapes, colorDict, materialDict, prefillItem }: any) {
   const emptyItem = {
     name: '', code: '', price: 0, rentalPrice: 0,
     color: '', material: '', categoryName: '', subcategoryName: '',
@@ -735,21 +738,33 @@ function CreateProductModal({ onClose, onCreated, categories, subcategoriesMap, 
     shape: '', hashtags: [], qty: 0, zone: '',
     description: '', careInstructions: '',
   }
+  // If duplicating: pre-fill fields, but clear SKU (must be unique) and reset qty to 0
+  const initialItem = prefillItem
+    ? {
+        ...prefillItem,
+        name: `${prefillItem.name || ''} (копія)`,
+        code: '',
+        qty: 0,
+      }
+    : emptyItem
+  const isDup = !!prefillItem
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4" data-testid="create-product-modal">
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
       <div className="relative bg-white rounded-2xl w-full max-w-3xl max-h-[92vh] overflow-hidden flex flex-col shadow-xl">
         <div className="flex items-center justify-between px-4 py-3 border-b border-corp-border bg-corp-bg-light/50">
           <div className="min-w-0">
-            <div className="text-xs text-corp-text-muted">Новий товар</div>
-            <h2 className="text-base sm:text-lg font-bold text-corp-text-dark">Додати позицію в каталог</h2>
+            <div className="text-xs text-corp-text-muted">{isDup ? `Дублювання з ${prefillItem.code || ''}` : 'Новий товар'}</div>
+            <h2 className="text-base sm:text-lg font-bold text-corp-text-dark">
+              {isDup ? 'Створити копію позиції' : 'Додати позицію в каталог'}
+            </h2>
           </div>
           <button onClick={onClose} className="p-1.5 hover:bg-slate-200 rounded-lg text-corp-text-muted flex-shrink-0" data-testid="create-modal-close-btn">
             <X className="w-5 h-5" />
           </button>
         </div>
         <div className="flex-1 overflow-y-auto p-4">
-          <TabEdit item={emptyItem} categories={categories} subcategoriesMap={subcategoriesMap}
+          <TabEdit item={initialItem} categories={categories} subcategoriesMap={subcategoriesMap}
             hashtags={hashtags} shapes={shapes} colorDict={colorDict} materialDict={materialDict}
             onSave={onCreated} />
         </div>
@@ -773,6 +788,7 @@ export default function ReauditCabinetFull({ onBackToDashboard, onNavigateToTask
   const resetFilters = () => setFilters({ q: '', category: '', subcategory: '', statusFilter: '' })
   const [selectedItem, setSelectedItem] = useState<any>(null)
   const [showCreateModal, setShowCreateModal] = useState(false)
+  const [duplicateFrom, setDuplicateFrom] = useState<any>(null)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [page, setPage] = useState(1)
   const PAGE_SIZE = 60
@@ -873,6 +889,11 @@ export default function ReauditCabinetFull({ onBackToDashboard, onNavigateToTask
     } catch (e) { alert('Помилка: ' + String(e)) }
   }
 
+  const handleDuplicate = (itm: any) => {
+    setSelectedItem(null)
+    setDuplicateFrom(itm)
+  }
+
   // Active filter count for badge
   const activeFilters = [filters.q, filters.category, filters.subcategory, filters.statusFilter].filter(Boolean).length
 
@@ -948,16 +969,18 @@ export default function ReauditCabinetFull({ onBackToDashboard, onNavigateToTask
         <ProductModal item={selectedItem} onClose={() => setSelectedItem(null)}
           categories={categories} subcategoriesMap={subcategoriesMap}
           hashtags={hashtags} shapes={shapes} colorDict={colorDict} materialDict={materialDict}
-          onItemUpdated={handleItemUpdated} onToggle={handleToggle} onDelete={handleDelete} />
+          onItemUpdated={handleItemUpdated} onToggle={handleToggle} onDelete={handleDelete}
+          onDuplicate={handleDuplicate} />
       )}
 
-      {/* Create new product modal */}
-      {showCreateModal && (
+      {/* Create new product modal (also used for duplicate) */}
+      {(showCreateModal || duplicateFrom) && (
         <CreateProductModal
-          onClose={() => setShowCreateModal(false)}
-          onCreated={() => { setShowCreateModal(false); handleItemUpdated() }}
+          onClose={() => { setShowCreateModal(false); setDuplicateFrom(null) }}
+          onCreated={() => { setShowCreateModal(false); setDuplicateFrom(null); handleItemUpdated() }}
           categories={categories} subcategoriesMap={subcategoriesMap}
           hashtags={hashtags} shapes={shapes} colorDict={colorDict} materialDict={materialDict}
+          prefillItem={duplicateFrom}
         />
       )}
     </div>
