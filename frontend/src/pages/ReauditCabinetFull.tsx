@@ -377,12 +377,24 @@ function TabEdit({ item, categories, subcategoriesMap, hashtags: hashtagDict, sh
       const token = localStorage.getItem('token')
       const headers: any = { 'Content-Type': 'application/json' }
       if (token) headers['Authorization'] = `Bearer ${token}`
-      const editRes = await fetch(`${BACKEND_URL}/api/audit/items/${item.id}/edit-full`, {
-        method: 'PUT', headers, body: JSON.stringify({
-          ...form,
-          color: form.colors.join(', '),
-          material: form.materials.join(', '),
+      const isNew = !item.id
+      const payload = {
+        ...form,
+        color: form.colors.join(', '),
+        material: form.materials.join(', '),
+      }
+      if (isNew) {
+        if (!form.name?.trim()) { alert('Введіть назву товару'); return }
+        if (!form.code?.trim()) { alert('Введіть SKU'); return }
+        const res = await fetch(`${BACKEND_URL}/api/audit/items`, {
+          method: 'POST', headers, body: JSON.stringify(payload)
         })
+        if (!res.ok) { const r = await res.json(); alert('Помилка: ' + (r.detail || '')); return }
+        onSave()
+        return
+      }
+      const editRes = await fetch(`${BACKEND_URL}/api/audit/items/${item.id}/edit-full`, {
+        method: 'PUT', headers, body: JSON.stringify(payload)
       })
       if (!editRes.ok) { const r = await editRes.json(); alert('Помилка: ' + (r.detail || '')); return }
       await fetch(`${BACKEND_URL}/api/audit/items/${item.id}/update-info`, {
@@ -474,7 +486,7 @@ function TabEdit({ item, categories, subcategoriesMap, hashtags: hashtagDict, sh
         <textarea rows={2} value={form.careInstructions} onChange={e => f('careInstructions', e.target.value)} className="w-full rounded-lg border border-corp-border px-3 py-2 text-sm resize-none" /></div>
       <div className="flex justify-end">
         <PillButton tone="green" onClick={handleSave} disabled={saving} data-testid="save-edit-btn">
-          {saving ? 'Зберігаю...' : 'Зберегти зміни'}
+          {saving ? 'Зберігаю...' : (item.id ? 'Зберегти зміни' : 'Створити товар')}
         </PillButton>
       </div>
     </div>
@@ -714,6 +726,38 @@ function ProductModal({ item, onClose, categories, subcategoriesMap, hashtags, s
   )
 }
 
+/* ─────────── Create New Product Modal ─────────── */
+function CreateProductModal({ onClose, onCreated, categories, subcategoriesMap, hashtags, shapes, colorDict, materialDict }: any) {
+  const emptyItem = {
+    name: '', code: '', price: 0, rentalPrice: 0,
+    color: '', material: '', categoryName: '', subcategoryName: '',
+    heightCm: '', widthCm: '', depthCm: '', diameterCm: '',
+    shape: '', hashtags: [], qty: 0, zone: '',
+    description: '', careInstructions: '',
+  }
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4" data-testid="create-product-modal">
+      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
+      <div className="relative bg-white rounded-2xl w-full max-w-3xl max-h-[92vh] overflow-hidden flex flex-col shadow-xl">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-corp-border bg-corp-bg-light/50">
+          <div className="min-w-0">
+            <div className="text-xs text-corp-text-muted">Новий товар</div>
+            <h2 className="text-base sm:text-lg font-bold text-corp-text-dark">Додати позицію в каталог</h2>
+          </div>
+          <button onClick={onClose} className="p-1.5 hover:bg-slate-200 rounded-lg text-corp-text-muted flex-shrink-0" data-testid="create-modal-close-btn">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+        <div className="flex-1 overflow-y-auto p-4">
+          <TabEdit item={emptyItem} categories={categories} subcategoriesMap={subcategoriesMap}
+            hashtags={hashtags} shapes={shapes} colorDict={colorDict} materialDict={materialDict}
+            onSave={onCreated} />
+        </div>
+      </div>
+    </div>
+  )
+}
+
 /* ════════════ MAIN COMPONENT ════════════ */
 export default function ReauditCabinetFull({ onBackToDashboard, onNavigateToTasks }: { onBackToDashboard?: () => void; onNavigateToTasks?: () => void }) {
   const [items, setItems] = useState<any[]>([])
@@ -728,6 +772,7 @@ export default function ReauditCabinetFull({ onBackToDashboard, onNavigateToTask
   const [filters, setFilters] = useState({ q: '', category: '', subcategory: '', statusFilter: '' })
   const resetFilters = () => setFilters({ q: '', category: '', subcategory: '', statusFilter: '' })
   const [selectedItem, setSelectedItem] = useState<any>(null)
+  const [showCreateModal, setShowCreateModal] = useState(false)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [page, setPage] = useState(1)
   const PAGE_SIZE = 60
@@ -851,6 +896,14 @@ export default function ReauditCabinetFull({ onBackToDashboard, onNavigateToTask
               <div className="text-sm text-corp-text-muted">
                 {loading ? 'Завантаження...' : `${items.length} товарів`}
               </div>
+              <button
+                onClick={() => setShowCreateModal(true)}
+                className="flex items-center gap-1.5 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 text-xs font-semibold shadow-sm transition"
+                data-testid="add-product-btn"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                Додати товар
+              </button>
             </div>
             {loading ? (
               <div className="py-16 text-center text-corp-text-muted">Завантаження...</div>
@@ -896,6 +949,16 @@ export default function ReauditCabinetFull({ onBackToDashboard, onNavigateToTask
           categories={categories} subcategoriesMap={subcategoriesMap}
           hashtags={hashtags} shapes={shapes} colorDict={colorDict} materialDict={materialDict}
           onItemUpdated={handleItemUpdated} onToggle={handleToggle} onDelete={handleDelete} />
+      )}
+
+      {/* Create new product modal */}
+      {showCreateModal && (
+        <CreateProductModal
+          onClose={() => setShowCreateModal(false)}
+          onCreated={() => { setShowCreateModal(false); handleItemUpdated() }}
+          categories={categories} subcategoriesMap={subcategoriesMap}
+          hashtags={hashtags} shapes={shapes} colorDict={colorDict} materialDict={materialDict}
+        />
       )}
     </div>
   )

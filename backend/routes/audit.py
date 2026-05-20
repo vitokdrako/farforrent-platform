@@ -1189,6 +1189,112 @@ async def get_audit_history(
 
 
 
+@router.post("/items")
+async def create_item(
+    data: dict,
+    rh_db: Session = Depends(get_rh_db)
+):
+    """
+    Створення нового товару з модалки кабінету переобліку.
+    Записує в RentalHub products. Унікальний product_id = MAX+1.
+    """
+    try:
+        import json
+        import re
+
+        name = (data.get('name') or '').strip()
+        sku = (data.get('code') or '').strip()
+        if not name:
+            raise HTTPException(status_code=400, detail="Назва обов'язкова")
+        if not sku:
+            raise HTTPException(status_code=400, detail="SKU обов'язковий")
+
+        # SKU uniqueness
+        existing = rh_db.execute(
+            text("SELECT product_id FROM products WHERE sku = :sku LIMIT 1"),
+            {"sku": sku}
+        ).fetchone()
+        if existing:
+            raise HTTPException(status_code=409, detail=f"SKU '{sku}' вже існує (товар #{existing[0]})")
+
+        # Next product_id
+        next_id_row = rh_db.execute(text("SELECT COALESCE(MAX(product_id), 0) + 1 FROM products")).fetchone()
+        new_product_id = int(next_id_row[0] or 1)
+
+        # Build INSERT params
+        params = {
+            "product_id": new_product_id,
+            "sku": sku,
+            "name": name,
+            "price": float(data.get('price') or 0),
+            "rental_price": float(data.get('rentalPrice') or 0),
+            "color": data.get('color') or '',
+            "material": data.get('material') or '',
+            "category_name": data.get('category') or None,
+            "subcategory_name": data.get('subcategory') or None,
+            "shape": data.get('shape') or None,
+            "height_cm": float(data['height']) if data.get('height') not in (None, '', 0) else None,
+            "width_cm": float(data['width']) if data.get('width') not in (None, '', 0) else None,
+            "depth_cm": float(data['depth']) if data.get('depth') not in (None, '', 0) else None,
+            "diameter_cm": float(data['diameter']) if data.get('diameter') not in (None, '', 0) else None,
+            "quantity": int(data.get('qty') or 0),
+            "zone": data.get('zone') or None,
+            "description": data.get('description') or None,
+            "care_instructions": data.get('careInstructions') or None,
+            "hashtags": json.dumps(data['hashtags'], ensure_ascii=False) if isinstance(data.get('hashtags'), list) else None,
+            "image_url": data.get('imageUrl') or None,
+            "status": 1,
+        }
+
+        # legacy size string
+        size_parts = [str(x) for x in [params['height_cm'], params['width_cm'], params['depth_cm']] if x]
+        params['size'] = 'x'.join(size_parts) if size_parts else None
+
+        # aisle/shelf parsing
+        aisle = None
+        shelf = None
+        if params['zone']:
+            m = re.match(r'([A-Za-z]+\d+)-(\d+)', params['zone'])
+            if m:
+                aisle = m.group(1)
+                shelf = m.group(2)
+        params['aisle'] = aisle
+        params['shelf'] = shelf
+
+        rh_db.execute(text("""
+            INSERT INTO products (
+                product_id, sku, name, price, rental_price,
+                color, material, category_name, subcategory_name,
+                shape, height_cm, width_cm, depth_cm, diameter_cm,
+                quantity, zone, aisle, shelf, size,
+                description, care_instructions, hashtags, image_url,
+                status, state, created_at, synced_at
+            ) VALUES (
+                :product_id, :sku, :name, :price, :rental_price,
+                :color, :material, :category_name, :subcategory_name,
+                :shape, :height_cm, :width_cm, :depth_cm, :diameter_cm,
+                :quantity, :zone, :aisle, :shelf, :size,
+                :description, :care_instructions, :hashtags, :image_url,
+                :status, 'available', NOW(), NOW()
+            )
+        """), params)
+        rh_db.commit()
+
+        return {
+            "success": True,
+            "product_id": new_product_id,
+            "id": f"A-{new_product_id}",
+            "message": f"Товар '{name}' створено (#{new_product_id})"
+        }
+
+    except HTTPException:
+        rh_db.rollback()
+        raise
+    except Exception as e:
+        rh_db.rollback()
+        raise HTTPException(status_code=500, detail=f"Помилка створення: {str(e)}")
+
+
 @router.put("/items/{item_id}/edit-full")
 async def edit_item_full(
     item_id: str,
