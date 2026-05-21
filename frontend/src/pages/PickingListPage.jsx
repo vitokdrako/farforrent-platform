@@ -161,6 +161,7 @@ export default function PickingListPage() {
               <Section title="📨 Очікують підтвердження клієнтом" subtitle="Нові ордери, поки що тільки для перегляду" tone="amber">
                 {data.awaiting_orders.map(card => (
                   <CardView key={`o-${card.order_id}`} card={card} cardId={`o-${card.order_id}`} kind="awaiting"
+                    onOpenCard={() => navigate(`/order/${card.order_id}/view`)}
                     checked={checked[`o-${card.order_id}`] || {}} onToggle={(pid) => toggleCheck(`o-${card.order_id}`, pid)} />
                 ))}
               </Section>
@@ -171,6 +172,7 @@ export default function PickingListPage() {
                   const { done, total } = cardProgress(card)
                   return <CardView key={card.id} card={card} cardId={card.id} kind="prep"
                     progress={{ done, total }}
+                    onOpenCard={() => navigate(`/issue/${card.id}`)}
                     checked={checked[card.id] || {}} onToggle={(pid) => toggleCheck(card.id, pid)} />
                 })}
               </Section>
@@ -181,6 +183,7 @@ export default function PickingListPage() {
                   const { done, total } = cardProgress(card)
                   return <CardView key={card.id} card={card} cardId={card.id} kind="ready"
                     progress={{ done, total }}
+                    onOpenCard={() => navigate(`/issue/${card.id}`)}
                     checked={checked[card.id] || {}} onToggle={(pid) => toggleCheck(card.id, pid)} />
                 })}
               </Section>
@@ -224,14 +227,21 @@ function Section({ title, subtitle, tone, children }) {
   )
 }
 
-function CardView({ card, cardId, kind, progress, checked, onToggle }) {
+function CardView({ card, cardId, kind, progress, checked, onToggle, onOpenCard }) {
   return (
     <article className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden break-inside-avoid print:shadow-none print:border print:rounded-none">
       {/* Card header */}
       <header className="px-4 py-3 border-b border-slate-100 bg-slate-50/40 flex flex-wrap items-center gap-3">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="font-bold text-slate-800 text-base">{card.order_number}</span>
+            <button
+              onClick={onOpenCard}
+              title="Відкрити картку"
+              className="font-bold text-slate-800 text-base hover:text-corp-primary hover:underline underline-offset-2 transition print:no-underline print:text-slate-800"
+              data-testid={`open-card-${cardId}`}
+            >
+              {card.order_number}
+            </button>
             <span className="text-slate-400">·</span>
             <span className="text-sm text-slate-700 font-medium">{card.customer_name || '—'}</span>
             {card.customer_phone && (
