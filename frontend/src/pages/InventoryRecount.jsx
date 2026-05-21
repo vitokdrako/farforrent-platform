@@ -171,7 +171,7 @@ export default function InventoryRecount() {
           <h2 className="text-xl font-semibold mb-2">Товар не знайдено</h2>
           <p className="text-corp-text-main mb-4">SKU: {sku}</p>
           <button 
-            onClick={() => navigate('/')}
+            onClick={() => (window.history.length > 1 ? navigate(-1) : navigate('/'))}
             className="px-4 py-2 bg-slate-800 text-white rounded-lg hover:bg-slate-700"
           >
             Повернутися
@@ -397,7 +397,7 @@ export default function InventoryRecount() {
               {saving ? 'Збереження...' : '💾 Зберегти переобік'}
             </button>
             <button
-              onClick={() => navigate('/')}
+              onClick={() => (window.history.length > 1 ? navigate(-1) : navigate('/'))}
               className="px-4 py-3 bg-slate-100 text-slate-700 rounded-lg font-medium hover:bg-slate-200"
             >
               Скасувати

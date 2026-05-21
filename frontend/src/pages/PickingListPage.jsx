@@ -96,7 +96,7 @@ export default function PickingListPage() {
       {/* Toolbar */}
       <div className="bg-white border-b border-corp-border sticky top-0 z-20 print:hidden">
         <div className="max-w-7xl mx-auto px-4 py-3 flex flex-wrap items-center gap-3">
-          <button onClick={() => navigate('/manager')}
+          <button onClick={() => (window.history.length > 1 ? navigate(-1) : navigate('/manager'))}
             className="p-2 rounded-lg hover:bg-slate-100 text-slate-600" data-testid="back-btn">
             <ArrowLeft className="w-4 h-4" />
           </button>

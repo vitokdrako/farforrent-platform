@@ -216,7 +216,7 @@ export default function ReturnVersionWorkspace() {
         <CorporateHeader cabinetName="Часткове повернення" />
         <div className="max-w-4xl mx-auto p-6 text-center">
           <p className="text-slate-500">Версія не знайдена</p>
-          <button onClick={() => navigate('/manager')} className="mt-4 text-blue-600">
+          <button onClick={() => (window.history.length > 1 ? navigate(-1) : navigate('/manager'))} className="mt-4 text-blue-600">
             ← Повернутись
           </button>
         </div>
@@ -234,11 +234,11 @@ export default function ReturnVersionWorkspace() {
       <div className="max-w-4xl mx-auto p-6">
         {/* Навігація */}
         <button 
-          onClick={() => navigate('/manager')}
+          onClick={() => (window.history.length > 1 ? navigate(-1) : navigate('/manager'))}
           className="flex items-center gap-2 text-sm text-slate-600 hover:text-slate-800 mb-4"
         >
           <ArrowLeft className="w-4 h-4" />
-          Назад до дашборду
+          Назад
         </button>
 
         {/* Заголовок */}

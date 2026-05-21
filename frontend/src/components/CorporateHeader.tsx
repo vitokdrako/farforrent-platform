@@ -42,7 +42,11 @@ export default function CorporateHeader({
   const handleBack = () => {
     if (onBackClick) {
       onBackClick();
+    } else if (window.history.length > 1) {
+      // Step back in browser history (e.g. back to PickingList, Calendar, etc.)
+      navigate(-1);
     } else {
+      // Fallback if opened in a new tab without history
       navigate('/manager');
     }
   };

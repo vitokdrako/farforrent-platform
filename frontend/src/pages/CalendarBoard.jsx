@@ -348,7 +348,7 @@ export default function CalendarBoard(){
       <div className="mb-4 flex items-center justify-between">
         <h1 className="text-2xl font-bold">Календар ордерів</h1>
         <div className="flex gap-2">
-          <button onClick={()=>navigate('/')} className="rounded-full bg-slate-200 px-3 py-1 text-sm">← Назад</button>
+          <button onClick={() => (window.history.length > 1 ? navigate(-1) : navigate('/'))} className="rounded-full bg-slate-200 px-3 py-1 text-sm">← Назад</button>
           <button onClick={()=>setPanel({open:true, date})} className="rounded-full bg-slate-900 px-3 py-1 text-sm text-white">Список на день</button>
         </div>
       </div>

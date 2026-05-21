@@ -392,7 +392,7 @@ export default function PartialReturnVersionWorkspace() {
         <div className="flex items-center justify-between max-w-7xl mx-auto">
           <div className="flex items-center gap-4">
             <button 
-              onClick={() => navigate('/manager')}
+              onClick={() => (window.history.length > 1 ? navigate(-1) : navigate('/manager'))}
               className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
             >
               <ArrowLeft className="w-5 h-5 text-slate-600" />
