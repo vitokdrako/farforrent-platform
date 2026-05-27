@@ -6,7 +6,7 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import CorporateHeader from '../components/CorporateHeader'
-import { Users, FileText, FolderTree, Receipt, Settings, Plus, Pencil, Trash2, Shield, X, Eye, EyeOff, Key, Save, RefreshCw, Check, ArrowLeft, RotateCcw, Code, BarChart3, CalendarCheck, ChevronDown, ChevronUp } from 'lucide-react'
+import { Users, FileText, FolderTree, Receipt, Settings, Plus, Pencil, Trash2, Shield, X, Eye, EyeOff, Key, Save, RefreshCw, Check, ArrowLeft, RotateCcw, Code, BarChart3, CalendarCheck, ChevronDown, ChevronUp, ClipboardList, Grid3x3 } from 'lucide-react'
 // Lightweight notification
 const toast = {
   success: (msg) => { const el = document.createElement('div'); el.className = 'fixed top-4 right-4 z-[999] px-4 py-3 rounded-xl bg-emerald-600 text-white text-sm font-medium shadow-lg'; el.textContent = msg; document.body.appendChild(el); setTimeout(() => el.remove(), 2500) },
@@ -900,7 +900,12 @@ function ReportsTab() {
 // ============================================================
 // MAIN
 // ============================================================
+import OrdersManagementTab from '../components/admin/OrdersManagementTab'
+import BulkProductEditor from '../components/admin/BulkProductEditor'
+
 const TABS = [
+  { key: 'orders', label: 'Замовлення', Icon: ClipboardList },
+  { key: 'bulk', label: 'Масове редагування', Icon: Grid3x3 },
   { key: 'users', label: 'Користувачі', Icon: Users },
   { key: 'documents', label: 'Документи', Icon: FileText },
   { key: 'categories', label: 'Категорії', Icon: FolderTree },
@@ -911,7 +916,7 @@ const TABS = [
 
 export default function AdminPanel() {
   const nav = useNavigate()
-  const [activeTab, setActiveTab] = useState('users')
+  const [activeTab, setActiveTab] = useState('orders')
 
   return (
     <div className="min-h-screen bg-corp-bg-page" data-testid="admin-panel">
@@ -934,6 +939,8 @@ export default function AdminPanel() {
         </div>
 
         {/* Content */}
+        {activeTab === 'orders' && <OrdersManagementTab />}
+        {activeTab === 'bulk' && <BulkProductEditor />}
         {activeTab === 'users' && <UsersTab />}
         {activeTab === 'documents' && <DocumentsTab />}
         {activeTab === 'categories' && <CategoriesTab />}
