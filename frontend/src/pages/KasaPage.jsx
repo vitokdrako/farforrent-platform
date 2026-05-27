@@ -5,7 +5,7 @@ import CorporateHeader from '../components/CorporateHeader';
 import {
   ArrowLeft, Banknote, CreditCard, Wallet, TrendingUp, TrendingDown,
   Search, RefreshCw, Shield, RotateCcw, Plus, X, MessageSquare,
-  ChevronDown, Landmark, CalendarCheck, Check, BarChart3, Calendar
+  ChevronDown, Landmark, CalendarCheck, Check
 } from 'lucide-react';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || '';
@@ -28,12 +28,6 @@ export default function KasaPage({ embedded = false }) {
   const [period, setPeriod] = useState(searchParams.get('period') || 'month');
   const [searchQuery, setSearchQuery] = useState('');
   const [modal, setModal] = useState(null); // 'income' | 'deposit' | 'expense' | 'collection' | 'closeMonth' | null
-  const [view, setView] = useState(searchParams.get('view') || 'cash'); // 'cash' | 'forecast' | 'debts' | 'expenses' | 'reports'
-  const [forecastOrders, setForecastOrders] = useState([]);
-  const [forecastLoading, setForecastLoading] = useState(false);
-  const [managerDebts, setManagerDebts] = useState(null);
-  const [expenseReport, setExpenseReport] = useState(null);
-  const [monthlyReports, setMonthlyReports] = useState([]);
 
   const fetchData = async () => {
     setLoading(true);
@@ -44,37 +38,7 @@ export default function KasaPage({ embedded = false }) {
     finally { setLoading(false); }
   };
 
-  const fetchForecast = async () => {
-    setForecastLoading(true);
-    try {
-      const res = await authFetch(`${BACKEND_URL}/api/manager/finance/orders-with-finance?limit=500`);
-      if (res.ok) {
-        const d = await res.json();
-        setForecastOrders(d.orders || []);
-      }
-    } catch (e) { console.error(e); }
-    finally { setForecastLoading(false); }
-  };
-
   useEffect(() => { fetchData(); }, [period]);
-  useEffect(() => { if (view === 'forecast' && forecastOrders.length === 0) fetchForecast(); }, [view]);
-  useEffect(() => {
-    if (view === 'debts' && !managerDebts) {
-      authFetch(`${BACKEND_URL}/api/finance/manager-debts`).then(r => r.ok ? r.json() : null).then(setManagerDebts);
-    }
-    if (view === 'expenses' && !expenseReport) {
-      authFetch(`${BACKEND_URL}/api/finance/expense-report`).then(r => r.ok ? r.json() : null).then(setExpenseReport);
-    }
-    if (view === 'reports' && monthlyReports.length === 0) {
-      authFetch(`${BACKEND_URL}/api/finance/monthly-reports`).then(r => r.ok ? r.json() : []).then(d => setMonthlyReports(d.reports || d || []));
-    }
-  }, [view]);
-
-  const changeView = (v) => {
-    setView(v);
-    const sp = Object.fromEntries(searchParams);
-    setSearchParams({ ...sp, view: v });
-  };
 
   const changePeriod = (p) => {
     setPeriod(p);
@@ -122,31 +86,10 @@ export default function KasaPage({ embedded = false }) {
               )}
               <div>
                 <h1 className="text-lg font-bold text-slate-800">Каса</h1>
-                <p className="text-xs text-slate-500">{view === 'forecast' ? 'План надходжень' : periodLabels[period]}</p>
+                <p className="text-xs text-slate-500">{periodLabels[period]}</p>
               </div>
             </div>
 
-            {/* View tabs: 5 cabinets */}
-            <div className="flex bg-slate-100 p-1 rounded-xl flex-wrap" data-testid="view-tabs">
-              {[
-                { id: 'cash', label: 'Каса', icon: Wallet },
-                { id: 'forecast', label: 'План надходжень', icon: BarChart3 },
-                { id: 'debts', label: 'Борги менеджерів', icon: TrendingDown },
-                { id: 'expenses', label: 'Звіт витрат', icon: TrendingUp },
-                { id: 'reports', label: 'Зведення', icon: Calendar },
-              ].map(t => {
-                const Icon = t.icon;
-                return (
-                  <button key={t.id} onClick={() => changeView(t.id)}
-                    className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors flex items-center gap-1.5 ${view === t.id ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-                    data-testid={`view-${t.id}`}>
-                    <Icon className="w-3.5 h-3.5" /> {t.label}
-                  </button>
-                );
-              })}
-            </div>
-
-            {view === 'cash' && (
             <div className="flex bg-slate-100 p-1 rounded-xl" data-testid="period-tabs">
               {Object.entries(periodLabels).map(([key, label]) => (
                 <button key={key} onClick={() => changePeriod(key)}
@@ -154,7 +97,6 @@ export default function KasaPage({ embedded = false }) {
                   data-testid={`period-${key}`}>{label}</button>
               ))}
             </div>
-            )}
 
             <div className="flex items-center gap-3">
               <div className="relative">
@@ -170,14 +112,8 @@ export default function KasaPage({ embedded = false }) {
             </div>
           </div>
 
-          {view === 'cash' && data && (
-            <div className="flex items-center gap-6 mt-3 pt-3 border-t border-slate-100 text-sm flex-wrap" data-testid="summary-bar">
-              {summary.carry_over_balance > 0 && (
-                <>
-                  <SummaryPill icon={CalendarCheck} label="Перенесено з мин. місяця" value={money(summary.carry_over_balance)} color="violet" />
-                  <div className="h-5 w-px bg-slate-200" />
-                </>
-              )}
+          {data && (
+            <div className="flex items-center gap-6 mt-3 pt-3 border-t border-slate-100 text-sm" data-testid="summary-bar">
               <SummaryPill icon={TrendingUp} label="Дохід" value={money(income.total)} color="emerald" />
               <SummaryPill icon={Banknote} label="Готівка" value={money(income.cash_total)} color="green" sub />
               <SummaryPill icon={CreditCard} label="Безготівка" value={money(income.bank_total)} color="blue" sub />
@@ -216,17 +152,9 @@ export default function KasaPage({ embedded = false }) {
         </div>
       </div>
 
-      {/* Content area */}
+      {/* 3-Column Layout */}
       <main className="max-w-[1800px] mx-auto px-4 py-6" data-testid="kasa-columns">
-        {view === 'forecast' ? (
-          <ForecastView orders={forecastOrders} loading={forecastLoading} />
-        ) : view === 'debts' ? (
-          <ManagerDebtsView data={managerDebts} />
-        ) : view === 'expenses' ? (
-          <ExpenseReportView data={expenseReport} />
-        ) : view === 'reports' ? (
-          <MonthlyReportsView reports={monthlyReports} />
-        ) : loading ? (
+        {loading ? (
           <div className="grid grid-cols-3 gap-6">
             {[1,2,3].map(i => <div key={i} className="bg-white rounded-2xl border border-slate-200 p-6 h-96 animate-pulse" />)}
           </div>
@@ -879,261 +807,3 @@ function FieldTextarea({ label, value, onChange, testId, placeholder }) {
     </div>
   );
 }
-
-
-/* ========== Forecast View (План надходжень) ========== */
-function ForecastView({ orders, loading }) {
-  // Compute expected income from active (non-completed, non-cancelled) orders
-  const upcoming = (orders || [])
-    .filter(o => o.status !== 'completed' && o.status !== 'cancelled' && o.status !== 'returned')
-    .map(o => {
-      const totalRental = Number(o.total_rental || o.total_price || 0);
-      const rentPaid = Number(o.rent_paid || 0);
-      const totalDeposit = Number(o.total_deposit || o.deposit_amount || 0);
-      const depositHeld = Number(o.deposit_held || 0);
-      return {
-        ...o,
-        rentDue: Math.max(0, totalRental - rentPaid),
-        depositExpected: Math.max(0, totalDeposit - depositHeld),
-      };
-    })
-    .filter(o => o.rentDue > 0 || o.depositExpected > 0)
-    .sort((a, b) => new Date(a.rental_start_date || 0) - new Date(b.rental_start_date || 0));
-
-  const totalRentExpected = upcoming.reduce((s, o) => s + o.rentDue, 0);
-  const totalDepositExpected = upcoming.reduce((s, o) => s + o.depositExpected, 0);
-
-  if (loading) {
-    return (
-      <div className="space-y-4">
-        <div className="grid grid-cols-3 gap-4">
-          {[1,2,3].map(i => <div key={i} className="bg-white rounded-xl border border-slate-200 p-6 h-24 animate-pulse" />)}
-        </div>
-        <div className="bg-white rounded-xl border border-slate-200 p-6 h-96 animate-pulse" />
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-4" data-testid="forecast-view">
-      {/* KPIs */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <SummaryCard label="Очікується оренди" value={money(totalRentExpected)} color="emerald" icon={TrendingUp} />
-        <SummaryCard label="Очікується застав" value={money(totalDepositExpected)} color="blue" icon={Shield} />
-        <SummaryCard label="Всього очікується" value={money(totalRentExpected + totalDepositExpected)} color="slate" icon={Wallet} bold />
-      </div>
-
-      {/* Table */}
-      <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden" data-testid="forecast-table">
-        <header className="px-5 py-3 border-b border-slate-100 bg-slate-50/50">
-          <h3 className="font-bold text-slate-800 flex items-center gap-2">
-            <Calendar className="w-4 h-4 text-slate-500" /> Очікувані надходження
-            <span className="text-xs font-normal text-slate-500 ml-auto">{upcoming.length} замовлень</span>
-          </h3>
-        </header>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-slate-50/40 text-xs uppercase text-slate-500">
-              <tr>
-                <th className="text-left py-2 px-3 font-semibold">Ордер</th>
-                <th className="text-left py-2 px-3 font-semibold">Клієнт</th>
-                <th className="text-left py-2 px-3 font-semibold">Дата</th>
-                <th className="text-left py-2 px-3 font-semibold">Статус</th>
-                <th className="text-right py-2 px-3 font-semibold">Борг оренди</th>
-                <th className="text-right py-2 px-3 font-semibold">Очік. застава</th>
-                <th className="text-right py-2 px-3 font-semibold">Всього</th>
-              </tr>
-            </thead>
-            <tbody>
-              {upcoming.map(o => (
-                <tr key={o.order_id} className="border-t border-slate-100 hover:bg-slate-50/60">
-                  <td className="py-2 px-3 font-bold text-slate-800">#{o.order_number || o.order_id}</td>
-                  <td className="py-2 px-3 text-slate-700">{o.customer_name || '—'}</td>
-                  <td className="py-2 px-3 text-slate-600">{fmtDate(o.rental_start_date)}</td>
-                  <td className="py-2 px-3"><span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">{o.status}</span></td>
-                  <td className="py-2 px-3 text-right font-medium text-emerald-700">{o.rentDue > 0 ? money(o.rentDue) : <span className="text-slate-300">—</span>}</td>
-                  <td className="py-2 px-3 text-right font-medium text-blue-700">{o.depositExpected > 0 ? money(o.depositExpected) : <span className="text-slate-300">—</span>}</td>
-                  <td className="py-2 px-3 text-right font-bold text-slate-800">{money(o.rentDue + o.depositExpected)}</td>
-                </tr>
-              ))}
-              {upcoming.length === 0 && (
-                <tr><td colSpan={7} className="py-12 text-center text-slate-400">Немає очікуваних надходжень</td></tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function SummaryCard({ label, value, color, icon: Icon, bold }) {
-  const colorClasses = {
-    emerald: 'text-emerald-600 bg-emerald-50',
-    blue: 'text-blue-600 bg-blue-50',
-    slate: 'text-slate-700 bg-slate-100',
-  }[color] || 'text-slate-700 bg-slate-100';
-  return (
-    <div className="bg-white rounded-xl border border-slate-200 p-4 flex items-center gap-3">
-      {Icon && (
-        <div className={`w-10 h-10 rounded-lg ${colorClasses} flex items-center justify-center`}>
-          <Icon className="w-5 h-5" />
-        </div>
-      )}
-      <div>
-        <div className="text-xs text-slate-500">{label}</div>
-        <div className={`text-xl ${bold ? 'font-bold' : 'font-semibold'} text-slate-800`}>{value}</div>
-      </div>
-    </div>
-  );
-}
-
-/* ========== Manager Debts View ========== */
-function ManagerDebtsView({ data }) {
-  if (!data) return <div className="bg-white rounded-2xl border p-12 text-center text-slate-400">Завантаження...</div>;
-  const managers = data.managers || [];
-  return (
-    <div className="space-y-4" data-testid="debts-view">
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <SummaryCard label="Всього менеджерів" value={data.managers_count || 0} color="slate" icon={TrendingDown} />
-        <SummaryCard label="Загальний борг" value={money(data.total_debt || 0)} color="rose" icon={TrendingDown} bold />
-        <SummaryCard label="Замовлень з боргом" value={managers.reduce((s, m) => s + (m.orders?.length || 0), 0)} color="amber" icon={Wallet} />
-      </div>
-      <div className="space-y-3">
-        {managers.length === 0 ? (
-          <div className="bg-white rounded-2xl border p-12 text-center text-slate-400">Боргів немає 🎉</div>
-        ) : managers.map(m => (
-          <div key={m.manager_id || m.name} className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
-            <header className="px-5 py-3 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
-              <div>
-                <div className="font-bold text-slate-800">{m.name || 'Без менеджера'}</div>
-                <div className="text-xs text-slate-500">{m.orders?.length || 0} замовлень</div>
-              </div>
-              <div className="text-xl font-bold text-rose-600">{money(m.total_debt || 0)}</div>
-            </header>
-            <table className="w-full text-sm">
-              <thead className="bg-slate-50/40 text-xs uppercase text-slate-500">
-                <tr>
-                  <th className="text-left py-2 px-4 font-semibold">Ордер</th>
-                  <th className="text-left py-2 px-4 font-semibold">Клієнт</th>
-                  <th className="text-left py-2 px-4 font-semibold">Дата</th>
-                  <th className="text-right py-2 px-4 font-semibold">Борг</th>
-                </tr>
-              </thead>
-              <tbody>
-                {(m.orders || []).map(o => (
-                  <tr key={o.order_id} className="border-t border-slate-100 hover:bg-slate-50/60">
-                    <td className="py-2 px-4 font-bold text-slate-800">#{o.order_number || o.order_id}</td>
-                    <td className="py-2 px-4 text-slate-700">{o.customer_name || '—'}</td>
-                    <td className="py-2 px-4 text-slate-600">{fmtDate(o.rental_start_date || o.created_at)}</td>
-                    <td className="py-2 px-4 text-right font-medium text-rose-600">{money(o.debt || o.amount || 0)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-/* ========== Expense Report View ========== */
-function ExpenseReportView({ data }) {
-  if (!data) return <div className="bg-white rounded-2xl border p-12 text-center text-slate-400">Завантаження...</div>;
-  const groups = data.by_group || data.by_detail || {};
-  const groupList = Object.entries(groups);
-  return (
-    <div className="space-y-4" data-testid="expenses-view">
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <SummaryCard label="Період" value={data.period || 'Поточний'} color="slate" icon={Calendar} />
-        <SummaryCard label="Всього витрат" value={money(data.grand_total || 0)} color="rose" icon={TrendingDown} bold />
-      </div>
-      <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
-        <header className="px-5 py-3 border-b border-slate-100 bg-slate-50/50">
-          <h3 className="font-bold text-slate-800">Витрати за категоріями</h3>
-        </header>
-        <table className="w-full text-sm">
-          <thead className="bg-slate-50/40 text-xs uppercase text-slate-500">
-            <tr>
-              <th className="text-left py-2 px-4 font-semibold">Категорія</th>
-              <th className="text-right py-2 px-4 font-semibold">Кількість</th>
-              <th className="text-right py-2 px-4 font-semibold">Сума</th>
-              <th className="text-right py-2 px-4 font-semibold">%</th>
-            </tr>
-          </thead>
-          <tbody>
-            {groupList.length === 0 ? (
-              <tr><td colSpan={4} className="py-12 text-center text-slate-400">Немає даних</td></tr>
-            ) : groupList.map(([name, info]) => {
-              const total = typeof info === 'object' ? (info.total || info.amount || 0) : info;
-              const count = typeof info === 'object' ? (info.count || 0) : 0;
-              const pct = data.grand_total > 0 ? ((total / data.grand_total) * 100).toFixed(1) : '0';
-              return (
-                <tr key={name} className="border-t border-slate-100 hover:bg-slate-50/60">
-                  <td className="py-2 px-4 text-slate-700 font-medium">{name}</td>
-                  <td className="py-2 px-4 text-right text-slate-600">{count}</td>
-                  <td className="py-2 px-4 text-right font-bold text-rose-600">{money(total)}</td>
-                  <td className="py-2 px-4 text-right text-slate-500">{pct}%</td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
-}
-
-/* ========== Monthly Reports View ========== */
-function MonthlyReportsView({ reports }) {
-  if (!reports) return <div className="bg-white rounded-2xl border p-12 text-center text-slate-400">Завантаження...</div>;
-  const monthNames = ['Січ','Лют','Бер','Кві','Тра','Чер','Лип','Сер','Вер','Жов','Лис','Гру'];
-  return (
-    <div className="space-y-4" data-testid="reports-view">
-      <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
-        <header className="px-5 py-3 border-b border-slate-100 bg-slate-50/50">
-          <h3 className="font-bold text-slate-800">Зведення по закритих місяцях</h3>
-          <p className="text-xs text-slate-500 mt-0.5">{reports.length} закритих місяців</p>
-        </header>
-        <table className="w-full text-sm">
-          <thead className="bg-slate-50/40 text-xs uppercase text-slate-500">
-            <tr>
-              <th className="text-left py-2 px-4 font-semibold">Місяць</th>
-              <th className="text-left py-2 px-4 font-semibold">Закрив</th>
-              <th className="text-right py-2 px-4 font-semibold">Дохід</th>
-              <th className="text-right py-2 px-4 font-semibold">Витрати</th>
-              <th className="text-right py-2 px-4 font-semibold">Чисто</th>
-              <th className="text-right py-2 px-4 font-semibold">Залишок каси</th>
-              <th className="text-left py-2 px-4 font-semibold">Примітка</th>
-            </tr>
-          </thead>
-          <tbody>
-            {reports.length === 0 ? (
-              <tr><td colSpan={7} className="py-12 text-center text-slate-400">Жоден місяць ще не закрито</td></tr>
-            ) : reports.map(r => {
-              const rd = r.report || r.report_data || {};
-              const summary = rd.summary || rd;
-              const income = summary.total_income || summary.income_total || 0;
-              const exp = summary.total_expenses || summary.expense_total || 0;
-              const net = summary.net_total || summary.net || (income - exp);
-              const closing = summary.closing_cash || summary.net_cash || 0;
-              return (
-                <tr key={r.id} className="border-t border-slate-100 hover:bg-slate-50/60">
-                  <td className="py-2 px-4 font-bold text-slate-800">{monthNames[r.month - 1]} {r.year}</td>
-                  <td className="py-2 px-4 text-slate-700">{r.closed_by || '—'}</td>
-                  <td className="py-2 px-4 text-right font-medium text-emerald-600">{money(income)}</td>
-                  <td className="py-2 px-4 text-right font-medium text-rose-600">{money(exp)}</td>
-                  <td className={`py-2 px-4 text-right font-bold ${net >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>{money(net)}</td>
-                  <td className="py-2 px-4 text-right font-bold text-violet-700">{money(closing)}</td>
-                  <td className="py-2 px-4 text-slate-500 text-xs">{r.note || '—'}</td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
-}
-
