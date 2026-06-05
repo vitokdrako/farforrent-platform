@@ -53,12 +53,11 @@ export default function Login() {
       localStorage.setItem('token', data.access_token)
       localStorage.setItem('user', JSON.stringify(data.user))
 
-      // Role-based redirect (з урахуванням PUBLIC_URL / basename для /admin деплою)
+      // Role-based redirect
       const role = data.user?.role;
       const startPage = role === 'manager' ? '/manager-cabinet'
                        : '/manager';
-      const base = process.env.PUBLIC_URL || ''
-      window.location.href = `${base}${startPage}`;
+      window.location.href = startPage;
     } catch (err: any) {
       setError(err.message || 'Помилка авторизації')
     } finally {

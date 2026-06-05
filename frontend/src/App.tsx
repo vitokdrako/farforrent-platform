@@ -41,6 +41,7 @@ import PersonalCabinet from './pages/PersonalCabinet';
 import SyncPanel from './pages/SyncPanel';
 import DocumentTemplatesAdmin from './pages/DocumentTemplatesAdmin';
 import UnifiedCalendar from './pages/UnifiedCalendarNew';
+import PublicCatalog from './pages/PublicCatalog';
 
 // Декодування JWT без бібліотеки
 function parseJwt(token: string) {
@@ -49,10 +50,6 @@ function parseJwt(token: string) {
     return JSON.parse(atob(base64));
   } catch { return null; }
 }
-
-// Базовий шлях для деплою (наприклад "/admin"). Порожній рядок локально.
-const APP_BASENAME = process.env.PUBLIC_URL || '';
-const withBase = (path: string) => `${APP_BASENAME}${path}`;
 
 // Protected Route — перевіряє наявність І валідність токена
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -86,7 +83,7 @@ function App() {
       if (!payload || !payload.exp || payload.exp * 1000 < Date.now()) {
         localStorage.removeItem('token');
         localStorage.removeItem('user');
-        window.location.href = withBase('/login');
+        window.location.href = '/login';
         return;
       }
       
@@ -97,7 +94,7 @@ function App() {
       if (hours === 7 && minutes < 5) {
         localStorage.removeItem('token');
         localStorage.removeItem('user');
-        window.location.href = withBase('/login');
+        window.location.href = '/login';
       }
     };
     
@@ -120,15 +117,15 @@ function App() {
   }, []);
   
   const handleBackToDashboard = () => {
-    window.location.href = withBase('/dashboard');
+    window.location.href = '/dashboard';
   };
   
   const handleNavigateToTasks = (itemId?: string, orderNumber?: string) => {
-    window.location.href = withBase(`/tasks${itemId ? `?itemId=${itemId}` : ''}`);
+    window.location.href = `/tasks${itemId ? `?itemId=${itemId}` : ''}`;
   };
   
   return (
-    <Router basename={APP_BASENAME || undefined}>
+    <Router>
       <div className="min-h-screen bg-gray-50 flex flex-col">
         <div className="flex-1">
         <Routes>
@@ -444,9 +441,9 @@ function App() {
             } 
           />
           
-          {/* Default redirect */}
-          <Route path="/" element={<Navigate to="/dashboard" replace />} />
-          <Route path="*" element={<Navigate to="/dashboard" replace />} />
+          {/* Публічний каталог для клієнтів — головна сторінка */}
+          <Route path="/" element={<PublicCatalog />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
         </div>
         {/* Legal Footer - показується на всіх сторінках, крім кабінету на мобільному */}

@@ -110,7 +110,7 @@ export default function OrdersChatModal({ isOpen, onClose }) {
       if (response.status === 401) {
         alert('Сесія закінчилась. Будь ласка, перелогіньтесь.');
         localStorage.removeItem('token');
-        window.location.href = `${process.env.PUBLIC_URL || ''}/login`;
+        window.location.href = '/login';
         return;
       }
 
