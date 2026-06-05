@@ -38,9 +38,10 @@ apiClient.interceptors.response.use(
         localStorage.removeItem('token');
         localStorage.removeItem('user');
         
-        // Редірект на логін (якщо ще не там)
+        // Редірект на логін (якщо ще не там), з урахуванням basename (PUBLIC_URL)
+        const base = process.env.PUBLIC_URL || '';
         if (!window.location.pathname.includes('/login')) {
-          window.location.href = '/login?session_expired=true';
+          window.location.href = `${base}/login?session_expired=true`;
         }
       }
     }

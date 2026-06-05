@@ -50,6 +50,10 @@ function parseJwt(token: string) {
   } catch { return null; }
 }
 
+// Базовий шлях для деплою (наприклад "/admin"). Порожній рядок локально.
+const APP_BASENAME = process.env.PUBLIC_URL || '';
+const withBase = (path: string) => `${APP_BASENAME}${path}`;
+
 // Protected Route — перевіряє наявність І валідність токена
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const token = localStorage.getItem('token');
@@ -82,7 +86,7 @@ function App() {
       if (!payload || !payload.exp || payload.exp * 1000 < Date.now()) {
         localStorage.removeItem('token');
         localStorage.removeItem('user');
-        window.location.href = '/login';
+        window.location.href = withBase('/login');
         return;
       }
       
@@ -93,7 +97,7 @@ function App() {
       if (hours === 7 && minutes < 5) {
         localStorage.removeItem('token');
         localStorage.removeItem('user');
-        window.location.href = '/login';
+        window.location.href = withBase('/login');
       }
     };
     
@@ -116,15 +120,15 @@ function App() {
   }, []);
   
   const handleBackToDashboard = () => {
-    window.location.href = '/dashboard';
+    window.location.href = withBase('/dashboard');
   };
   
   const handleNavigateToTasks = (itemId?: string, orderNumber?: string) => {
-    window.location.href = `/tasks${itemId ? `?itemId=${itemId}` : ''}`;
+    window.location.href = withBase(`/tasks${itemId ? `?itemId=${itemId}` : ''}`);
   };
   
   return (
-    <Router>
+    <Router basename={APP_BASENAME || undefined}>
       <div className="min-h-screen bg-gray-50 flex flex-col">
         <div className="flex-1">
         <Routes>

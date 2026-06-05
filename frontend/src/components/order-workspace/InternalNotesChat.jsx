@@ -72,7 +72,7 @@ export default function InternalNotesChat({
       
       if (!token) {
         alert('Сесія закінчилась. Будь ласка, перелогіньтесь.')
-        window.location.href = '/login'
+        window.location.href = `${process.env.PUBLIC_URL || ''}/login`
         return
       }
       
@@ -96,7 +96,7 @@ export default function InternalNotesChat({
       if (err.response?.status === 401) {
         alert('Сесія закінчилась. Будь ласка, перелогіньтесь.')
         localStorage.removeItem('token')
-        window.location.href = '/login'
+        window.location.href = `${process.env.PUBLIC_URL || ''}/login`
       } else {
         console.error('[InternalNotesChat] Error sending note:', err)
         alert('Помилка відправки повідомлення. Спробуйте ще раз.')

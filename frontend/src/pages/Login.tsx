@@ -37,18 +37,28 @@ export default function Login() {
       const data = await response.json()
 
       if (!response.ok) {
-        throw new Error(data.detail || 'Помилка авторизації')
+        // FastAPI може повернути detail як string, об'єкт або масив об'єктів (validation errors)
+        let msg = 'Помилка авторизації'
+        if (typeof data?.detail === 'string') {
+          msg = data.detail
+        } else if (Array.isArray(data?.detail)) {
+          msg = data.detail.map((d: any) => d?.msg || JSON.stringify(d)).join('; ')
+        } else if (data?.detail && typeof data.detail === 'object') {
+          msg = data.detail.msg || JSON.stringify(data.detail)
+        }
+        throw new Error(msg)
       }
 
       // Save token to localStorage
       localStorage.setItem('token', data.access_token)
       localStorage.setItem('user', JSON.stringify(data.user))
 
-      // Role-based redirect
+      // Role-based redirect (з урахуванням PUBLIC_URL / basename для /admin деплою)
       const role = data.user?.role;
       const startPage = role === 'manager' ? '/manager-cabinet'
                        : '/manager';
-      window.location.href = startPage;
+      const base = process.env.PUBLIC_URL || ''
+      window.location.href = `${base}${startPage}`;
     } catch (err: any) {
       setError(err.message || 'Помилка авторизації')
     } finally {
