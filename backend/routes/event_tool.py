@@ -1510,54 +1510,90 @@ async def get_my_orders(
     token: str = Depends(get_token_from_header)
 ):
     """Список замовлень поточного авторизованого клієнта Event Tool"""
-    customer = get_current_customer(token, db)
-    email = (customer.get("email") or "").lower().strip()
-    if not email:
+    try:
+        customer = get_current_customer(token, db)
+        email = (customer.get("email") or "").lower().strip()
+        if not email:
+            return []
+
+        # Знайти client_user_id за email
+        cu = db.execute(
+            text("SELECT id FROM client_users WHERE email_normalized = :e LIMIT 1"),
+            {"e": email}
+        ).fetchone()
+        if not cu:
+            return []
+        client_user_id = cu[0]
+
+        # Визначаємо які колонки реально існують у orders
+        cols_rows = db.execute(text("SHOW COLUMNS FROM orders")).fetchall()
+        existing_cols = {r[0] for r in cols_rows}
+
+        def col(name, default="NULL"):
+            return name if name in existing_cols else default
+
+        select_sql = f"""
+            SELECT
+                order_id,
+                {col('order_number', "''")} AS order_number,
+                {col('status', "''")} AS status,
+                {col('rental_start_date')} AS rental_start_date,
+                {col('rental_end_date')} AS rental_end_date,
+                {col('rental_days', '0')} AS rental_days,
+                {col('event_date')} AS event_date,
+                {col('event_location', "''")} AS event_location,
+                {col('total_price', col('total_amount', '0'))} AS total_price,
+                {col('deposit_amount', '0')} AS deposit_amount,
+                {col('payment_status', "''")} AS payment_status,
+                {col('source', "''")} AS source,
+                {col('created_at')} AS created_at,
+                {col('notes', "''")} AS notes,
+                {col('customer_name', "''")} AS customer_name
+            FROM orders
+            WHERE {col('client_user_id', 'NULL')} = :cuid
+               OR ({col('customer_email', "''")} = :email AND :email <> '')
+            ORDER BY created_at DESC
+            LIMIT 100
+        """
+
+        rows = db.execute(text(select_sql), {"cuid": client_user_id, "email": email}).fetchall()
+
+        result = []
+        for r in rows:
+            order_id = r[0]
+            try:
+                items_count = db.execute(
+                    text("SELECT COUNT(*) FROM order_items WHERE order_id = :oid"),
+                    {"oid": order_id}
+                ).scalar() or 0
+            except Exception:
+                items_count = 0
+
+            result.append({
+                "order_id": order_id,
+                "order_number": r[1],
+                "status": r[2],
+                "rental_start_date": r[3].isoformat() if r[3] else None,
+                "rental_end_date": r[4].isoformat() if r[4] else None,
+                "rental_days": int(r[5] or 0),
+                "event_date": r[6].isoformat() if r[6] else None,
+                "event_location": r[7],
+                "total_price": float(r[8] or 0),
+                "deposit_amount": float(r[9] or 0),
+                "payment_status": r[10] or "",
+                "source": r[11] or "",
+                "created_at": r[12].isoformat() if r[12] else None,
+                "notes": r[13] or "",
+                "customer_name": r[14] or "",
+                "items_count": items_count,
+            })
+        return result
+    except Exception as e:
+        # Не валимо API — повертаємо порожньо щоб UI не падав
+        import traceback
+        traceback.print_exc()
+        print(f"[get_my_orders] Error: {e}")
         return []
-
-    # Знайти client_user_id за email
-    cu = db.execute(
-        text("SELECT id FROM client_users WHERE email_normalized = :e"),
-        {"e": email}
-    ).fetchone()
-    if not cu:
-        return []
-    client_user_id = cu[0]
-
-    rows = db.execute(text("""
-        SELECT order_id, order_number, status, rental_start_date, rental_end_date,
-               rental_days, event_date, event_location, total_price, deposit_amount,
-               source, created_at, notes
-        FROM orders
-        WHERE client_user_id = :cuid
-        ORDER BY created_at DESC
-        LIMIT 100
-    """), {"cuid": client_user_id}).fetchall()
-
-    result = []
-    for r in rows:
-        order_id = r[0]
-        items_count = db.execute(
-            text("SELECT COUNT(*) FROM order_items WHERE order_id = :oid"),
-            {"oid": order_id}
-        ).scalar() or 0
-        result.append({
-            "order_id": order_id,
-            "order_number": r[1],
-            "status": r[2],
-            "rental_start_date": r[3].isoformat() if r[3] else None,
-            "rental_end_date": r[4].isoformat() if r[4] else None,
-            "rental_days": r[5],
-            "event_date": r[6].isoformat() if r[6] else None,
-            "event_location": r[7],
-            "total_price": float(r[8] or 0),
-            "deposit_amount": float(r[9] or 0),
-            "source": r[10],
-            "created_at": r[11].isoformat() if r[11] else None,
-            "notes": r[12],
-            "items_count": items_count,
-        })
-    return result
 
 
 @router.get("/orders/{order_id}")
@@ -1567,61 +1603,179 @@ async def get_my_order_details(
     token: str = Depends(get_token_from_header)
 ):
     """Деталі окремого замовлення (тільки своє)"""
-    customer = get_current_customer(token, db)
-    email = (customer.get("email") or "").lower().strip()
+    try:
+        customer = get_current_customer(token, db)
+        email = (customer.get("email") or "").lower().strip()
 
-    cu = db.execute(
-        text("SELECT id FROM client_users WHERE email_normalized = :e"),
-        {"e": email}
-    ).fetchone()
-    if not cu:
-        raise HTTPException(status_code=404, detail="Order not found")
-    client_user_id = cu[0]
+        cu = db.execute(
+            text("SELECT id FROM client_users WHERE email_normalized = :e LIMIT 1"),
+            {"e": email}
+        ).fetchone()
+        client_user_id = cu[0] if cu else None
 
-    order_row = db.execute(text("""
-        SELECT order_id, order_number, status, rental_start_date, rental_end_date,
-               rental_days, event_date, event_location, total_price, deposit_amount,
-               source, created_at, notes, customer_name, customer_phone, customer_email
-        FROM orders
-        WHERE order_id = :oid AND client_user_id = :cuid
-    """), {"oid": order_id, "cuid": client_user_id}).fetchone()
-    if not order_row:
-        raise HTTPException(status_code=404, detail="Order not found")
+        # Колонки orders
+        cols_rows = db.execute(text("SHOW COLUMNS FROM orders")).fetchall()
+        existing_cols = {r[0] for r in cols_rows}
+        def col(name, default="NULL"):
+            return name if name in existing_cols else default
 
-    items_rows = db.execute(text("""
-        SELECT product_id, product_name, quantity, price, total_rental, image_url
-        FROM order_items WHERE order_id = :oid
-    """), {"oid": order_id}).fetchall()
+        sql = f"""
+            SELECT
+                order_id,
+                {col('order_number', "''")} AS order_number,
+                {col('status', "''")} AS status,
+                {col('rental_start_date')} AS rental_start_date,
+                {col('rental_end_date')} AS rental_end_date,
+                {col('rental_days', '0')} AS rental_days,
+                {col('event_date')} AS event_date,
+                {col('event_location', "''")} AS event_location,
+                {col('total_price', col('total_amount', '0'))} AS total_price,
+                {col('deposit_amount', '0')} AS deposit_amount,
+                {col('payment_status', "''")} AS payment_status,
+                {col('source', "''")} AS source,
+                {col('created_at')} AS created_at,
+                {col('notes', "''")} AS notes,
+                {col('customer_name', "''")} AS customer_name,
+                {col('customer_phone', "''")} AS customer_phone,
+                {col('customer_email', "''")} AS customer_email
+            FROM orders
+            WHERE order_id = :oid
+              AND ({col('client_user_id', 'NULL')} = :cuid OR {col('customer_email', "''")} = :email)
+        """
+        order_row = db.execute(text(sql), {"oid": order_id, "cuid": client_user_id, "email": email}).fetchone()
+        if not order_row:
+            raise HTTPException(status_code=404, detail="Order not found")
 
-    return {
-        "order_id": order_row[0],
-        "order_number": order_row[1],
-        "status": order_row[2],
-        "rental_start_date": order_row[3].isoformat() if order_row[3] else None,
-        "rental_end_date": order_row[4].isoformat() if order_row[4] else None,
-        "rental_days": order_row[5],
-        "event_date": order_row[6].isoformat() if order_row[6] else None,
-        "event_location": order_row[7],
-        "total_price": float(order_row[8] or 0),
-        "deposit_amount": float(order_row[9] or 0),
-        "source": order_row[10],
-        "created_at": order_row[11].isoformat() if order_row[11] else None,
-        "notes": order_row[12],
-        "customer_name": order_row[13],
-        "customer_phone": order_row[14],
-        "customer_email": order_row[15],
-        "items": [
+        # Items — теж захищаємо від відсутніх колонок
+        item_cols_rows = db.execute(text("SHOW COLUMNS FROM order_items")).fetchall()
+        item_cols = {r[0] for r in item_cols_rows}
+        def ic(name, default="NULL"):
+            return name if name in item_cols else default
+
+        items_sql = f"""
+            SELECT
+                {ic('product_id', '0')} AS product_id,
+                {ic('product_name', "''")} AS product_name,
+                {ic('quantity', '0')} AS quantity,
+                {ic('price', '0')} AS price,
+                {ic('total_rental', '0')} AS total_rental,
+                {ic('total_deposit', '0')} AS total_deposit
+            FROM order_items WHERE order_id = :oid
+        """
+        items_rows = db.execute(text(items_sql), {"oid": order_id}).fetchall()
+
+        return {
+            "order_id": order_row[0],
+            "order_number": order_row[1],
+            "status": order_row[2],
+            "rental_start_date": order_row[3].isoformat() if order_row[3] else None,
+            "rental_end_date": order_row[4].isoformat() if order_row[4] else None,
+            "rental_days": int(order_row[5] or 0),
+            "event_date": order_row[6].isoformat() if order_row[6] else None,
+            "event_location": order_row[7],
+            "total_price": float(order_row[8] or 0),
+            "deposit_amount": float(order_row[9] or 0),
+            "payment_status": order_row[10] or "",
+            "source": order_row[11] or "",
+            "created_at": order_row[12].isoformat() if order_row[12] else None,
+            "notes": order_row[13] or "",
+            "customer_name": order_row[14] or "",
+            "customer_phone": order_row[15] or "",
+            "customer_email": order_row[16] or "",
+            "items": [
+                {
+                    "product_id": ir[0],
+                    "product_name": ir[1],
+                    "quantity": int(ir[2] or 0),
+                    "price": float(ir[3] or 0),
+                    "total_rental": float(ir[4] or 0),
+                    "total_deposit": float(ir[5] or 0),
+                }
+                for ir in items_rows
+            ],
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        print(f"[get_my_order_details] Error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/orders/{order_id}/documents")
+async def get_my_order_documents(
+    order_id: int,
+    db: Session = Depends(get_rh_db),
+    token: str = Depends(get_token_from_header)
+):
+    """Список документів конкретного замовлення (тільки якщо воно належить клієнту)"""
+    try:
+        customer = get_current_customer(token, db)
+        email = (customer.get("email") or "").lower().strip()
+
+        # Перевірка прав — замовлення має належати цьому клієнту
+        cu = db.execute(
+            text("SELECT id FROM client_users WHERE email_normalized = :e LIMIT 1"),
+            {"e": email}
+        ).fetchone()
+        client_user_id = cu[0] if cu else None
+
+        # Чи дійсно це замовлення цього клієнта?
+        cols_rows = db.execute(text("SHOW COLUMNS FROM orders")).fetchall()
+        existing_cols = {r[0] for r in cols_rows}
+        cuid_col = "client_user_id" if "client_user_id" in existing_cols else "NULL"
+        email_col = "customer_email" if "customer_email" in existing_cols else "''"
+        check = db.execute(text(f"""
+            SELECT order_id FROM orders
+            WHERE order_id = :oid
+              AND ({cuid_col} = :cuid OR {email_col} = :email)
+            LIMIT 1
+        """), {"oid": order_id, "cuid": client_user_id, "email": email}).fetchone()
+        if not check:
+            raise HTTPException(status_code=404, detail="Order not found")
+
+        # Документи
+        rows = db.execute(text("""
+            SELECT id, doc_type, doc_number, version, status, signed_at, created_at
+            FROM documents
+            WHERE entity_type = 'order' AND entity_id = :oid
+            ORDER BY created_at DESC
+        """), {"oid": str(order_id)}).fetchall()
+
+        DOC_TYPE_LABELS = {
+            "invoice": "Рахунок",
+            "invoice_legal": "Рахунок (юр.особа)",
+            "invoice_offer": "Рахунок-оферта",
+            "estimate": "Кошторис",
+            "act_issue": "Акт видачі",
+            "act_return": "Акт повернення",
+            "annex": "Додаток до договору",
+            "contract": "Договір оренди",
+        }
+
+        return [
             {
-                "product_id": ir[0],
-                "product_name": ir[1],
-                "quantity": ir[2],
-                "price": float(ir[3] or 0),
-                "total_rental": float(ir[4] or 0),
-                "image_url": normalize_image_url(ir[5]),
+                "id": r[0],
+                "doc_type": r[1],
+                "doc_type_label": DOC_TYPE_LABELS.get(r[1], r[1]),
+                "doc_number": r[2],
+                "version": r[3],
+                "status": r[4],
+                "signed_at": r[5].isoformat() if r[5] else None,
+                "created_at": r[6].isoformat() if r[6] else None,
+                "preview_url": f"/api/documents/{r[0]}/preview",
+                "pdf_url": f"/api/documents/{r[0]}/pdf",
             }
-            for ir in items_rows
-        ],
-    }
+            for r in rows
+        ]
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        print(f"[get_my_order_documents] Error: {e}")
+        return []
 
 
 # ============================================================================

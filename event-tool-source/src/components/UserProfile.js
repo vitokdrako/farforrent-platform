@@ -16,6 +16,23 @@ const ORDER_STATUS_LABELS = {
   cancelled: { text: 'Скасовано', color: '#c62828', bg: '#ffebee' },
 };
 
+const PAYMENT_LABELS = {
+  unpaid: { text: 'Не оплачено', color: '#c62828', bg: '#ffebee' },
+  pending: { text: 'Очікує оплати', color: '#b58a00', bg: '#fff7d6' },
+  partially_paid: { text: 'Частково сплачено', color: '#1565c0', bg: '#e3f2fd' },
+  paid: { text: 'Оплачено', color: '#2e7d32', bg: '#e8f5e9' },
+  deposit_paid: { text: 'Завдаток внесено', color: '#2e7d32', bg: '#e8f5e9' },
+  refunded: { text: 'Повернуто', color: '#555', bg: '#eee' },
+};
+
+const formatDate = (iso) => {
+  if (!iso) return '—';
+  try {
+    const d = new Date(iso);
+    return d.toLocaleDateString('uk-UA', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  } catch { return iso; }
+};
+
 const UserProfile = () => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
@@ -23,6 +40,8 @@ const UserProfile = () => {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('orders'); // 'orders' | 'boards'
+  const [docsByOrder, setDocsByOrder] = useState({}); // {orderId: [docs]}
+  const [openedOrderId, setOpenedOrderId] = useState(null);
 
   useEffect(() => {
     loadData();
@@ -56,6 +75,23 @@ const UserProfile = () => {
     } catch (error) {
       console.error('Failed to delete board:', error);
       alert('Помилка видалення мудборду');
+    }
+  };
+
+  const toggleOrderDocs = async (orderId) => {
+    if (openedOrderId === orderId) {
+      setOpenedOrderId(null);
+      return;
+    }
+    setOpenedOrderId(orderId);
+    if (!docsByOrder[orderId]) {
+      try {
+        const docs = await ordersApi.documents(orderId);
+        setDocsByOrder(prev => ({...prev, [orderId]: Array.isArray(docs) ? docs : []}));
+      } catch (e) {
+        console.error('Failed to load docs:', e);
+        setDocsByOrder(prev => ({...prev, [orderId]: []}));
+      }
     }
   };
 
@@ -204,7 +240,10 @@ const UserProfile = () => {
             ) : (
               <div style={{display: 'flex', flexDirection: 'column', gap: '16px'}}>
                 {orders.map((o) => {
-                  const status = ORDER_STATUS_LABELS[o.status] || {text: o.status, color: '#555', bg: '#eee'};
+                  const status = ORDER_STATUS_LABELS[o.status] || {text: o.status || '—', color: '#555', bg: '#eee'};
+                  const paymentLabel = PAYMENT_LABELS[o.payment_status] || (o.payment_status ? {text: o.payment_status, color: '#555', bg: '#eee'} : null);
+                  const isOpen = openedOrderId === o.order_id;
+                  const docs = docsByOrder[o.order_id] || [];
                   return (
                     <div
                       key={o.order_id}
@@ -218,10 +257,10 @@ const UserProfile = () => {
                       }}
                     >
                       <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '16px', flexWrap: 'wrap'}}>
-                        <div>
-                          <div style={{display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px'}}>
+                        <div style={{flex: 1, minWidth: 0}}>
+                          <div style={{display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px', flexWrap: 'wrap'}}>
                             <h4 style={{fontSize: '17px', fontWeight: '700', color: '#222', margin: 0}}>
-                              {o.order_number}
+                              {o.order_number || `#${o.order_id}`}
                             </h4>
                             <span style={{
                               padding: '3px 10px',
@@ -233,6 +272,18 @@ const UserProfile = () => {
                             }}>
                               {status.text}
                             </span>
+                            {paymentLabel && (
+                              <span style={{
+                                padding: '3px 10px',
+                                borderRadius: '999px',
+                                fontSize: '12px',
+                                fontWeight: '600',
+                                color: paymentLabel.color,
+                                background: paymentLabel.bg,
+                              }}>
+                                💳 {paymentLabel.text}
+                              </span>
+                            )}
                           </div>
                           <div style={{fontSize: '13px', color: '#666', marginBottom: '4px'}}>
                             📅 {formatDate(o.rental_start_date)} → {formatDate(o.rental_end_date)}
@@ -249,15 +300,111 @@ const UserProfile = () => {
                         </div>
                         <div style={{textAlign: 'right'}}>
                           <div style={{fontSize: '22px', fontWeight: '700', color: '#0a3d2e'}}>
-                            ₴{o.total_price.toFixed(2)}
+                            ₴{(o.total_price || 0).toFixed(2)}
                           </div>
                           {o.deposit_amount > 0 && (
                             <div style={{fontSize: '12px', color: '#888', marginTop: '4px'}}>
                               Завдаток: ₴{o.deposit_amount.toFixed(2)}
                             </div>
                           )}
+                          <button
+                            onClick={() => toggleOrderDocs(o.order_id)}
+                            data-testid={`order-docs-toggle-${o.order_id}`}
+                            style={{
+                              marginTop: '10px',
+                              padding: '6px 12px',
+                              background: isOpen ? '#0a3d2e' : '#f5f5f5',
+                              color: isOpen ? '#fff' : '#0a3d2e',
+                              border: '1px solid #0a3d2e',
+                              borderRadius: '4px',
+                              cursor: 'pointer',
+                              fontSize: '12px',
+                              fontWeight: '600',
+                            }}
+                          >
+                            📄 Документи {isOpen ? '▲' : '▼'}
+                          </button>
                         </div>
                       </div>
+
+                      {isOpen && (
+                        <div
+                          data-testid={`order-docs-${o.order_id}`}
+                          style={{
+                            marginTop: '16px',
+                            paddingTop: '16px',
+                            borderTop: '1px solid #f0f0f0',
+                          }}
+                        >
+                          {docs.length === 0 ? (
+                            <div style={{fontSize: '13px', color: '#999', fontStyle: 'italic'}}>
+                              Документів по цьому замовленню ще немає. Менеджер сформує їх найближчим часом.
+                            </div>
+                          ) : (
+                            <div style={{display: 'flex', flexDirection: 'column', gap: '8px'}}>
+                              {docs.map(d => (
+                                <div
+                                  key={d.id}
+                                  style={{
+                                    display: 'flex',
+                                    justifyContent: 'space-between',
+                                    alignItems: 'center',
+                                    padding: '10px 14px',
+                                    background: '#fafafa',
+                                    borderRadius: '6px',
+                                    border: '1px solid #ececec',
+                                  }}
+                                >
+                                  <div>
+                                    <div style={{fontWeight: '600', fontSize: '14px', color: '#222'}}>
+                                      {d.doc_type_label}
+                                      {d.doc_number ? ` №${d.doc_number}` : ''}
+                                    </div>
+                                    <div style={{fontSize: '11px', color: '#999', marginTop: '2px'}}>
+                                      {formatDate(d.created_at)}
+                                      {d.status === 'signed' && ' • ✅ підписано'}
+                                    </div>
+                                  </div>
+                                  <div style={{display: 'flex', gap: '6px'}}>
+                                    <a
+                                      href={d.preview_url}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      style={{
+                                        padding: '6px 12px',
+                                        background: '#fff',
+                                        color: '#0a3d2e',
+                                        border: '1px solid #0a3d2e',
+                                        borderRadius: '4px',
+                                        fontSize: '12px',
+                                        fontWeight: '600',
+                                        textDecoration: 'none',
+                                      }}
+                                    >
+                                      Переглянути
+                                    </a>
+                                    <a
+                                      href={d.pdf_url}
+                                      style={{
+                                        padding: '6px 12px',
+                                        background: '#0a3d2e',
+                                        color: '#fff',
+                                        border: '1px solid #0a3d2e',
+                                        borderRadius: '4px',
+                                        fontSize: '12px',
+                                        fontWeight: '600',
+                                        textDecoration: 'none',
+                                      }}
+                                    >
+                                      PDF
+                                    </a>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
                   );
                 })}

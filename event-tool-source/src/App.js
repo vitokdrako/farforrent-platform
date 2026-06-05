@@ -259,7 +259,7 @@ const EventPlannerPage = () => {
     if (!startDate || !endDate) return;
 
     try {
-      const updatedBoard = await api.patch(`/boards/${boardId}`, {
+      const updatedBoard = await api.patch(`/event/boards/${boardId}`, {
         rental_start_date: startDate,
         rental_end_date: endDate,
       }).then(r => r.data);
@@ -276,7 +276,7 @@ const EventPlannerPage = () => {
     if (!activeBoard) return;
 
     try {
-      const updatedBoard = await api.patch(`/boards/${activeBoard.id}`, {
+      const updatedBoard = await api.patch(`/event/boards/${activeBoard.id}`, {
         canvas_layout: canvasLayout,
       }).then(r => r.data);
       
@@ -318,7 +318,7 @@ const EventPlannerPage = () => {
     if (!activeBoard) return;
 
     try {
-      await api.patch(`/boards/${activeBoard.id}/items/${itemId}`, updateData);
+      await api.patch(`/event/boards/${activeBoard.id}/items/${itemId}`, updateData);
       
       // Reload active board
       const updatedBoard = await api.get(`/event/boards/${activeBoard.id}`).then(r => r.data);

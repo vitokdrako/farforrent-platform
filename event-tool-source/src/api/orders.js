@@ -11,4 +11,9 @@ export const ordersApi = {
     const res = await api.get(`/event/orders/${orderId}`);
     return res.data;
   },
+  // Документи замовлення
+  documents: async (orderId) => {
+    const res = await api.get(`/event/orders/${orderId}/documents`);
+    return res.data;
+  },
 };
