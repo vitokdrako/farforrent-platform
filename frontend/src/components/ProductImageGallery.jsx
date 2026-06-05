@@ -11,7 +11,7 @@ const API = process.env.REACT_APP_BACKEND_URL || '';
  *   onChange (fn)      — викликається після успіх. операції
  *   compact (bool)     — компактний режим без заголовку
  */
-export default function ProductImageGallery({ productId, onChange, compact = false }) {
+export default function ProductImageGallery({ productId, onChange = null, compact = false }) {
   const [images, setImages] = useState([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);

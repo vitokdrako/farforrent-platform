@@ -796,7 +796,7 @@ function CreateProductModal({ onClose, onCreated, categories, subcategoriesMap, 
               <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3 text-sm text-emerald-800">
                 ✅ Товар створено. Тепер додайте фотографії (можна кілька одночасно).
               </div>
-              <ProductImageGallery productId={createdId} />
+              <ProductImageGallery productId={createdId} onChange={undefined} />
               <div className="flex justify-end gap-2 pt-2 border-t border-corp-border">
                 <button
                   onClick={onCreated}
