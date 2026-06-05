@@ -1,0 +1,418 @@
+/* FarforRent Corporate Style */
+/* Based on farforrent.com.ua template design */
+
+/* Montserrat Font Family */
+@font-face {
+    font-family: 'Montserrat';
+    src: url('../assets/fonts/Montserrat-Light.woff') format('woff');
+    font-weight: 300;
+    font-style: normal;
+}
+
+@font-face {
+    font-family: 'Montserrat';
+    src: url('../assets/fonts/Montserrat-Regular.woff') format('woff');
+    font-weight: 400;
+    font-style: normal;
+}
+
+@font-face {
+    font-family: 'Montserrat';
+    src: url('../assets/fonts/Montserrat-Medium.woff') format('woff');
+    font-weight: 500;
+    font-style: normal;
+}
+
+@font-face {
+    font-family: 'Montserrat';
+    src: url('../assets/fonts/Montserrat-SemiBold.woff') format('woff');
+    font-weight: 600;
+    font-style: normal;
+}
+
+@font-face {
+    font-family: 'Montserrat';
+    src: url('../assets/fonts/Montserrat-Bold.woff') format('woff');
+    font-weight: 700;
+    font-style: normal;
+}
+
+@font-face {
+    font-family: 'Montserrat';
+    src: url('../assets/fonts/Montserrat-ExtraBold.woff') format('woff');
+    font-weight: 800;
+    font-style: normal;
+}
+
+/* CSS Variables */
+:root {
+    /* Corporate Colors */
+    --corp-primary: #b1cb29;
+    --corp-primary-hover: #9fb524;
+    --corp-text-main: #838182;
+    --corp-text-dark: #2b292b;
+    --corp-text-light: #4D4D4D;
+    
+    /* Backgrounds */
+    --corp-bg-white: #ffffff;
+    --corp-bg-light: #f7f7f7;
+    --corp-bg-lighter: #f8f8f8;
+    
+    /* Borders */
+    --corp-border: #e5ecf3;
+    --corp-border-light: #eee;
+    
+    /* Shadows */
+    --corp-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+    --corp-shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.05);
+    
+    /* Transitions */
+    --corp-transition: all ease 0.3s;
+}
+
+/* Global Styles */
+* {
+    box-sizing: border-box;
+    outline: 0 !important;
+}
+
+body {
+    font-family: 'Montserrat', Arial, sans-serif;
+    font-weight: 400;
+    color: var(--corp-text-main);
+    font-size: 14px;
+    line-height: 1.5;
+    width: 100%;
+    margin: 0;
+    padding: 0;
+    background: var(--corp-bg-lighter);
+}
+
+a {
+    color: var(--corp-primary);
+    text-decoration: none;
+    transition: var(--corp-transition);
+}
+
+a:hover {
+    color: var(--corp-primary-hover);
+}
+
+/* Typography */
+h1 {
+    margin: 0 auto 20px;
+    text-align: center;
+    font-size: 30px;
+    font-weight: 700;
+    color: var(--corp-text-dark);
+}
+
+h2 {
+    font-size: 24px;
+    font-weight: 600;
+    color: var(--corp-text-dark);
+    margin: 0 0 15px 0;
+}
+
+h3 {
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--corp-text-dark);
+    margin: 0 0 10px 0;
+}
+
+p {
+    margin: 0 0 10px 0;
+}
+
+/* Inputs */
+input:not([type="radio"]):not([type="checkbox"]):not([type="button"]):not([type="submit"]),
+select,
+textarea {
+    color: var(--corp-text-main);
+    border: 1px solid var(--corp-border);
+    padding: 10px 15px;
+    width: 100%;
+    margin: 0 auto 20px;
+    border-radius: 4px;
+    font-size: 15px;
+    font-family: 'Montserrat', Arial, sans-serif;
+    font-weight: 300;
+    line-height: 1;
+    transition: var(--corp-transition);
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+    border-color: var(--corp-primary);
+}
+
+input::placeholder,
+textarea::placeholder {
+    color: var(--corp-text-main);
+    font-size: 15px;
+    font-family: 'Montserrat', Arial, sans-serif;
+    font-weight: 300;
+}
+
+textarea {
+    height: 140px;
+    resize: none;
+    line-height: 1.5;
+}
+
+/* Checkboxes */
+input[type="checkbox"] {
+    display: none;
+}
+
+input[type="checkbox"] + label {
+    position: relative;
+    padding: 0 0 0 25px;
+    cursor: pointer;
+    transition: var(--corp-transition);
+}
+
+input[type="checkbox"] + label:before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 18px;
+    height: 18px;
+    background: transparent;
+    border-radius: 4px;
+    border: 1px solid var(--corp-border);
+    transition: all 0.3s ease;
+}
+
+input[type="checkbox"]:checked + label:before {
+    background: var(--corp-text-main);
+}
+
+input[type="checkbox"]:disabled + label {
+    color: var(--corp-border);
+}
+
+/* Buttons */
+.btn,
+button.btn,
+input[type="button"],
+input[type="submit"] {
+    position: relative;
+    font-family: 'Montserrat', Arial, sans-serif;
+    font-weight: 500;
+    font-size: 14px;
+    text-transform: uppercase;
+    cursor: pointer;
+    user-select: none;
+    background: var(--corp-bg-light);
+    color: var(--corp-text-main);
+    border: none;
+    padding: 0 20px;
+    height: 40px;
+    border-radius: 8px;
+    transition: var(--corp-transition);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    text-decoration: none;
+}
+
+.btn:hover,
+button.btn:hover,
+input[type="button"]:hover,
+input[type="submit"]:hover {
+    background: var(--corp-primary);
+    color: #fff;
+}
+
+.btn.disabled,
+button.btn.disabled {
+    background: var(--corp-bg-light);
+    color: var(--corp-text-main);
+    cursor: not-allowed;
+    opacity: 0.5;
+}
+
+.btn.disabled:hover {
+    background: var(--corp-bg-light);
+    color: var(--corp-text-main);
+}
+
+.btn-primary {
+    background: var(--corp-primary);
+    color: #fff;
+}
+
+.btn-primary:hover {
+    background: var(--corp-primary-hover);
+    color: #fff;
+}
+
+.btn-secondary {
+    background: var(--corp-bg-light);
+    color: var(--corp-text-main);
+}
+
+.btn-secondary:hover {
+    background: var(--corp-primary);
+    color: #fff;
+}
+
+/* Cards */
+.card {
+    background: var(--corp-bg-white);
+    border-radius: 4px;
+    padding: 20px;
+    box-shadow: var(--corp-shadow-sm);
+    transition: var(--corp-transition);
+}
+
+.card:hover {
+    box-shadow: var(--corp-shadow);
+}
+
+/* Modal */
+.modal {
+    position: fixed;
+    left: 0;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+    padding: 20px;
+}
+
+.modal-content {
+    background: var(--corp-bg-white);
+    box-shadow: var(--corp-shadow);
+    border-radius: 4px;
+    max-width: 90vw;
+    max-height: 90vh;
+    overflow: auto;
+    position: relative;
+    padding: 30px;
+}
+
+.modal-close {
+    position: absolute;
+    right: 15px;
+    top: 15px;
+    background: none;
+    border: none;
+    font-size: 28px;
+    padding: 0;
+    width: 30px;
+    height: 30px;
+    line-height: 1;
+    color: var(--corp-text-light);
+    cursor: pointer;
+    transition: var(--corp-transition);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.modal-close:hover {
+    color: var(--corp-primary);
+}
+
+/* Lists */
+.list-unstyled {
+    list-style-type: none;
+    padding: 0;
+    margin: 0;
+}
+
+/* Utility Classes */
+.text-center {
+    text-align: center;
+}
+
+.text-right {
+    text-align: right;
+}
+
+.text-uppercase {
+    text-transform: uppercase;
+}
+
+.mt-0 { margin-top: 0; }
+.mt-1 { margin-top: 10px; }
+.mt-2 { margin-top: 20px; }
+.mt-3 { margin-top: 30px; }
+
+.mb-0 { margin-bottom: 0; }
+.mb-1 { margin-bottom: 10px; }
+.mb-2 { margin-bottom: 20px; }
+.mb-3 { margin-bottom: 30px; }
+
+.p-0 { padding: 0; }
+.p-1 { padding: 10px; }
+.p-2 { padding: 20px; }
+.p-3 { padding: 30px; }
+
+.d-flex {
+    display: flex;
+}
+
+.align-items-center {
+    align-items: center;
+}
+
+.justify-content-between {
+    justify-content: space-between;
+}
+
+.justify-content-center {
+    justify-content: center;
+}
+
+.gap-1 { gap: 10px; }
+.gap-2 { gap: 20px; }
+
+/* Scrollbar Styling */
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: var(--corp-bg-light);
+}
+
+::-webkit-scrollbar-thumb {
+    background: var(--corp-text-main);
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: var(--corp-primary);
+}
+
+/* Error States */
+.error-message {
+    color: #dc3545;
+    font-size: 13px;
+    margin-top: -15px;
+    margin-bottom: 10px;
+}
+
+.has-error input,
+.has-error textarea,
+.has-error select {
+    border-color: #dc3545;
+}
+
+/* Success States */
+.success-message {
+    color: var(--corp-primary);
+    font-size: 13px;
+}

@@ -1,68 +1,92 @@
 #!/bin/bash
 # ============================================================
-# Деплой обох аплікацій на VPS
-# RentalHub адмінка → http://173.242.49.48:8080
-# Event Tool клієнти → http://173.242.49.48
+# ПОВНИЙ ДЕПЛОЙ на VPS
+#
+# Архітектура:
+#   ┌────────────────────────────────────────┐
+#   │ ОДИН backend (RentalHub) на :8001      │
+#   │ ОДНА БД MySQL `farforrent`              │
+#   └─────┬──────────────────────────┬───────┘
+#         │ /api/*                   │ /api/*
+#   ┌─────▼─────────────┐    ┌───────▼───────────┐
+#   │ http://IP/        │    │ http://IP:8080/   │
+#   │ Event Tool        │    │ RentalHub admin   │
+#   │ (клієнти)         │    │ (менеджери)       │
+#   └───────────────────┘    └───────────────────┘
 # ============================================================
 set -e
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 echo "📂 Repo root: $REPO_ROOT"
+echo ""
 
-# ===== 1. Event Tool frontend (статика — вже зібрано) =====
-echo "🟢 [1/5] Викладаємо Event Tool білд..."
-sudo rm -rf /var/www/event-tool-build
-sudo cp -r "$REPO_ROOT/event-tool-build" /var/www/event-tool-build
-sudo chown -R www-data:www-data /var/www/event-tool-build
+# ===== 1. Build Event Tool (клієнтський фронт) =====
+echo "═══ [1/4] Білдимо Event Tool (клієнтський React) ═══"
+bash "$REPO_ROOT/deploy/build_event_tool.sh"
+echo ""
 
-# ===== 2. RentalHub frontend (білдимо з джерел) =====
-echo "🟢 [2/5] Білдимо RentalHub адмінку..."
+# ===== 2. Build RentalHub adminку =====
+echo "═══ [2/4] Білдимо RentalHub адмінку ═══"
 cd "$REPO_ROOT/frontend"
 if [ ! -d node_modules ]; then
-  yarn install
+  yarn install --frozen-lockfile
 fi
 yarn build
-echo "  Білд готовий у $REPO_ROOT/frontend/build"
+sudo rm -rf /var/www/rentalhub-admin-build
+sudo cp -r build /var/www/rentalhub-admin-build
+sudo chown -R www-data:www-data /var/www/rentalhub-admin-build
+echo "✅ RentalHub білд у /var/www/rentalhub-admin-build"
+echo ""
 
-# ===== 3. Systemd unit-и =====
-echo "🟢 [3/5] Встановлюємо systemd unit-и..."
-sudo cp "$REPO_ROOT/deploy/rentalhub-backend.service" /etc/systemd/system/
-# Event Tool unit — тільки якщо є бекенд директорія
-if [ -d /var/www/event-tool/backend ]; then
-  sudo cp "$REPO_ROOT/deploy/event-tool-backend.service" /etc/systemd/system/
-fi
-sudo systemctl daemon-reload
+# ===== 3. Nginx конфіги =====
+echo "═══ [3/4] Налаштовуємо Nginx ═══"
+sudo cp "$REPO_ROOT/deploy/nginx-event-tool.conf"    /etc/nginx/sites-available/event-tool
+sudo cp "$REPO_ROOT/deploy/nginx-rentalhub.conf"     /etc/nginx/sites-available/rentalhub-admin
 
-# ===== 4. Nginx конфіги =====
-echo "🟢 [4/5] Налаштовуємо Nginx..."
-sudo cp "$REPO_ROOT/deploy/nginx-event-tool.conf" /etc/nginx/sites-available/event-tool
-sudo cp "$REPO_ROOT/deploy/nginx-rentalhub.conf"  /etc/nginx/sites-available/rentalhub-admin
-sudo ln -sf /etc/nginx/sites-available/event-tool      /etc/nginx/sites-enabled/
-sudo ln -sf /etc/nginx/sites-available/rentalhub-admin /etc/nginx/sites-enabled/
+# Виправляємо шлях у nginx-rentalhub.conf на новий
+sudo sed -i 's|/var/www/farforrent/frontend/build|/var/www/rentalhub-admin-build|g' /etc/nginx/sites-available/rentalhub-admin
+
+sudo ln -sf /etc/nginx/sites-available/event-tool       /etc/nginx/sites-enabled/
+sudo ln -sf /etc/nginx/sites-available/rentalhub-admin  /etc/nginx/sites-enabled/
 sudo rm -f /etc/nginx/sites-enabled/default
+sudo rm -f /etc/nginx/sites-enabled/farforrent
 sudo nginx -t
 sudo systemctl reload nginx
+echo "✅ Nginx OK"
+echo ""
 
-# ===== 5. Запуск backend-ів =====
-echo "🟢 [5/5] Перезапускаємо backend-и..."
+# ===== 4. Backend RH (systemd) =====
+echo "═══ [4/4] Перезапускаємо RH backend ═══"
+sudo cp "$REPO_ROOT/deploy/rentalhub-backend.service" /etc/systemd/system/
+sudo systemctl daemon-reload
 sudo systemctl enable rentalhub-backend 2>/dev/null || true
-sudo systemctl restart rentalhub-backend || echo "⚠️ rentalhub-backend не стартує — перевір логи: journalctl -u rentalhub-backend -n 50"
 
-if [ -d /var/www/event-tool/backend ]; then
-  sudo systemctl enable event-tool-backend 2>/dev/null || true
-  sudo systemctl restart event-tool-backend || echo "⚠️ event-tool-backend не стартує — перевір логи: journalctl -u event-tool-backend -n 50"
+# Знайти існуючий unit (raystatest або власна назва) — або просто наш
+if sudo systemctl list-units --type=service --all | grep -q "rentalhub-backend"; then
+  sudo systemctl restart rentalhub-backend || echo "⚠️ Backend не стартує — перевір логи"
 else
-  echo "⚠️ /var/www/event-tool/backend ще не створено — Event Tool backend не запускається."
-  echo "   Це ОК, бо готовий білд Event Tool fronту звертається до https://backrentalhub.farforrent.com.ua напряму."
+  echo "ℹ️  Юніт rentalhub-backend ще не активний. Якщо у тебе власне ім'я — перезапусти його вручну."
 fi
+echo ""
+
+# ===== Фінальна перевірка =====
+echo "═══ Перевірка ═══"
+sleep 2
+echo "Event Tool   (http://localhost):"
+curl -s -o /dev/null -w "  HTTP %{http_code}\n" http://127.0.0.1/ || echo "  ❌ нема відповіді"
+echo "RentalHub    (http://localhost:8080):"
+curl -s -o /dev/null -w "  HTTP %{http_code}\n" http://127.0.0.1:8080/ || echo "  ❌ нема відповіді"
+echo "Backend API  (http://localhost:8001/docs):"
+curl -s -o /dev/null -w "  HTTP %{http_code}\n" http://127.0.0.1:8001/docs || echo "  ❌ backend не запущено"
 
 echo ""
-echo "✅ Деплой завершено!"
+echo "✅ ДЕПЛОЙ ЗАВЕРШЕНО!"
 echo ""
-echo "Перевір:"
-echo "  Event Tool (клієнти):  http://173.242.49.48"
-echo "  RentalHub адмінка:     http://173.242.49.48:8080"
+echo "🌐 Адреси:"
+echo "   Клієнти (Event Tool):   http://173.242.49.48"
+echo "   Адмінка (RentalHub):    http://173.242.49.48:8080"
+echo "   API docs:               http://173.242.49.48:8080/docs"
 echo ""
-echo "Логи:"
-echo "  sudo journalctl -u rentalhub-backend -f"
-echo "  sudo tail -f /var/log/nginx/error.log"
+echo "📋 Логи:"
+echo "   sudo journalctl -u rentalhub-backend -f"
+echo "   sudo tail -f /var/log/nginx/error.log"
