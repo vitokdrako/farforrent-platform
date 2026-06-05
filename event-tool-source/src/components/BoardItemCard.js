@@ -16,11 +16,12 @@ const BoardItemCard = ({ item, boardDates, rentalDays, onUpdate, onRemove }) => 
 
   const handleQuantityChange = async (newQuantity) => {
     if (newQuantity < 1) return;
-    
-    // Check availability first
+
+    // Перевірка доступності на обрані дати
     if (boardDates?.startDate && boardDates?.endDate) {
-      if (availability && newQuantity > availability.available_quantity) {
-        alert(`Доступно лише ${availability.available_quantity} шт на вибрані дати`);
+      const maxAvail = availability?.available ?? availability?.available_quantity;
+      if (maxAvail !== undefined && newQuantity > maxAvail) {
+        alert(`Доступно лише ${maxAvail} шт на вибрані дати`);
         return;
       }
     }
@@ -69,7 +70,7 @@ const BoardItemCard = ({ item, boardDates, rentalDays, onUpdate, onRemove }) => 
             <span className="board-item-loading">⏳ Перевірка...</span>
           ) : availability ? (
             <AvailabilityBadge
-              available={availability.available_quantity}
+              available={availability.available ?? availability.available_quantity ?? 0}
               total={item.product?.quantity || 0}
               requested={quantity}
             />
@@ -101,7 +102,10 @@ const BoardItemCard = ({ item, boardDates, rentalDays, onUpdate, onRemove }) => 
           />
           <button
             onClick={() => handleQuantityChange(quantity + 1)}
-            disabled={isUpdating || (availability && quantity >= availability.available_quantity)}
+            disabled={
+              isUpdating ||
+              (availability && quantity >= (availability.available ?? availability.available_quantity ?? Infinity))
+            }
             className="board-item-quantity-btn"
           >
             +

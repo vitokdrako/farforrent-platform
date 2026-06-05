@@ -199,6 +199,33 @@ const EventPlannerPage = () => {
     loadInitialData();
   }, []);
 
+  // Перезавантажуємо товари коли змінилися дати оренди — щоб availability була актуальною
+  useEffect(() => {
+    if (!activeBoard?.rental_start_date || !activeBoard?.rental_end_date) return;
+    reloadProductsForDates(activeBoard.rental_start_date, activeBoard.rental_end_date);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeBoard?.rental_start_date, activeBoard?.rental_end_date]);
+
+  const buildProductsUrl = (skip, limit, dateFrom, dateTo) => {
+    const params = new URLSearchParams({ skip: String(skip), limit: String(limit) });
+    if (dateFrom) params.set('date_from', dateFrom);
+    if (dateTo) params.set('date_to', dateTo);
+    return `/event/products?${params.toString()}`;
+  };
+
+  const reloadProductsForDates = async (dateFrom, dateTo) => {
+    try {
+      setLoading(true);
+      const data = await api.get(buildProductsUrl(0, 100, dateFrom, dateTo)).then(r => r.data);
+      setProducts(Array.isArray(data) ? data : []);
+      setHasMore(Array.isArray(data) && data.length === 100);
+    } catch (e) {
+      console.error('Failed to reload products for dates:', e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const loadInitialData = async () => {
     try {
       setLoading(true);
@@ -209,9 +236,14 @@ const EventPlannerPage = () => {
         api.get('/event/subcategories').then(r => r.data),
         api.get('/event/boards').then(r => r.data),
       ]);
-      
+
+      // `/event/categories` повертає {categories: [...], colors, materials} — беремо саме .categories
+      const categoriesList = Array.isArray(categoriesData)
+        ? categoriesData
+        : (categoriesData?.categories || []);
+
       setProducts(Array.isArray(productsData) ? productsData : []);
-      setCategories(Array.isArray(categoriesData) ? categoriesData : []);
+      setCategories(categoriesList);
       setAllSubcategories(Array.isArray(subcategoriesData) ? subcategoriesData : []);
       setBoards(Array.isArray(boardsData) ? boardsData : []);
 
@@ -229,9 +261,11 @@ const EventPlannerPage = () => {
     try {
       setLoadingMore(true);
       const currentCount = products.length;
-      const moreProducts = await api.get(`/event/products?skip=${currentCount}&limit=100`).then(r => r.data);
-      
-      if (moreProducts.length === 0) {
+      const moreProducts = await api.get(
+        buildProductsUrl(currentCount, 100, activeBoard?.rental_start_date, activeBoard?.rental_end_date)
+      ).then(r => r.data);
+
+      if (!Array.isArray(moreProducts) || moreProducts.length === 0) {
         setHasMore(false);
       } else {
         setProducts([...products, ...moreProducts]);
@@ -378,22 +412,26 @@ const EventPlannerPage = () => {
     });
   }, [categories, products]);
 
-  // Get available subcategories based on selected category
-  // IMPORTANT: Use only subcategories from currently loaded products
+  // Get available subcategories — використовуємо повний список з API
+  // (раніше брали з завантажених products, що обмежувало вибір до 100 товарів)
   const availableSubcategories = React.useMemo(() => {
     if (!selectedCategory) return [];
-    
-    // Get subcategories from loaded products only (not from API)
-    // This ensures we only show subcategories that have products in current view
+
+    // Пріоритет — підкатегорії з selectedCategory у дереві категорій
+    const cat = (categories || []).find(c => c.name === selectedCategory);
+    if (cat && Array.isArray(cat.subcategories) && cat.subcategories.length > 0) {
+      return cat.subcategories.map(s => s.name).filter(Boolean).sort((a, b) => a.localeCompare(b, 'uk'));
+    }
+
+    // Fallback: з завантажених products
     const subcats = new Set();
     products.forEach(p => {
       if (p.category_name === selectedCategory && p.subcategory_name) {
         subcats.add(p.subcategory_name);
       }
     });
-    
     return Array.from(subcats).sort((a, b) => a.localeCompare(b, 'uk'));
-  }, [products, selectedCategory]);
+  }, [products, selectedCategory, categories]);
 
   // Get all available colors
   const availableColors = React.useMemo(() => {
@@ -413,6 +451,36 @@ const EventPlannerPage = () => {
   useEffect(() => {
     setSelectedSubcategory(null);
   }, [selectedCategory]);
+
+  // Серверсайд фільтрація — реагуємо на пошук/категорію/підкатегорію/колір з дебаунсом
+  useEffect(() => {
+    const handle = setTimeout(() => {
+      const params = new URLSearchParams({ skip: '0', limit: '500' });
+      if (searchTerm) params.set('search', searchTerm);
+      if (selectedCategory) params.set('category_name', selectedCategory);
+      if (selectedSubcategory) params.set('subcategory_name', selectedSubcategory);
+      if (selectedColor) params.set('color', selectedColor);
+      if (activeBoard?.rental_start_date) params.set('date_from', activeBoard.rental_start_date);
+      if (activeBoard?.rental_end_date) params.set('date_to', activeBoard.rental_end_date);
+
+      // Якщо немає жодного фільтру — не перевантажуємо, лишаємо завантажені 100
+      const hasFilters = searchTerm || selectedCategory || selectedSubcategory || selectedColor;
+      if (!hasFilters && !activeBoard?.rental_start_date) return;
+
+      setLoading(true);
+      api.get(`/event/products?${params.toString()}`)
+        .then(r => {
+          const data = Array.isArray(r.data) ? r.data : [];
+          setProducts(data);
+          setHasMore(data.length === 500);
+        })
+        .catch(e => console.error('Filter fetch failed:', e))
+        .finally(() => setLoading(false));
+    }, 350); // debounce 350ms
+
+    return () => clearTimeout(handle);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchTerm, selectedCategory, selectedSubcategory, selectedColor]);
 
   const filteredProducts = products.filter(p => {
     // Smart search - checks name, SKU, category, subcategory, color, material

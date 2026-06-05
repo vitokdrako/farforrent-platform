@@ -70,7 +70,7 @@ const ProductCard = ({ product, onAddToBoard, boardDates }) => {
               <span>⏳ Перевірка...</span>
             ) : availability ? (
               <AvailabilityBadge
-                available={availability.available_quantity}
+                available={availability.available ?? availability.available_quantity ?? 0}
                 total={product.quantity}
                 requested={1}
                 compact={true}
@@ -127,7 +127,7 @@ const ProductCard = ({ product, onAddToBoard, boardDates }) => {
         {boardDates?.startDate && boardDates?.endDate && availability && (
           <div className="product-card-availability">
             <AvailabilityBadge
-              available={availability.available_quantity}
+              available={availability.available ?? availability.available_quantity ?? 0}
               total={product.quantity}
               requested={1}
             />
