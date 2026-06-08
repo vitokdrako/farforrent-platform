@@ -1,7 +1,0 @@
-# Ignore all uploaded files
-*
-# But keep directory structure
-!.gitignore
-!photos/
-!products/
-!qr/
