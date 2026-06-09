@@ -1,18 +1,16 @@
 #!/bin/bash
 # ============================================================
-# ПОВНИЙ ДЕПЛОЙ на VPS
+# ПОВНИЙ ДЕПЛОЙ на VPS — УНІФІКОВАНА АРХІТЕКТУРА (один порт 80)
 #
-# Архітектура:
-#   ┌────────────────────────────────────────┐
-#   │ ОДИН backend (RentalHub) на :8001      │
-#   │ ОДНА БД MySQL `farforrent`              │
-#   └─────┬──────────────────────────┬───────┘
-#         │ /api/*                   │ /api/*
-#   ┌─────▼─────────────┐    ┌───────▼───────────┐
-#   │ http://IP/        │    │ http://IP:8080/   │
-#   │ Event Tool        │    │ RentalHub admin   │
-#   │ (клієнти)         │    │ (менеджери)       │
-#   └───────────────────┘    └───────────────────┘
+#   ┌─────────────────────────────────────────────┐
+#   │ ОДИН backend (RentalHub) на :8001           │
+#   │ ОДНА БД MySQL `farforrent`                  │
+#   └────────────────────┬────────────────────────┘
+#                        │ /api/*
+#   ┌────────────────────▼────────────────────────┐
+#   │ http://IP/         → Event Tool (клієнти)   │
+#   │ http://IP/admin/   → RentalHub адмінка      │
+#   └─────────────────────────────────────────────┘
 # ============================================================
 set -e
 
@@ -26,18 +24,17 @@ bash "$REPO_ROOT/deploy/build_event_tool.sh"
 echo ""
 
 # ===== 2. Build RentalHub adminку =====
-echo "═══ [2/4] Білдимо RentalHub адмінку ═══"
+echo "═══ [2/4] Білдимо RentalHub адмінку (PUBLIC_URL=/admin) ═══"
 cd "$REPO_ROOT/frontend"
 if [ ! -d node_modules ]; then
   yarn install --frozen-lockfile
 fi
-# Очищаємо PUBLIC_URL щоб білд був на корені (порт :8080)
-unset PUBLIC_URL
-PUBLIC_URL='' yarn build
+# Білд під шляхом /admin/ + same-origin API
+PUBLIC_URL='/admin' REACT_APP_BACKEND_URL='' yarn build
 sudo rm -rf /var/www/rentalhub-admin-build
 sudo cp -r build /var/www/rentalhub-admin-build
 sudo chown -R www-data:www-data /var/www/rentalhub-admin-build
-echo "✅ RentalHub білд у /var/www/rentalhub-admin-build"
+echo "✅ RentalHub білд у /var/www/rentalhub-admin-build (під /admin/)"
 echo ""
 
 # ===== 3. Nginx конфіги =====
@@ -48,12 +45,12 @@ sudo rm -f /etc/nginx/sites-enabled/farforrent
 sudo rm -f /etc/nginx/sites-enabled/event-tool
 sudo rm -f /etc/nginx/sites-enabled/rentalhub-admin
 sudo rm -f /etc/nginx/sites-enabled/rentalhub
+# Видаляємо застарілу конфігурацію порту 8080 (більше не потрібна)
+sudo rm -f /etc/nginx/sites-available/rentalhub-admin
 
 sudo cp "$REPO_ROOT/deploy/nginx-event-tool.conf"    /etc/nginx/sites-available/event-tool
-sudo cp "$REPO_ROOT/deploy/nginx-rentalhub.conf"     /etc/nginx/sites-available/rentalhub-admin
 
 sudo ln -sf /etc/nginx/sites-available/event-tool       /etc/nginx/sites-enabled/
-sudo ln -sf /etc/nginx/sites-available/rentalhub-admin  /etc/nginx/sites-enabled/
 
 sudo nginx -t
 sudo systemctl reload nginx
@@ -90,10 +87,10 @@ echo ""
 # ===== Фінальна перевірка =====
 echo "═══ Перевірка ═══"
 sleep 3
-echo "Event Tool   (http://localhost):"
+echo "Event Tool   (http://localhost/):"
 curl -s -o /dev/null -w "  HTTP %{http_code}\n" http://127.0.0.1/ || echo "  ❌ нема відповіді"
-echo "RentalHub    (http://localhost:8080):"
-curl -s -o /dev/null -w "  HTTP %{http_code}\n" http://127.0.0.1:8080/ || echo "  ❌ нема відповіді"
+echo "RentalHub    (http://localhost/admin/):"
+curl -s -o /dev/null -w "  HTTP %{http_code}\n" http://127.0.0.1/admin/ || echo "  ❌ нема відповіді"
 echo "Backend API  (http://localhost:8001/docs):"
 BACKEND_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8001/docs)
 echo "  HTTP $BACKEND_CODE"
@@ -109,9 +106,9 @@ echo ""
 echo "✅ ДЕПЛОЙ ЗАВЕРШЕНО!"
 echo ""
 echo "🌐 Адреси:"
-echo "   Клієнти (Event Tool):   http://173.242.49.48"
-echo "   Адмінка (RentalHub):    http://173.242.49.48:8080"
-echo "   API docs:               http://173.242.49.48:8080/docs"
+echo "   Клієнти (Event Tool):   http://173.242.49.48/"
+echo "   Адмінка (RentalHub):    http://173.242.49.48/admin/"
+echo "   API docs:               http://173.242.49.48/docs"
 echo ""
 echo "📋 Логи:"
 echo "   sudo journalctl -u rentalhub-backend -f"
