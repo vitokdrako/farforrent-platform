@@ -607,7 +607,7 @@ const EventPlannerPage = () => {
         <div className={`flex-1 overflow-auto transition-all duration-300 ${isSidePanelOpen ? 'mr-96' : ''}`}>
           <div className="p-8">
             {/* Search and Filters */}
-            <div className="mb-6 space-y-4">
+            <div className="mb-6 space-y-4 desktop-only-filters">
               <div style={{maxWidth: '600px'}}>
                 <input
                   type="text"

@@ -142,6 +142,7 @@ html, body {
     .filters-container,
     .filters-bar,
     .corp-search-bar,
+    .desktop-only-filters,
     div.mb-4:has(> input[placeholder*="ошук" i]),
     div.mb-4:has(> select) {
         display: none !important;
