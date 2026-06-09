@@ -30,7 +30,9 @@ if [ ! -d node_modules ]; then
   yarn install --frozen-lockfile
 fi
 # Білд під шляхом /admin/ + same-origin API
-PUBLIC_URL='/admin' REACT_APP_BACKEND_URL='' yarn build
+# REACT_APP_BASENAME — для React Router basename (правильно інлайниться CRA)
+# PUBLIC_URL — для статичних ассетів (CSS/JS) щоб шукали /admin/static/
+PUBLIC_URL='/admin' REACT_APP_BASENAME='/admin' REACT_APP_BACKEND_URL='' yarn build
 sudo rm -rf /var/www/rentalhub-admin-build
 sudo cp -r build /var/www/rentalhub-admin-build
 sudo chown -R www-data:www-data /var/www/rentalhub-admin-build

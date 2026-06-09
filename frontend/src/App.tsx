@@ -124,7 +124,7 @@ function App() {
   };
   
   return (
-    <Router basename={process.env.PUBLIC_URL || ''}>
+    <Router basename={process.env.REACT_APP_BASENAME || ''}>
       <div className="min-h-screen bg-gray-50 flex flex-col">
         <div className="flex-1">
         <Routes>
