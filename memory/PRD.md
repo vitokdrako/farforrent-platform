@@ -17,6 +17,14 @@ See `/app/memory/test_credentials.md`
 
 ## What's Been Implemented (latest first)
 
+### 2026-02-05
+- **Repo cleanup**: видалено ~50 одноразових скриптів з `/app/backend/` (sync_*, check_*, migrate_*, fix_*, update_*, setup_rentalhub_*, test_* в корені, *.xlsx).
+- **Безпека**: `backend/.encryption_key` прибрано з git tracking + додано в `.gitignore`.
+- **Дублікати видалено**: `models_extended.py`, `finance_rules.py` (не імпортуються), `nginx-rentalhub-unified.conf` (застарілий).
+- **Event Tool mobile fix — sidebar fullscreen**: `mobile.css` тепер правильно таргетить `.fd-side-panel` (раніше селектор не співпадав, тому каталог-чіпси "проступали" через мудборд). Додано клас `body.sidebar-open` що приховує chips/FAB коли мудборд відкритий.
+- **Event Tool — інфініт-скрол пагінація**: автозавантаження товарів при прокрутці до низу через `IntersectionObserver` + fallback-кнопка + лічильник "Показано N".
+- **deploy.sh — авто-оновлення Python deps**: додано `pip install -r requirements.txt` у venv та діагностику бек-логів при невдалому старті (виводить останні 30 рядків при HTTP 000/502).
+
 ### 2026-05-28
 - **Mobile UI: top toolbars refactored** on `ManagerDashboard.jsx` and `PickingListPage.jsx` (smaller paddings, `text-xs/sm:text-sm`, flex-wrap with smaller gaps; search and counter stack vertically on mobile).
 - **Back button navigation fix**:

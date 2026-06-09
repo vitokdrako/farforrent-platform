@@ -214,6 +214,33 @@ const EventPlannerPage = () => {
     reloadProductsForDates(activeBoard.rental_start_date, activeBoard.rental_end_date);
   }, [activeBoard?.rental_start_date, activeBoard?.rental_end_date]);
 
+  // Sync body.sidebar-open class for mobile CSS rules (hide chips & FAB while moodboard open)
+  useEffect(() => {
+    if (isSidePanelOpen) {
+      document.body.classList.add('sidebar-open');
+    } else {
+      document.body.classList.remove('sidebar-open');
+    }
+    return () => document.body.classList.remove('sidebar-open');
+  }, [isSidePanelOpen]);
+
+  // Інфініт-скрол: автозавантажуємо більше товарів коли користувач прокручує до низу
+  const loadMoreSentinelRef = React.useRef(null);
+  useEffect(() => {
+    const node = loadMoreSentinelRef.current;
+    if (!node) return;
+    const hasFilters = !!(searchTerm || selectedCategory || selectedSubcategory || selectedColor);
+    if (hasFilters || !hasMore || loadingMore) return;
+
+    const observer = new IntersectionObserver((entries) => {
+      if (entries[0].isIntersecting) {
+        loadMoreProducts();
+      }
+    }, { rootMargin: '300px 0px' });
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [hasMore, loadingMore, products.length, searchTerm, selectedCategory, selectedSubcategory, selectedColor]);
+
   const buildProductsUrl = (skip, limit, dateFrom, dateTo) => {
     const params = new URLSearchParams({ skip: String(skip), limit: String(limit) });
     if (dateFrom) params.set('date_from', dateFrom);
@@ -652,17 +679,34 @@ const EventPlannerPage = () => {
               ))}
             </div>
 
-            {/* Load More Button */}
+            {/* Load More — інфініт-скрол sentinel + fallback кнопка */}
             {hasMore && filteredProducts.length > 0 && !searchTerm && !selectedCategory && !selectedSubcategory && !selectedColor && (
-              <div className="text-center mt-8">
-                <button
-                  onClick={loadMoreProducts}
-                  disabled={loadingMore}
-                  className="fd-btn fd-btn-black disabled:opacity-50"
-                  style={{minWidth: '200px'}}
-                >
-                  {loadingMore ? 'Завантаження...' : 'Завантажити більше'}
-                </button>
+              <>
+                <div ref={loadMoreSentinelRef} aria-hidden="true" style={{height: '1px'}} />
+                <div className="text-center mt-8 mb-4">
+                  {loadingMore ? (
+                    <div className="inline-flex items-center gap-2" style={{color: '#666', fontSize: '13px'}}>
+                      <span className="infinite-spinner" />
+                      Завантаження товарів...
+                    </div>
+                  ) : (
+                    <button
+                      onClick={loadMoreProducts}
+                      className="fd-btn fd-btn-black"
+                      style={{minWidth: '200px'}}
+                      data-testid="load-more-btn"
+                    >
+                      Завантажити більше
+                    </button>
+                  )}
+                </div>
+              </>
+            )}
+
+            {/* Лічильник завантаженого — корисний індикатор пагінації */}
+            {filteredProducts.length > 0 && (
+              <div className="text-center mt-2 mb-6" style={{fontSize: '11px', color: '#999'}} data-testid="pagination-counter">
+                Показано {filteredProducts.length} {hasMore && !(searchTerm || selectedCategory || selectedSubcategory || selectedColor) ? '(прокрутіть, щоб завантажити ще)' : ''}
               </div>
             )}
 
