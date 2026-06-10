@@ -47,6 +47,18 @@ const UserProfile = () => {
     loadData();
   }, []);
 
+  // 🔄 Polling: автооновлення замовлень кожні 30с поки вкладка активна
+  useEffect(() => {
+    if (activeTab !== 'orders') return;
+    const interval = setInterval(() => {
+      // Тихе оновлення без спінера
+      ordersApi.list()
+        .then(data => setOrders(data))
+        .catch(() => {});
+    }, 30000);
+    return () => clearInterval(interval);
+  }, [activeTab]);
+
   const loadData = async () => {
     try {
       setLoading(true);
@@ -296,15 +308,66 @@ const UserProfile = () => {
                           )}
                           <div style={{fontSize: '12px', color: '#999', marginTop: '6px'}}>
                             {o.items_count} позицій • створено {formatDate(o.created_at)}
+                            {o.updated_at && o.updated_at !== o.created_at && (
+                              <> • оновлено {formatDate(o.updated_at)}</>
+                            )}
                           </div>
+
+                          {/* 📦 Прогрес комплектації */}
+                          {typeof o.packing_progress === 'number' && o.packing_progress > 0 && (
+                            <div style={{marginTop: '10px'}} data-testid={`packing-progress-${o.order_id}`}>
+                              <div style={{display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: '#666', marginBottom: '4px'}}>
+                                <span>📦 Комплектація</span>
+                                <span style={{fontWeight: '600', color: '#0a3d2e'}}>{o.packing_progress}%</span>
+                              </div>
+                              <div style={{width: '100%', height: '6px', background: '#eef2f0', borderRadius: '999px', overflow: 'hidden'}}>
+                                <div style={{
+                                  width: `${o.packing_progress}%`,
+                                  height: '100%',
+                                  background: o.packing_progress >= 100 ? '#16a34a' : '#0a3d2e',
+                                  transition: 'width 0.4s ease',
+                                }} />
+                              </div>
+                            </div>
+                          )}
+
+                          {/* 💬 Коментар менеджера */}
+                          {o.manager_comment && o.manager_comment.trim() && (
+                            <div style={{
+                              marginTop: '10px',
+                              padding: '8px 12px',
+                              background: '#fff7d6',
+                              borderLeft: '3px solid #b58a00',
+                              borderRadius: '4px',
+                              fontSize: '12px',
+                              color: '#5a4400',
+                            }} data-testid={`manager-comment-${o.order_id}`}>
+                              <strong>Менеджер:</strong> {o.manager_comment}
+                            </div>
+                          )}
                         </div>
                         <div style={{textAlign: 'right'}}>
                           <div style={{fontSize: '22px', fontWeight: '700', color: '#0a3d2e'}}>
-                            ₴{(o.total_price || 0).toFixed(2)}
+                            ₴{(o.total_to_pay || o.total_price || 0).toFixed(2)}
                           </div>
+                          {/* Деталі суми: знижка / сервісний збір */}
+                          {(o.discount_amount > 0 || o.service_fee > 0) && (
+                            <div style={{fontSize: '11px', color: '#888', marginTop: '2px'}}>
+                              {o.discount_amount > 0 && <>знижка −₴{o.discount_amount.toFixed(2)} </>}
+                              {o.service_fee > 0 && <>+сервіс ₴{o.service_fee.toFixed(2)}</>}
+                            </div>
+                          )}
                           {o.deposit_amount > 0 && (
                             <div style={{fontSize: '12px', color: '#888', marginTop: '4px'}}>
                               Завдаток: ₴{o.deposit_amount.toFixed(2)}
+                              {o.paid_deposit > 0 && (
+                                <span style={{color: '#2e7d32', fontWeight: '600'}}> (сплачено ₴{o.paid_deposit.toFixed(2)})</span>
+                              )}
+                            </div>
+                          )}
+                          {o.paid_rent > 0 && (
+                            <div style={{fontSize: '12px', color: '#2e7d32', marginTop: '2px', fontWeight: '600'}} data-testid={`paid-rent-${o.order_id}`}>
+                              ✅ Сплачено: ₴{o.paid_rent.toFixed(2)}
                             </div>
                           )}
                           <button

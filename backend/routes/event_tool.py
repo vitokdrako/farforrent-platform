@@ -1619,7 +1619,13 @@ async def get_my_orders(
                 {col('source', "''")} AS source,
                 {col('created_at')} AS created_at,
                 {col('notes', "''")} AS notes,
-                {col('customer_name', "''")} AS customer_name
+                {col('customer_name', "''")} AS customer_name,
+                {col('updated_at')} AS updated_at,
+                {col('issue_date')} AS issue_date,
+                {col('return_date')} AS return_date,
+                {col('service_fee', '0')} AS service_fee,
+                {col('discount_amount', '0')} AS discount_amount,
+                {col('manager_comment', "''")} AS manager_comment
             FROM orders
             WHERE {col('client_user_id', 'NULL')} = :cuid
                OR ({col('customer_email', "''")} = :email AND :email <> '')
@@ -1640,6 +1646,46 @@ async def get_my_orders(
             except Exception:
                 items_count = 0
 
+            # ✅ Прогрес комплектації з issue_cards
+            packing_progress = 0
+            try:
+                ic_row = db.execute(
+                    text("SELECT items FROM issue_cards WHERE order_id = :oid"),
+                    {"oid": order_id}
+                ).fetchone()
+                if ic_row and ic_row[0]:
+                    import json
+                    ic_items = json.loads(ic_row[0]) if isinstance(ic_row[0], str) else ic_row[0]
+                    if ic_items:
+                        total_qty = sum(it.get('qty', 1) for it in ic_items)
+                        picked_qty = sum(it.get('picked_qty', 0) for it in ic_items)
+                        if total_qty > 0:
+                            packing_progress = int((picked_qty / total_qty) * 100)
+            except Exception:
+                packing_progress = 0
+
+            # ✅ Скільки клієнт сплатив (з fin_transactions)
+            paid_rent = 0.0
+            paid_deposit = 0.0
+            try:
+                pay_row = db.execute(text("""
+                    SELECT
+                        COALESCE(SUM(CASE WHEN tx_type IN ('rent_payment', 'additional_payment') THEN amount ELSE 0 END), 0),
+                        COALESCE(SUM(CASE WHEN tx_type = 'deposit_payment' THEN amount ELSE 0 END), 0)
+                    FROM fin_transactions
+                    WHERE entity_type = 'order' AND entity_id = :oid
+                """), {"oid": order_id}).fetchone()
+                if pay_row:
+                    paid_rent = float(pay_row[0] or 0)
+                    paid_deposit = float(pay_row[1] or 0)
+            except Exception:
+                pass
+
+            total_rental = float(r[8] or 0)
+            service_fee = float(r[18] or 0)
+            discount_amount = float(r[19] or 0)
+            total_to_pay = round(max(0, total_rental - discount_amount) + service_fee, 2)
+
             result.append({
                 "order_id": order_id,
                 "order_number": r[1],
@@ -1649,7 +1695,7 @@ async def get_my_orders(
                 "rental_days": int(r[5] or 0),
                 "event_date": r[6].isoformat() if r[6] else None,
                 "event_location": r[7],
-                "total_price": float(r[8] or 0),
+                "total_price": total_rental,
                 "deposit_amount": float(r[9] or 0),
                 "payment_status": r[10] or "",
                 "source": r[11] or "",
@@ -1657,6 +1703,17 @@ async def get_my_orders(
                 "notes": r[13] or "",
                 "customer_name": r[14] or "",
                 "items_count": items_count,
+                # Нові поля для синхронізації з RentalHub
+                "updated_at": r[15].isoformat() if r[15] else None,
+                "issue_date": r[16].isoformat() if r[16] else None,
+                "return_date": r[17].isoformat() if r[17] else None,
+                "service_fee": service_fee,
+                "discount_amount": discount_amount,
+                "total_to_pay": total_to_pay,
+                "manager_comment": r[20] or "",
+                "packing_progress": packing_progress,
+                "paid_rent": paid_rent,
+                "paid_deposit": paid_deposit,
             })
         return result
     except Exception as e:
@@ -1708,7 +1765,13 @@ async def get_my_order_details(
                 {col('notes', "''")} AS notes,
                 {col('customer_name', "''")} AS customer_name,
                 {col('customer_phone', "''")} AS customer_phone,
-                {col('customer_email', "''")} AS customer_email
+                {col('customer_email', "''")} AS customer_email,
+                {col('updated_at')} AS updated_at,
+                {col('issue_date')} AS issue_date,
+                {col('return_date')} AS return_date,
+                {col('service_fee', '0')} AS service_fee,
+                {col('discount_amount', '0')} AS discount_amount,
+                {col('manager_comment', "''")} AS manager_comment
             FROM orders
             WHERE order_id = :oid
               AND ({col('client_user_id', 'NULL')} = :cuid OR {col('customer_email', "''")} = :email)
@@ -1730,10 +1793,51 @@ async def get_my_order_details(
                 {ic('quantity', '0')} AS quantity,
                 {ic('price', '0')} AS price,
                 {ic('total_rental', '0')} AS total_rental,
-                {ic('total_deposit', '0')} AS total_deposit
+                {ic('total_deposit', '0')} AS total_deposit,
+                {ic('image_url', "''")} AS image_url
             FROM order_items WHERE order_id = :oid
         """
         items_rows = db.execute(text(items_sql), {"oid": order_id}).fetchall()
+
+        # ✅ Прогрес комплектації з issue_cards
+        packing_progress = 0
+        try:
+            ic_row = db.execute(
+                text("SELECT items FROM issue_cards WHERE order_id = :oid"),
+                {"oid": order_id}
+            ).fetchone()
+            if ic_row and ic_row[0]:
+                import json
+                ic_items = json.loads(ic_row[0]) if isinstance(ic_row[0], str) else ic_row[0]
+                if ic_items:
+                    total_qty = sum(it.get('qty', 1) for it in ic_items)
+                    picked_qty = sum(it.get('picked_qty', 0) for it in ic_items)
+                    if total_qty > 0:
+                        packing_progress = int((picked_qty / total_qty) * 100)
+        except Exception:
+            packing_progress = 0
+
+        # ✅ Скільки клієнт сплатив
+        paid_rent = 0.0
+        paid_deposit = 0.0
+        try:
+            pay_row = db.execute(text("""
+                SELECT
+                    COALESCE(SUM(CASE WHEN tx_type IN ('rent_payment', 'additional_payment') THEN amount ELSE 0 END), 0),
+                    COALESCE(SUM(CASE WHEN tx_type = 'deposit_payment' THEN amount ELSE 0 END), 0)
+                FROM fin_transactions
+                WHERE entity_type = 'order' AND entity_id = :oid
+            """), {"oid": order_id}).fetchone()
+            if pay_row:
+                paid_rent = float(pay_row[0] or 0)
+                paid_deposit = float(pay_row[1] or 0)
+        except Exception:
+            pass
+
+        total_rental = float(order_row[8] or 0)
+        service_fee = float(order_row[20] or 0)
+        discount_amount = float(order_row[21] or 0)
+        total_to_pay = round(max(0, total_rental - discount_amount) + service_fee, 2)
 
         return {
             "order_id": order_row[0],
@@ -1744,7 +1848,7 @@ async def get_my_order_details(
             "rental_days": int(order_row[5] or 0),
             "event_date": order_row[6].isoformat() if order_row[6] else None,
             "event_location": order_row[7],
-            "total_price": float(order_row[8] or 0),
+            "total_price": total_rental,
             "deposit_amount": float(order_row[9] or 0),
             "payment_status": order_row[10] or "",
             "source": order_row[11] or "",
@@ -1753,6 +1857,17 @@ async def get_my_order_details(
             "customer_name": order_row[14] or "",
             "customer_phone": order_row[15] or "",
             "customer_email": order_row[16] or "",
+            # Нові поля для синхронізації з RentalHub
+            "updated_at": order_row[17].isoformat() if order_row[17] else None,
+            "issue_date": order_row[18].isoformat() if order_row[18] else None,
+            "return_date": order_row[19].isoformat() if order_row[19] else None,
+            "service_fee": service_fee,
+            "discount_amount": discount_amount,
+            "total_to_pay": total_to_pay,
+            "manager_comment": order_row[22] or "",
+            "packing_progress": packing_progress,
+            "paid_rent": paid_rent,
+            "paid_deposit": paid_deposit,
             "items": [
                 {
                     "product_id": ir[0],
@@ -1761,6 +1876,7 @@ async def get_my_order_details(
                     "price": float(ir[3] or 0),
                     "total_rental": float(ir[4] or 0),
                     "total_deposit": float(ir[5] or 0),
+                    "image_url": ir[6] or "",
                 }
                 for ir in items_rows
             ],
