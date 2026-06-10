@@ -45,6 +45,9 @@ const UserProfile = () => {
   const [openedOrderId, setOpenedOrderId] = useState(null);
   // Документ що клієнт зараз підписує (модалка)
   const [signingDoc, setSigningDoc] = useState(null); // {orderId, document}
+  // Кеш повних деталей замовлення (з items + photos)
+  const [orderDetailsCache, setOrderDetailsCache] = useState({}); // {orderId: detail}
+  const [expandedItems, setExpandedItems] = useState(null); // orderId: показати items
 
   useEffect(() => {
     loadData();
@@ -106,6 +109,22 @@ const UserProfile = () => {
       } catch (e) {
         console.error('Failed to load docs:', e);
         setDocsByOrder(prev => ({...prev, [orderId]: []}));
+      }
+    }
+  };
+
+  const toggleOrderItems = async (orderId) => {
+    if (expandedItems === orderId) {
+      setExpandedItems(null);
+      return;
+    }
+    setExpandedItems(orderId);
+    if (!orderDetailsCache[orderId]) {
+      try {
+        const detail = await ordersApi.get(orderId);
+        setOrderDetailsCache(prev => ({...prev, [orderId]: detail}));
+      } catch (e) {
+        console.error('Failed to load order details:', e);
       }
     }
   };
@@ -373,25 +392,125 @@ const UserProfile = () => {
                               ✅ Сплачено: ₴{o.paid_rent.toFixed(2)}
                             </div>
                           )}
-                          <button
-                            onClick={() => toggleOrderDocs(o.order_id)}
-                            data-testid={`order-docs-toggle-${o.order_id}`}
-                            style={{
-                              marginTop: '10px',
-                              padding: '6px 12px',
-                              background: isOpen ? '#0a3d2e' : '#f5f5f5',
-                              color: isOpen ? '#fff' : '#0a3d2e',
-                              border: '1px solid #0a3d2e',
-                              borderRadius: '4px',
-                              cursor: 'pointer',
-                              fontSize: '12px',
-                              fontWeight: '600',
-                            }}
-                          >
-                            📄 Документи {isOpen ? '▲' : '▼'}
-                          </button>
+                          <div style={{display: 'flex', gap: '6px', marginTop: '10px', flexWrap: 'wrap', justifyContent: 'flex-end'}}>
+                            <button
+                              onClick={() => toggleOrderItems(o.order_id)}
+                              data-testid={`order-items-toggle-${o.order_id}`}
+                              style={{
+                                padding: '6px 12px',
+                                background: expandedItems === o.order_id ? '#0a3d2e' : '#f5f5f5',
+                                color: expandedItems === o.order_id ? '#fff' : '#0a3d2e',
+                                border: '1px solid #0a3d2e',
+                                borderRadius: '4px',
+                                cursor: 'pointer',
+                                fontSize: '12px',
+                                fontWeight: '600',
+                              }}
+                            >
+                              🛍 Склад {expandedItems === o.order_id ? '▲' : '▼'}
+                            </button>
+                            <button
+                              onClick={() => toggleOrderDocs(o.order_id)}
+                              data-testid={`order-docs-toggle-${o.order_id}`}
+                              style={{
+                                padding: '6px 12px',
+                                background: isOpen ? '#0a3d2e' : '#f5f5f5',
+                                color: isOpen ? '#fff' : '#0a3d2e',
+                                border: '1px solid #0a3d2e',
+                                borderRadius: '4px',
+                                cursor: 'pointer',
+                                fontSize: '12px',
+                                fontWeight: '600',
+                              }}
+                            >
+                              📄 Документи {isOpen ? '▲' : '▼'}
+                            </button>
+                          </div>
                         </div>
                       </div>
+
+                      {/* Розгорнутий склад замовлення з фото, артикулом, цінами */}
+                      {expandedItems === o.order_id && (
+                        <div
+                          data-testid={`order-items-${o.order_id}`}
+                          style={{marginTop: '16px', paddingTop: '16px', borderTop: '1px solid #f0f0f0'}}
+                        >
+                          {!orderDetailsCache[o.order_id] ? (
+                            <div style={{fontSize: '13px', color: '#999'}}>Завантаження...</div>
+                          ) : (orderDetailsCache[o.order_id].items || []).length === 0 ? (
+                            <div style={{fontSize: '13px', color: '#999', fontStyle: 'italic'}}>
+                              Позицій ще немає (менеджер опрацьовує)
+                            </div>
+                          ) : (
+                            <>
+                              <div style={{fontSize: '13px', fontWeight: '600', color: '#444', marginBottom: '10px'}}>
+                                Позиції в замовленні (кількість діб встановлює менеджер):
+                              </div>
+                              <div style={{display: 'flex', flexDirection: 'column', gap: '10px'}}>
+                                {(orderDetailsCache[o.order_id].items || []).map((it, idx) => (
+                                  <div key={idx} style={{
+                                    display: 'flex', gap: '12px', padding: '10px',
+                                    background: '#fafafa', borderRadius: '8px',
+                                    border: '1px solid #ececec', alignItems: 'flex-start',
+                                  }}>
+                                    {/* Фото */}
+                                    <div style={{
+                                      width: '64px', height: '64px', borderRadius: '6px',
+                                      background: '#fff', overflow: 'hidden', flexShrink: 0,
+                                      border: '1px solid #eee',
+                                    }}>
+                                      {it.image_url ? (
+                                        <img src={it.image_url} alt={it.product_name}
+                                             style={{width: '100%', height: '100%', objectFit: 'cover'}}/>
+                                      ) : (
+                                        <div style={{width: '100%', height: '100%', background: '#f0f0f0',
+                                                     display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                     fontSize: '20px', color: '#bbb'}}>📦</div>
+                                      )}
+                                    </div>
+                                    {/* Інфо */}
+                                    <div style={{flex: 1, minWidth: 0}}>
+                                      <div style={{fontWeight: '600', color: '#222', fontSize: '14px', lineHeight: 1.3}}>
+                                        {it.product_name}
+                                      </div>
+                                      {it.sku && (
+                                        <div style={{fontSize: '11px', color: '#888', marginTop: '2px'}}>
+                                          Артикул: <code style={{background: '#eee', padding: '1px 5px', borderRadius: '3px'}}>{it.sku}</code>
+                                        </div>
+                                      )}
+                                      {(it.color || it.material) && (
+                                        <div style={{fontSize: '11px', color: '#888', marginTop: '2px'}}>
+                                          {it.color && <>🎨 {it.color}</>}{it.color && it.material && ' · '}
+                                          {it.material && <>{it.material}</>}
+                                        </div>
+                                      )}
+                                      <div style={{fontSize: '12px', color: '#444', marginTop: '6px', display: 'flex', gap: '14px', flexWrap: 'wrap'}}>
+                                        <span><strong>×{it.quantity}</strong> шт</span>
+                                        <span style={{color: '#0a3d2e'}}>₴{(it.price_per_day || 0).toFixed(2)}/добу</span>
+                                        {it.deposit_per_unit > 0 && (
+                                          <span style={{color: '#b58a00'}}>застава: ₴{it.deposit_per_unit.toFixed(2)}/шт</span>
+                                        )}
+                                      </div>
+                                      <div style={{fontSize: '12px', color: '#222', marginTop: '4px', fontWeight: '600'}}>
+                                        Разом за позицію: ₴{(it.total_rental || 0).toFixed(2)}
+                                        {it.total_deposit > 0 && <span style={{color: '#888', fontWeight: 'normal'}}> + застава ₴{it.total_deposit.toFixed(2)}</span>}
+                                      </div>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                              <div style={{
+                                marginTop: '12px', padding: '10px',
+                                background: '#f0f9ff', borderLeft: '3px solid #0ea5e9',
+                                borderRadius: '4px', fontSize: '12px', color: '#0c4a6e',
+                              }}>
+                                💡 <strong>Звертайте увагу:</strong> ціна оренди за добу × кількість діб × кількість одиниць = сума за позицію.
+                                Кількість діб оренди визначає менеджер при підтвердженні замовлення (за фактом видачі/повернення).
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      )}
 
                       {isOpen && (
                         <div

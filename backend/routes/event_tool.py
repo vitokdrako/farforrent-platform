@@ -804,11 +804,15 @@ async def get_boards(
         FROM event_boards WHERE customer_id = :customer_id
     """
     params = {"customer_id": customer["customer_id"]}
-    
+
     if status:
         sql += " AND status = :status"
         params["status"] = status
-    
+    else:
+        # За замовчуванням приховуємо мудборди, які вже стали замовленнями
+        # (вони мають status='converted'). Якщо потрібні усі — передай ?status=all
+        sql += " AND (status IS NULL OR status NOT IN ('converted', 'archived'))"
+
     sql += " ORDER BY updated_at DESC"
     
     result = db.execute(text(sql), params)
@@ -1774,22 +1778,31 @@ async def get_my_order_details(
         if not order_row:
             raise HTTPException(status_code=404, detail="Order not found")
 
-        # Items — теж захищаємо від відсутніх колонок
+        # Items — з джойном до products щоб дістати фото, SKU, актуальну ціну
         item_cols_rows = db.execute(text("SHOW COLUMNS FROM order_items")).fetchall()
         item_cols = {r[0] for r in item_cols_rows}
         def ic(name, default="NULL"):
-            return name if name in item_cols else default
+            return f"oi.{name}" if name in item_cols else default
 
         items_sql = f"""
             SELECT
                 {ic('product_id', '0')} AS product_id,
                 {ic('product_name', "''")} AS product_name,
                 {ic('quantity', '0')} AS quantity,
-                {ic('price', '0')} AS price,
+                {ic('price', '0')} AS price_per_day,
                 {ic('total_rental', '0')} AS total_rental,
                 {ic('total_deposit', '0')} AS total_deposit,
-                {ic('image_url', "''")} AS image_url
-            FROM order_items WHERE order_id = :oid
+                {ic('image_url', "''")} AS oi_image_url,
+                p.sku AS sku,
+                p.name AS p_name,
+                p.image_url AS p_image_url,
+                p.rental_price AS p_rental_price,
+                p.deposit AS p_deposit,
+                p.color AS color,
+                p.material AS material
+            FROM order_items oi
+            LEFT JOIN products p ON oi.product_id = p.product_id
+            WHERE oi.order_id = :oid
         """
         items_rows = db.execute(text(items_sql), {"oid": order_id}).fetchall()
 
@@ -1865,12 +1878,16 @@ async def get_my_order_details(
             "items": [
                 {
                     "product_id": ir[0],
-                    "product_name": ir[1],
+                    "product_name": ir[1] or ir[8] or '',
                     "quantity": int(ir[2] or 0),
-                    "price": float(ir[3] or 0),
+                    "price_per_day": float(ir[3] or 0),
                     "total_rental": float(ir[4] or 0),
                     "total_deposit": float(ir[5] or 0),
-                    "image_url": ir[6] or "",
+                    "image_url": ir[9] or ir[6] or '',  # фото товару (актуальне з products)
+                    "sku": ir[7] or '',                  # артикул
+                    "deposit_per_unit": float(ir[11] or 0),  # повна вартість одиниці (заставна)
+                    "color": ir[12] or '',
+                    "material": ir[13] or '',
                 }
                 for ir in items_rows
             ],
@@ -1917,6 +1934,8 @@ async def get_my_order_documents(
             raise HTTPException(status_code=404, detail="Order not found")
 
         # Документи + статус підписання
+        # ВАЖЛИВО: документи в RH можуть бути збережені з entity_id як STRING або INT.
+        # Шукаємо в обох форматах щоб не пропустити кошториси/договори створені менеджером.
         rows = db.execute(text("""
             SELECT d.id, d.doc_type, d.doc_number, d.version, d.status, d.signed_at, d.created_at,
                    (SELECT COUNT(*) FROM document_signatures ds
@@ -1924,9 +1943,12 @@ async def get_my_order_documents(
                    (SELECT COUNT(*) FROM document_signatures ds
                     WHERE ds.document_id = d.id AND ds.signer_role = 'landlord') AS landlord_signed
             FROM documents d
-            WHERE d.entity_type = 'order' AND d.entity_id = :oid
+            WHERE d.entity_type = 'order'
+              AND (d.entity_id = :oid_str OR d.entity_id = :oid_int)
             ORDER BY d.created_at DESC
-        """), {"oid": str(order_id)}).fetchall()
+        """), {"oid_str": str(order_id), "oid_int": str(int(order_id))}).fetchall()
+
+        logger.info(f"[get_my_order_documents] order_id={order_id}, docs_found={len(rows)}")
 
         DOC_TYPE_LABELS = {
             "invoice": "Рахунок",

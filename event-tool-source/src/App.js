@@ -929,9 +929,24 @@ const EventPlannerPage = () => {
           board={activeBoard}
           user={user}
           onClose={() => setShowCheckout(false)}
-          onSuccess={() => {
-            // Перезавантажуємо мудборди — після конвертації статус оновиться
-            api.get('/event/boards').then(r => setBoards(Array.isArray(r.data) ? r.data : [])).catch(() => {});
+          onSuccess={(orderData) => {
+            // Перезавантажуємо мудборди — конвертований буде відфільтровано (status='converted')
+            api.get('/event/boards').then(r => {
+              const arr = Array.isArray(r.data) ? r.data : [];
+              setBoards(arr);
+              // Активуємо інший мудборд або скидаємо
+              if (arr.length > 0) {
+                setActiveBoard(arr[0]);
+              } else {
+                setActiveBoard(null);
+              }
+            }).catch(() => {});
+            // Закриваємо панель кошику автоматично
+            if (isSidePanelOpen) toggleSidePanel();
+            // Показуємо успіх
+            if (orderData?.order_number) {
+              alert(`✅ Замовлення ${orderData.order_number} створено! Перейдіть в "Кабінет" → "Мої замовлення".`);
+            }
           }}
         />
       )}
