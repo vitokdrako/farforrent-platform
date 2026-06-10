@@ -167,7 +167,6 @@ const CheckoutModal = ({ board, user, onClose, onSuccess }) => {
           <div style={{display: 'flex', gap: '8px', flexWrap: 'wrap'}}>
             {[
               {key: 'cash', label: '💵 Готівка'},
-              {key: 'card', label: '💳 Картка'},
               {key: 'bank_transfer', label: '🏦 Безготівка'},
             ].map(m => (
               <button

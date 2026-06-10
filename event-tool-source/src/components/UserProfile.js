@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import api from '../api/axios';
 import { ordersApi } from '../api/orders';
+import SignDocumentModal from './SignDocumentModal';
 
 const ORDER_STATUS_LABELS = {
   pending: { text: 'Очікує підтвердження', color: '#b58a00', bg: '#fff7d6' },
@@ -42,6 +43,8 @@ const UserProfile = () => {
   const [activeTab, setActiveTab] = useState('orders'); // 'orders' | 'boards'
   const [docsByOrder, setDocsByOrder] = useState({}); // {orderId: [docs]}
   const [openedOrderId, setOpenedOrderId] = useState(null);
+  // Документ що клієнт зараз підписує (модалка)
+  const [signingDoc, setSigningDoc] = useState(null); // {orderId, document}
 
   useEffect(() => {
     loadData();
@@ -413,22 +416,38 @@ const UserProfile = () => {
                                     justifyContent: 'space-between',
                                     alignItems: 'center',
                                     padding: '10px 14px',
-                                    background: '#fafafa',
+                                    background: d.needs_client_signature ? '#fef3c7' : '#fafafa',
                                     borderRadius: '6px',
-                                    border: '1px solid #ececec',
+                                    border: d.needs_client_signature ? '1px solid #fcd34d' : '1px solid #ececec',
+                                    gap: '8px',
+                                    flexWrap: 'wrap',
                                   }}
                                 >
-                                  <div>
+                                  <div style={{flex: 1, minWidth: '160px'}}>
                                     <div style={{fontWeight: '600', fontSize: '14px', color: '#222'}}>
                                       {d.doc_type_label}
                                       {d.doc_number ? ` №${d.doc_number}` : ''}
+                                      {d.needs_client_signature && (
+                                        <span style={{marginLeft: '8px', fontSize: '11px', padding: '2px 8px', background: '#dc2626', color: '#fff', borderRadius: '10px', fontWeight: '700'}}>
+                                          ПОТРЕБУЄ ВАШОГО ПІДПИСУ
+                                        </span>
+                                      )}
+                                      {d.status === 'signed' && (
+                                        <span style={{marginLeft: '8px', fontSize: '11px', padding: '2px 8px', background: '#16a34a', color: '#fff', borderRadius: '10px', fontWeight: '700'}}>
+                                          ✓ ПІДПИСАНО
+                                        </span>
+                                      )}
+                                      {d.is_signable && d.tenant_signed && !d.landlord_signed && (
+                                        <span style={{marginLeft: '8px', fontSize: '11px', padding: '2px 8px', background: '#f59e0b', color: '#fff', borderRadius: '10px', fontWeight: '700'}}>
+                                          ⏳ ОЧІКУЄ МЕНЕДЖЕРА
+                                        </span>
+                                      )}
                                     </div>
                                     <div style={{fontSize: '11px', color: '#999', marginTop: '2px'}}>
                                       {formatDate(d.created_at)}
-                                      {d.status === 'signed' && ' • ✅ підписано'}
                                     </div>
                                   </div>
-                                  <div style={{display: 'flex', gap: '6px'}}>
+                                  <div style={{display: 'flex', gap: '6px', flexWrap: 'wrap'}}>
                                     <a
                                       href={d.preview_url}
                                       target="_blank"
@@ -461,6 +480,24 @@ const UserProfile = () => {
                                     >
                                       PDF
                                     </a>
+                                    {d.needs_client_signature && (
+                                      <button
+                                        onClick={() => setSigningDoc({orderId: o.order_id, document: d})}
+                                        data-testid={`sign-doc-btn-${d.id}`}
+                                        style={{
+                                          padding: '6px 12px',
+                                          background: '#dc2626',
+                                          color: '#fff',
+                                          border: '1px solid #dc2626',
+                                          borderRadius: '4px',
+                                          fontSize: '12px',
+                                          fontWeight: '700',
+                                          cursor: 'pointer',
+                                        }}
+                                      >
+                                        ✍️ Підписати
+                                      </button>
+                                    )}
                                   </div>
                                 </div>
                               ))}
@@ -629,6 +666,28 @@ const UserProfile = () => {
         </div>
         )}
       </div>
+
+      {/* Модалка підписання документа */}
+      {signingDoc && (
+        <SignDocumentModal
+          orderId={signingDoc.orderId}
+          document={signingDoc.document}
+          user={user}
+          onClose={() => setSigningDoc(null)}
+          onSigned={() => {
+            // Перезавантажуємо документи цього замовлення
+            setDocsByOrder(prev => {
+              const copy = {...prev};
+              delete copy[signingDoc.orderId];
+              return copy;
+            });
+            setSigningDoc(null);
+            // Перевідкриваємо щоб показати оновлені бейджі
+            const oid = signingDoc.orderId;
+            setTimeout(() => toggleOrderDocs(oid), 100);
+          }}
+        />
+      )}
     </div>
   );
 };

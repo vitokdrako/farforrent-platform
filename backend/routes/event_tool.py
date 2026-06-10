@@ -1560,14 +1560,18 @@ async def convert_to_order(
     except Exception as e:
         db.rollback()
         trace_id = f"ERR-{board_id[:8]}-{datetime.now().strftime('%H%M%S')}"
-        logger.error(f"[convert-to-order] {trace_id}: {str(e)}\n{traceback.format_exc()}")
+        # Витягуємо найглибший рядок traceback з нашого файлу — для зручної діагностики
+        tb_lines = traceback.format_exc().splitlines()
+        our_file_lines = [ln for ln in tb_lines if 'event_tool.py' in ln]
+        last_our_line = our_file_lines[-1].strip() if our_file_lines else ''
+        logger.error(f"[convert-to-order] {trace_id}: {str(e)}\nLast app line: {last_our_line}\n{traceback.format_exc()}")
         raise HTTPException(
-            status_code=500, 
+            status_code=500,
             detail={
                 "error": "convert_failed",
                 "trace_id": trace_id,
-                "message": "Помилка при створенні замовлення. Зверніться до підтримки.",
-                "details": str(e)
+                "message": f"Помилка: {str(e)[:150]}",
+                "details": f"{str(e)} | {last_our_line}",
             }
         )
 
@@ -1922,12 +1926,16 @@ async def get_my_order_documents(
         if not check:
             raise HTTPException(status_code=404, detail="Order not found")
 
-        # Документи
+        # Документи + статус підписання
         rows = db.execute(text("""
-            SELECT id, doc_type, doc_number, version, status, signed_at, created_at
-            FROM documents
-            WHERE entity_type = 'order' AND entity_id = :oid
-            ORDER BY created_at DESC
+            SELECT d.id, d.doc_type, d.doc_number, d.version, d.status, d.signed_at, d.created_at,
+                   (SELECT COUNT(*) FROM document_signatures ds
+                    WHERE ds.document_id = d.id AND ds.signer_role = 'tenant') AS tenant_signed,
+                   (SELECT COUNT(*) FROM document_signatures ds
+                    WHERE ds.document_id = d.id AND ds.signer_role = 'landlord') AS landlord_signed
+            FROM documents d
+            WHERE d.entity_type = 'order' AND d.entity_id = :oid
+            ORDER BY d.created_at DESC
         """), {"oid": str(order_id)}).fetchall()
 
         DOC_TYPE_LABELS = {
@@ -1941,6 +1949,9 @@ async def get_my_order_documents(
             "contract": "Договір оренди",
         }
 
+        # Документи які клієнт повинен підписати
+        SIGNABLE_TYPES = {"contract", "annex", "act_issue", "act_return"}
+
         return [
             {
                 "id": r[0],
@@ -1953,6 +1964,10 @@ async def get_my_order_documents(
                 "created_at": r[6].isoformat() if r[6] else None,
                 "preview_url": f"/api/documents/{r[0]}/preview",
                 "pdf_url": f"/api/documents/{r[0]}/pdf",
+                "is_signable": r[1] in SIGNABLE_TYPES,
+                "tenant_signed": bool(r[7]),
+                "landlord_signed": bool(r[8]),
+                "needs_client_signature": r[1] in SIGNABLE_TYPES and not bool(r[7]),
             }
             for r in rows
         ]
@@ -1963,6 +1978,112 @@ async def get_my_order_documents(
         traceback.print_exc()
         print(f"[get_my_order_documents] Error: {e}")
         return []
+
+
+@router.post("/orders/{order_id}/documents/{document_id}/sign")
+async def sign_document_as_client(
+    order_id: int,
+    document_id: str,
+    payload: dict,
+    db: Session = Depends(get_rh_db),
+    token: str = Depends(get_token_from_header)
+):
+    """
+    Клієнт підписує документ зі свого кабінету (роль = tenant).
+
+    Body: {"signature_png_base64": "data:image/png;base64,...", "signer_name": "..."}
+
+    1. Перевіряємо що документ належить замовленню цього клієнта.
+    2. Не дозволяємо повторний підпис tenant'ом.
+    3. Зберігаємо в document_signatures (signer_role='tenant').
+    4. Якщо landlord теж підписав → orders.status = 'signed'.
+    """
+    try:
+        customer = get_current_customer(token, db)
+        email = (customer.get("email") or "").lower().strip()
+
+        # Знайти client_user_id
+        cu = db.execute(
+            text("SELECT id FROM client_users WHERE email_normalized = :e LIMIT 1"),
+            {"e": email}
+        ).fetchone()
+        client_user_id = cu[0] if cu else None
+
+        # 1. Перевіряємо приналежність документа замовленню клієнта
+        cols_rows = db.execute(text("SHOW COLUMNS FROM orders")).fetchall()
+        existing_cols = {r[0] for r in cols_rows}
+        cuid_col = "client_user_id" if "client_user_id" in existing_cols else "NULL"
+        email_col = "customer_email" if "customer_email" in existing_cols else "''"
+
+        check = db.execute(text(f"""
+            SELECT d.id, d.doc_type, d.status
+            FROM documents d
+            JOIN orders o ON CAST(d.entity_id AS UNSIGNED) = o.order_id
+            WHERE d.id = :doc_id
+              AND d.entity_type = 'order'
+              AND o.order_id = :oid
+              AND ({cuid_col} = :cuid OR {email_col} = :email)
+            LIMIT 1
+        """), {
+            "doc_id": document_id, "oid": order_id,
+            "cuid": client_user_id, "email": email
+        }).fetchone()
+
+        if not check:
+            raise HTTPException(status_code=404, detail="Document not found or access denied")
+
+        # 2. Перевіряємо чи вже підписаний tenant'ом
+        existing = db.execute(text("""
+            SELECT id FROM document_signatures
+            WHERE document_id = :doc_id AND signer_role = 'tenant'
+        """), {"doc_id": document_id}).fetchone()
+        if existing:
+            raise HTTPException(status_code=400, detail="Document already signed")
+
+        # 3. Підпис
+        sig_b64 = payload.get("signature_png_base64", "")
+        if not sig_b64:
+            raise HTTPException(status_code=400, detail="signature_png_base64 required")
+        if sig_b64.startswith("data:image"):
+            pass  # вже data URL
+        else:
+            sig_b64 = f"data:image/png;base64,{sig_b64}"
+
+        signer_name = payload.get("signer_name") or f"{customer.get('firstname','')} {customer.get('lastname','')}".strip() or email
+
+        db.execute(text("""
+            INSERT INTO document_signatures
+            (document_id, signer_role, signature_image, signer_name, signed_at)
+            VALUES (:doc_id, 'tenant', :sig, :name, NOW())
+        """), {"doc_id": document_id, "sig": sig_b64, "name": signer_name})
+
+        # 4. Якщо обидві сторони підписали — позначаємо документ як signed
+        sig_count = db.execute(text("""
+            SELECT COUNT(DISTINCT signer_role) FROM document_signatures
+            WHERE document_id = :doc_id
+        """), {"doc_id": document_id}).scalar() or 0
+
+        fully_signed = sig_count >= 2
+        if fully_signed:
+            db.execute(text("UPDATE documents SET status = 'signed' WHERE id = :id"),
+                       {"id": document_id})
+
+        db.commit()
+
+        return {
+            "success": True,
+            "document_id": document_id,
+            "fully_signed": fully_signed,
+            "message": "Підпис прийнято. " + ("Документ повністю підписаний." if fully_signed else "Очікуємо підпис менеджера."),
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        import traceback
+        traceback.print_exc()
+        logger.error(f"[sign_document_as_client] {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # ============================================================================
