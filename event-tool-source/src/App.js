@@ -967,6 +967,33 @@ const ProtectedRoute = ({ children }) => {
   return isAuthenticated ? children : <Navigate to="/login" />;
 };
 
+// Невеличкий бейдж версії — щоб одразу видно чи задеплоїлось
+const BuildBadge = () => {
+  const hash = process.env.REACT_APP_BUILD_HASH || 'dev';
+  const time = process.env.REACT_APP_BUILD_TIME || '';
+  return (
+    <div
+      data-testid="build-badge"
+      style={{
+        position: 'fixed',
+        bottom: '4px',
+        right: '6px',
+        fontSize: '9px',
+        color: 'rgba(0,0,0,0.35)',
+        background: 'rgba(255,255,255,0.7)',
+        padding: '2px 6px',
+        borderRadius: '4px',
+        fontFamily: 'monospace',
+        pointerEvents: 'none',
+        zIndex: 9999,
+      }}
+      title={time}
+    >
+      v: {hash}
+    </div>
+  );
+};
+
 // Main App
 function App() {
   return (
@@ -994,6 +1021,7 @@ function App() {
               />
               <Route path="/rules" element={<RentalRules />} />
             </Routes>
+            <BuildBadge />
           </BrowserRouter>
         </BoardProvider>
       </AuthProvider>

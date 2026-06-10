@@ -20,8 +20,10 @@ echo "📦 Target: $TARGET"
 cd "$SRC"
 
 # .env — same origin, ходить на /api свого ж домену
-cat > .env <<'EOF'
+cat > .env <<EOF
 REACT_APP_BACKEND_URL=
+REACT_APP_BUILD_HASH=${REACT_APP_BUILD_HASH:-dev}
+REACT_APP_BUILD_TIME=${REACT_APP_BUILD_TIME:-local}
 EOF
 
 # Залежності

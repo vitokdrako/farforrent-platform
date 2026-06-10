@@ -17,9 +17,47 @@ REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 echo "📂 Repo root: $REPO_ROOT"
 echo ""
 
+# ===== 0. Тягнемо ОСТАННІЙ код з GitHub (з force-reset, без залежності від upstream) =====
+echo "═══ [0/4] Тягнемо останні зміни з GitHub ═══"
+cd "$REPO_ROOT"
+
+# Беремо реальний origin URL (на випадок різних remote-конфігів)
+ORIGIN_URL=$(git config --get remote.origin.url || echo "")
+if [ -z "$ORIGIN_URL" ]; then
+  echo "❌ remote.origin не налаштовано. Виконай:"
+  echo "   git remote add origin <github_url>"
+  exit 1
+fi
+echo "🔗 origin: $ORIGIN_URL"
+
+# Визначаємо основну вітку: main або master
+BRANCH=$(git ls-remote --symref "$ORIGIN_URL" HEAD 2>/dev/null | head -1 | awk '{print $2}' | sed 's@refs/heads/@@')
+BRANCH=${BRANCH:-main}
+echo "🌿 Branch: $BRANCH"
+
+OLD_HASH=$(git rev-parse --short HEAD 2>/dev/null || echo "none")
+git fetch origin "$BRANCH" --depth=50 --quiet || git fetch origin --quiet
+git reset --hard "origin/$BRANCH"
+NEW_HASH=$(git rev-parse --short HEAD)
+COMMIT_MSG=$(git log -1 --pretty=format:'%s' | head -c 80)
+
+if [ "$OLD_HASH" = "$NEW_HASH" ]; then
+  echo "ℹ️  Код вже актуальний: $NEW_HASH"
+else
+  echo "✅ Оновлено: $OLD_HASH → $NEW_HASH"
+fi
+echo "📝 Останній коміт: $NEW_HASH «$COMMIT_MSG»"
+echo ""
+
+# Передаємо хеш у білди як змінну (буде видно у фронті)
+export REACT_APP_BUILD_HASH="$NEW_HASH"
+export REACT_APP_BUILD_TIME="$(date -u +'%Y-%m-%d %H:%M UTC')"
+
 # ===== 1. Build Event Tool (клієнтський фронт) =====
 echo "═══ [1/4] Білдимо Event Tool (клієнтський React) ═══"
 bash "$REPO_ROOT/deploy/build_event_tool.sh"
+# Запис версії у файл щоб можна було перевірити через curl
+echo "$NEW_HASH $REACT_APP_BUILD_TIME" | sudo tee /var/www/event-tool-build/version.txt > /dev/null
 echo ""
 
 # ===== 2. Build RentalHub adminку =====
@@ -28,11 +66,11 @@ cd "$REPO_ROOT/frontend"
 if [ ! -d node_modules ]; then
   yarn install --frozen-lockfile
 fi
-# Same-origin API + білд на корені (рендер з порту :8080)
-PUBLIC_URL='' REACT_APP_BACKEND_URL='' yarn build
+PUBLIC_URL='' REACT_APP_BACKEND_URL='' REACT_APP_BUILD_HASH="$NEW_HASH" REACT_APP_BUILD_TIME="$REACT_APP_BUILD_TIME" yarn build
 sudo rm -rf /var/www/rentalhub-admin-build
 sudo cp -r build /var/www/rentalhub-admin-build
 sudo chown -R www-data:www-data /var/www/rentalhub-admin-build
+echo "$NEW_HASH $REACT_APP_BUILD_TIME" | sudo tee /var/www/rentalhub-admin-build/version.txt > /dev/null
 echo "✅ RentalHub білд у /var/www/rentalhub-admin-build"
 echo ""
 
