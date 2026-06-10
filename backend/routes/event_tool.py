@@ -1439,53 +1439,43 @@ async def convert_to_order(
         
         notes_text = "\n".join(notes_parts) if notes_parts else None
         
-        # Створити order в RentalHub — ESSENTIAL cols (мають точно існувати)
-        # Додаткові колонки (client_user_id, event_board_id) UPDATE-имо нижче з try/except
-        db.execute(text("""
-            INSERT INTO orders (
-                order_id, order_number, status,
-                rental_start_date, rental_end_date, rental_days,
-                event_date, event_location,
-                total_price, deposit_amount,
-                customer_name, customer_phone, customer_email,
-                notes, source, created_at
-            )
-            VALUES (
-                :order_id, :order_number, 'awaiting_customer',
-                :start_date, :end_date, :rental_days,
-                :event_date, :event_location,
-                :total_price, :deposit_amount,
-                :customer_name, :phone, :email,
-                :notes, 'event_tool', NOW()
-            )
-        """), {
+        # Створити order в RentalHub — динамічний INSERT тільки з колонок що існують
+        # (різні версії БД можуть мати різний набір колонок)
+        order_cols_rows = db.execute(text("SHOW COLUMNS FROM orders")).fetchall()
+        order_cols = {r[0] for r in order_cols_rows}
+
+        # Кандидати: ключ_колонки -> значення
+        candidate_values = {
             "order_id": new_order_id,
             "order_number": order_number,
-            "start_date": board["rental_start_date"],
-            "end_date": board["rental_end_date"],
+            "status": "awaiting_customer",
+            "rental_start_date": board["rental_start_date"],
+            "rental_end_date": board["rental_end_date"],
             "rental_days": rental_days,
             "event_date": event_date,
             "event_location": event_name,
             "total_price": total_price,
+            "total_amount": total_price,  # альтернативна назва
             "deposit_amount": deposit_amount,
             "customer_name": customer_name,
-            "phone": phone,
-            "email": email,
+            "customer_phone": phone,
+            "customer_email": email,
             "notes": notes_text,
-        })
+            "source": "event_tool",
+            "event_board_id": board_id,
+            "client_user_id": client_user_id,
+        }
 
-        # Опціонально привʼязуємо до client_users + event_boards (якщо колонки існують у БД)
-        try:
-            db.execute(text("""
-                UPDATE orders SET event_board_id = :board_id, client_user_id = :client_user_id
-                WHERE order_id = :order_id
-            """), {
-                "board_id": board_id,
-                "client_user_id": client_user_id,
-                "order_id": new_order_id,
-            })
-        except Exception as e:
-            logger.warning(f"[convert-to-order] Could not set event_board_id/client_user_id (column may not exist): {e}")
+        # Залишаємо тільки ті ключі, для яких реально існує колонка в БД
+        use_cols = [c for c in candidate_values if c in order_cols]
+        params = {c: candidate_values[c] for c in use_cols}
+
+        col_list_sql = ", ".join(use_cols + (["created_at"] if "created_at" in order_cols else []))
+        val_list_sql = ", ".join(f":{c}" for c in use_cols) + (", NOW()" if "created_at" in order_cols else "")
+
+        insert_sql = f"INSERT INTO orders ({col_list_sql}) VALUES ({val_list_sql})"
+        logger.info(f"[convert-to-order] Dynamic INSERT cols: {use_cols}")
+        db.execute(text(insert_sql), params)
         
         # Створити order_items
         for item in items:
