@@ -1439,23 +1439,24 @@ async def convert_to_order(
         
         notes_text = "\n".join(notes_parts) if notes_parts else None
         
-        # Створити order в RentalHub з client_user_id
+        # Створити order в RentalHub — ESSENTIAL cols (мають точно існувати)
+        # Додаткові колонки (client_user_id, event_board_id) UPDATE-имо нижче з try/except
         db.execute(text("""
             INSERT INTO orders (
-                order_id, order_number, status, 
+                order_id, order_number, status,
                 rental_start_date, rental_end_date, rental_days,
                 event_date, event_location,
-                total_price, deposit_amount, 
+                total_price, deposit_amount,
                 customer_name, customer_phone, customer_email,
-                notes, source, event_board_id, client_user_id, created_at
+                notes, source, created_at
             )
             VALUES (
-                :order_id, :order_number, 'awaiting_customer', 
+                :order_id, :order_number, 'awaiting_customer',
                 :start_date, :end_date, :rental_days,
                 :event_date, :event_location,
-                :total_price, :deposit_amount, 
+                :total_price, :deposit_amount,
                 :customer_name, :phone, :email,
-                :notes, 'event_tool', :board_id, :client_user_id, NOW()
+                :notes, 'event_tool', NOW()
             )
         """), {
             "order_id": new_order_id,
@@ -1471,9 +1472,20 @@ async def convert_to_order(
             "phone": phone,
             "email": email,
             "notes": notes_text,
-            "board_id": board_id,
-            "client_user_id": client_user_id
         })
+
+        # Опціонально привʼязуємо до client_users + event_boards (якщо колонки існують у БД)
+        try:
+            db.execute(text("""
+                UPDATE orders SET event_board_id = :board_id, client_user_id = :client_user_id
+                WHERE order_id = :order_id
+            """), {
+                "board_id": board_id,
+                "client_user_id": client_user_id,
+                "order_id": new_order_id,
+            })
+        except Exception as e:
+            logger.warning(f"[convert-to-order] Could not set event_board_id/client_user_id (column may not exist): {e}")
         
         # Створити order_items
         for item in items:

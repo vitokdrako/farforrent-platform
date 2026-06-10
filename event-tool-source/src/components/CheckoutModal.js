@@ -10,7 +10,6 @@ const CheckoutModal = ({ board, user, onClose, onSuccess }) => {
     customer_name: user ? `${user.firstname || ''} ${user.lastname || ''}`.trim() : '',
     customer_phone: user?.telephone || '',
     customer_email: user?.email || '',
-    event_location: '',
     notes: '',
     payment_method: 'cash',
   });
@@ -43,13 +42,18 @@ const CheckoutModal = ({ board, user, onClose, onSuccess }) => {
     setError('');
     setSubmitting(true);
     try {
+      // Збираємо коментар + спосіб оплати в одне поле (бекенд приймає customer_comment)
+      const paymentLabels = {cash: 'Готівка', card: 'Картка', bank_transfer: 'Безготівка'};
+      const fullComment = [
+        `Оплата: ${paymentLabels[form.payment_method] || form.payment_method}`,
+        form.notes && form.notes.trim() ? `Коментар: ${form.notes.trim()}` : null,
+      ].filter(Boolean).join(' | ');
+
       const res = await api.post(`/event/boards/${board.id}/convert-to-order`, {
         customer_name: form.customer_name,
-        customer_phone: form.customer_phone,
-        customer_email: form.customer_email,
-        event_location: form.event_location,
-        notes: form.notes,
-        payment_method: form.payment_method,
+        phone: form.customer_phone,           // ← бекенд чекає `phone`
+        customer_comment: fullComment,         // ← бекенд чекає `customer_comment`
+        payer_type: 'individual',
       });
       setSuccess(res.data);
       if (onSuccess) onSuccess(res.data);
@@ -58,7 +62,10 @@ const CheckoutModal = ({ board, user, onClose, onSuccess }) => {
       let msg = 'Помилка оформлення';
       if (typeof d === 'string') msg = d;
       else if (Array.isArray(d)) msg = d.map(x => x.msg || JSON.stringify(x)).join('; ');
+      else if (d?.message) msg = d.message + (d.details ? ` (${d.details})` : '');
       else if (d?.msg) msg = d.msg;
+      else if (d?.details) msg = d.details;
+      else if (err?.message) msg = err.message;
       setError(msg);
     } finally {
       setSubmitting(false);
@@ -142,7 +149,6 @@ const CheckoutModal = ({ board, user, onClose, onSuccess }) => {
 
         {/* Деталі івенту */}
         <Section title="Деталі івенту">
-          <Input label="Адреса проведення" value={form.event_location} onChange={update('event_location')} placeholder="м. Київ, вул. ..." data-testid="checkout-location" />
           <div style={{marginBottom: '14px'}}>
             <label style={labelStyle}>Коментар менеджеру</label>
             <textarea
