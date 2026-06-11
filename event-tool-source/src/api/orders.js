@@ -16,4 +16,9 @@ export const ordersApi = {
     const res = await api.get(`/event/orders/${orderId}/documents`);
     return res.data;
   },
+  // Історія змін замовлення (timeline)
+  timeline: async (orderId) => {
+    const res = await api.get(`/event/orders/${orderId}/timeline`);
+    return res.data;
+  },
 };

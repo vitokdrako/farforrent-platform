@@ -189,7 +189,7 @@ function PackingDetails({
       {/* Header */}
       <div className="mb-3 flex items-center justify-between gap-3">
         <div>
-          <h2 className="text-sm font-semibold text-corp-text-dark">Комплектація #{order.order_id}</h2>
+          <h2 className="text-sm font-semibold text-corp-text-dark">Комплектація #{order.order_number || order.order_id}</h2>
           <p className="text-[11px] text-corp-text-muted">
             {order.client} · {order.itemsCount} од. ({order.skuCount} SKU) · {order.warehouseZone}
           </p>

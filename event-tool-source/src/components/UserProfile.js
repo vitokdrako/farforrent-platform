@@ -10,15 +10,19 @@ import { ordersApi } from '../api/orders';
 import SignDocumentModal from './SignDocumentModal';
 
 const ORDER_STATUS_LABELS = {
-  pending: { text: 'Очікує підтвердження', color: '#b58a00', bg: '#fff7d6' },
-  awaiting_customer: { text: 'Чекає на клієнта', color: '#b58a00', bg: '#fff7d6' },
-  processing: { text: 'В обробці', color: '#1565c0', bg: '#e3f2fd' },
-  ready_for_issue: { text: 'Готове до видачі', color: '#1565c0', bg: '#e3f2fd' },
-  issued: { text: 'Видано', color: '#2e7d32', bg: '#e8f5e9' },
-  on_rent: { text: 'В оренді', color: '#2e7d32', bg: '#e8f5e9' },
-  returned: { text: 'Повернено', color: '#555', bg: '#eee' },
-  completed: { text: 'Завершено', color: '#555', bg: '#eee' },
-  cancelled: { text: 'Скасовано', color: '#c62828', bg: '#ffebee' },
+  pending: { text: 'Очікує підтвердження', color: '#b58a00' },
+  awaiting_customer: { text: 'В обробці', color: '#1565c0' },
+  preparation: { text: 'На комплектації', color: '#b58a00' },
+  processing: { text: 'В обробці', color: '#1565c0' },
+  ready_for_issue: { text: 'Готове до видачі', color: '#0a3d2e' },
+  issued: { text: 'Видано', color: '#0a3d2e' },
+  on_rent: { text: 'В оренді', color: '#0a3d2e' },
+  returned: { text: 'Повернено', color: '#555' },
+  completed: { text: 'Завершено', color: '#555' },
+  cancelled: { text: 'Скасовано', color: '#c62828' },
+  cancelled_by_client: { text: 'Скасовано клієнтом', color: '#c62828' },
+  cancelled_by_manager: { text: 'Скасовано менеджером', color: '#c62828' },
+  signed: { text: 'Підписано', color: '#0a3d2e' },
 };
 
 const PAYMENT_LABELS = {
@@ -52,6 +56,8 @@ const UserProfile = () => {
   // Кеш повних деталей замовлення (з items + photos)
   const [orderDetailsCache, setOrderDetailsCache] = useState({}); // {orderId: detail}
   const [expandedItems, setExpandedItems] = useState(null); // orderId: показати items
+  // Кеш timeline
+  const [timelineCache, setTimelineCache] = useState({}); // {orderId: [events]}
 
   useEffect(() => {
     loadData();
@@ -305,6 +311,14 @@ const UserProfile = () => {
                         setDocsByOrder(prev => ({...prev, [o.order_id]: Array.isArray(d) ? d : []}));
                       } catch (e) {
                         setDocsByOrder(prev => ({...prev, [o.order_id]: []}));
+                      }
+                    }
+                    if (!timelineCache[o.order_id]) {
+                      try {
+                        const tl = await ordersApi.timeline(o.order_id);
+                        setTimelineCache(prev => ({...prev, [o.order_id]: Array.isArray(tl) ? tl : []}));
+                      } catch (e) {
+                        setTimelineCache(prev => ({...prev, [o.order_id]: []}));
                       }
                     }
                   };
@@ -581,7 +595,7 @@ const UserProfile = () => {
                           </div>
 
                           {/* Секція ДОКУМЕНТИ */}
-                          <div>
+                          <div style={{marginBottom: '24px'}}>
                             <div style={{fontSize: '10px', fontWeight: '600', color: '#666', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '12px'}}>
                               Документи
                             </div>
@@ -675,6 +689,46 @@ const UserProfile = () => {
                               </div>
                             )}
                           </div>
+
+                          {/* Секція ІСТОРІЯ ЗМІН */}
+                          {(timelineCache[o.order_id] || []).length > 0 && (
+                            <div>
+                              <div style={{fontSize: '10px', fontWeight: '600', color: '#666', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '12px'}}>
+                                Історія змін
+                              </div>
+                              <div style={{display: 'flex', flexDirection: 'column'}}>
+                                {timelineCache[o.order_id].map((ev, evIdx) => (
+                                  <div key={evIdx} style={{
+                                    display: 'flex', gap: '12px', padding: '10px 0',
+                                    borderTop: evIdx === 0 ? '1px solid #ececec' : 'none',
+                                    borderBottom: '1px solid #ececec',
+                                  }}>
+                                    {/* Маркер крапки */}
+                                    <div style={{flexShrink: 0, marginTop: '6px'}}>
+                                      <div style={{
+                                        width: '6px', height: '6px',
+                                        borderRadius: '50%',
+                                        background: '#0a3d2e',
+                                      }}/>
+                                    </div>
+                                    <div style={{flex: 1, minWidth: 0}}>
+                                      <div style={{fontSize: '12px', fontWeight: '500', color: '#1a1a1a'}}>
+                                        {ev.stage_label}
+                                      </div>
+                                      {ev.notes && (
+                                        <div style={{fontSize: '11px', color: '#666', marginTop: '2px', lineHeight: 1.5}}>
+                                          {ev.notes}
+                                        </div>
+                                      )}
+                                      <div style={{fontSize: '10px', color: '#999', marginTop: '4px', textTransform: 'uppercase', letterSpacing: '0.05em'}}>
+                                        {ev.actor} · {formatDate(ev.created_at)}
+                                      </div>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>

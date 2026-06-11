@@ -1784,6 +1784,17 @@ async def get_my_order_details(
         def ic(name, default="NULL"):
             return f"oi.{name}" if name in item_cols else default
 
+        # Знаходимо назву колонки з фото в products (image_url або image)
+        prod_cols_rows = db.execute(text("SHOW COLUMNS FROM products")).fetchall()
+        prod_cols = {r[0] for r in prod_cols_rows}
+        p_img_col = "p.image_url" if "image_url" in prod_cols else ("p.image" if "image" in prod_cols else "''")
+        p_sku_col = "p.sku" if "sku" in prod_cols else "''"
+        p_name_col = "p.name" if "name" in prod_cols else "''"
+        p_rental_col = "p.rental_price" if "rental_price" in prod_cols else "0"
+        p_deposit_col = "p.deposit" if "deposit" in prod_cols else "0"
+        p_color_col = "p.color" if "color" in prod_cols else "''"
+        p_material_col = "p.material" if "material" in prod_cols else "''"
+
         items_sql = f"""
             SELECT
                 {ic('product_id', '0')} AS product_id,
@@ -1793,18 +1804,30 @@ async def get_my_order_details(
                 {ic('total_rental', '0')} AS total_rental,
                 {ic('total_deposit', '0')} AS total_deposit,
                 {ic('image_url', "''")} AS oi_image_url,
-                p.sku AS sku,
-                p.name AS p_name,
-                p.image_url AS p_image_url,
-                p.rental_price AS p_rental_price,
-                p.deposit AS p_deposit,
-                p.color AS color,
-                p.material AS material
+                {p_sku_col} AS sku,
+                {p_name_col} AS p_name,
+                {p_img_col} AS p_image_url,
+                {p_rental_col} AS p_rental_price,
+                {p_deposit_col} AS p_deposit,
+                {p_color_col} AS color,
+                {p_material_col} AS material
             FROM order_items oi
             LEFT JOIN products p ON oi.product_id = p.product_id
             WHERE oi.order_id = :oid
         """
         items_rows = db.execute(text(items_sql), {"oid": order_id}).fetchall()
+
+        # Нормалізуємо URL картинок — додаємо префікс /uploads/ якщо потрібно
+        def normalize_image_url(url: str) -> str:
+            if not url:
+                return ""
+            url = str(url).strip()
+            if url.startswith("http://") or url.startswith("https://"):
+                return url
+            if url.startswith("/"):
+                return url
+            # Відносний шлях — додаємо /uploads/
+            return f"/uploads/{url}"
 
         # ✅ Прогрес комплектації з issue_cards
         packing_progress = 0
@@ -1883,9 +1906,9 @@ async def get_my_order_details(
                     "price_per_day": float(ir[3] or 0),
                     "total_rental": float(ir[4] or 0),
                     "total_deposit": float(ir[5] or 0),
-                    "image_url": ir[9] or ir[6] or '',  # фото товару (актуальне з products)
-                    "sku": ir[7] or '',                  # артикул
-                    "deposit_per_unit": float(ir[11] or 0),  # повна вартість одиниці (заставна)
+                    "image_url": normalize_image_url(ir[9] or ir[6] or ''),
+                    "sku": ir[7] or '',
+                    "deposit_per_unit": float(ir[11] or 0),
                     "color": ir[12] or '',
                     "material": ir[13] or '',
                 }
@@ -1899,6 +1922,86 @@ async def get_my_order_details(
         traceback.print_exc()
         print(f"[get_my_order_details] Error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/orders/{order_id}/timeline")
+async def get_my_order_timeline(
+    order_id: int,
+    db: Session = Depends(get_rh_db),
+    token: str = Depends(get_token_from_header)
+):
+    """
+    Історія змін замовлення з order_lifecycle — клієнт бачить
+    всі дії менеджера (статуси, коментарі) в хронологічному порядку.
+    """
+    try:
+        customer = get_current_customer(token, db)
+        email = (customer.get("email") or "").lower().strip()
+        cu = db.execute(
+            text("SELECT id FROM client_users WHERE email_normalized = :e LIMIT 1"),
+            {"e": email}
+        ).fetchone()
+        client_user_id = cu[0] if cu else None
+
+        # Перевірка приналежності замовлення клієнту
+        cols_rows = db.execute(text("SHOW COLUMNS FROM orders")).fetchall()
+        existing_cols = {r[0] for r in cols_rows}
+        cuid_col = "client_user_id" if "client_user_id" in existing_cols else "NULL"
+        email_col = "customer_email" if "customer_email" in existing_cols else "''"
+        own = db.execute(text(f"""
+            SELECT order_id FROM orders WHERE order_id = :oid
+              AND ({cuid_col} = :cuid OR {email_col} = :email)
+            LIMIT 1
+        """), {"oid": order_id, "cuid": client_user_id, "email": email}).fetchone()
+        if not own:
+            raise HTTPException(status_code=404, detail="Order not found")
+
+        # Читаємо timeline (за наявності таблиці)
+        try:
+            lc_rows = db.execute(text("""
+                SELECT stage, notes, created_by, created_by_name, created_at
+                FROM order_lifecycle WHERE order_id = :oid ORDER BY created_at ASC
+            """), {"oid": order_id}).fetchall()
+        except Exception:
+            lc_rows = []
+
+        STAGE_LABELS = {
+            "created": "Замовлення створено",
+            "awaiting_customer": "Очікує підтвердження клієнта",
+            "confirmed": "Підтверджено клієнтом",
+            "preparation": "Передано на комплектацію",
+            "ready_for_issue": "Готове до видачі",
+            "issued": "Видано клієнту",
+            "on_rent": "На оренді",
+            "returned": "Повернуто",
+            "completed": "Завершено",
+            "cancelled": "Скасовано",
+            "cancelled_by_client": "Скасовано клієнтом",
+            "cancelled_by_manager": "Скасовано менеджером",
+            "estimate_created": "Сформовано кошторис",
+            "contract_created": "Сформовано договір",
+            "invoice_created": "Сформовано рахунок",
+            "document_signed": "Документ підписано",
+        }
+
+        return [
+            {
+                "stage": r[0],
+                "stage_label": STAGE_LABELS.get(r[0], r[0]),
+                "notes": r[1] or "",
+                "actor": r[3] or r[2] or "Система",
+                "created_at": r[4].isoformat() if r[4] else None,
+            }
+            for r in lc_rows
+        ]
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        logger.error(f"[get_my_order_timeline] {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 
 @router.get("/orders/{order_id}/documents")
@@ -1934,21 +2037,38 @@ async def get_my_order_documents(
             raise HTTPException(status_code=404, detail="Order not found")
 
         # Документи + статус підписання
-        # ВАЖЛИВО: документи в RH можуть бути збережені з entity_id як STRING або INT.
-        # Шукаємо в обох форматах щоб не пропустити кошториси/договори створені менеджером.
+        # ВАЖЛИВО: документи в RH можуть бути збережені з різним entity_id:
+        #   - 'order' + order_id (стандарт)
+        #   - 'order' + order_number (рідко, deprecated)
+        #   - 'customer' + customer_id (estimate перед оформленням)
+        # Шукаємо в усіх варіантах щоб не пропустити нічого.
+        order_number = order_row[1] or ''
+
+        # Дістаємо customer_id замовлення
+        customer_id_row = db.execute(text(f"""
+            SELECT {col('customer_id', 'NULL')} FROM orders WHERE order_id = :oid
+        """), {"oid": order_id}).fetchone()
+        customer_id_val = customer_id_row[0] if customer_id_row else None
+
         rows = db.execute(text("""
             SELECT d.id, d.doc_type, d.doc_number, d.version, d.status, d.signed_at, d.created_at,
                    (SELECT COUNT(*) FROM document_signatures ds
                     WHERE ds.document_id = d.id AND ds.signer_role = 'tenant') AS tenant_signed,
                    (SELECT COUNT(*) FROM document_signatures ds
-                    WHERE ds.document_id = d.id AND ds.signer_role = 'landlord') AS landlord_signed
+                    WHERE ds.document_id = d.id AND ds.signer_role = 'landlord') AS landlord_signed,
+                   d.entity_type, d.entity_id
             FROM documents d
-            WHERE d.entity_type = 'order'
-              AND (d.entity_id = :oid_str OR d.entity_id = :oid_int)
+            WHERE (d.entity_type = 'order' AND d.entity_id IN (:oid_str, :order_number))
+               OR (d.entity_type = 'customer' AND :cust_id_str <> '' AND d.entity_id = :cust_id_str)
             ORDER BY d.created_at DESC
-        """), {"oid_str": str(order_id), "oid_int": str(int(order_id))}).fetchall()
+        """), {
+            "oid_str": str(order_id),
+            "order_number": str(order_number) if order_number else '___none___',
+            "cust_id_str": str(customer_id_val) if customer_id_val else '',
+        }).fetchall()
 
-        logger.info(f"[get_my_order_documents] order_id={order_id}, docs_found={len(rows)}")
+        logger.info(f"[get_my_order_documents] order_id={order_id}, order_number={order_number}, "
+                    f"customer_id={customer_id_val}, docs_found={len(rows)}")
 
         DOC_TYPE_LABELS = {
             "invoice": "Рахунок",
