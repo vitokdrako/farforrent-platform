@@ -556,8 +556,81 @@ html, body {
 }
 
 /* ============================================================
-   ІНФІНІТ-СКРОЛ — спінер завантаження
+   КАБІНЕТ КОРИСТУВАЧА — мобільний layout
    ============================================================ */
+.profile-header-inner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    width: 100%;
+}
+.profile-header-brand {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-width: 0;
+}
+.profile-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+/* Stats grid: 4 колонки на десктопі */
+.profile-stats-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 24px;
+}
+
+@media (max-width: 768px) {
+    /* Хедер кабінету — вертикальний на мобільному */
+    .profile-header-inner {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 8px;
+    }
+    .profile-header-brand {
+        justify-content: flex-start;
+    }
+    .profile-header-title {
+        font-size: 14px !important;
+    }
+    .profile-header-divider {
+        display: none !important;
+    }
+    .profile-header-label {
+        font-size: 10px !important;
+    }
+    .profile-header-actions {
+        justify-content: stretch;
+        width: 100%;
+    }
+    .profile-header-actions .fd-btn {
+        flex: 1;
+        padding: 8px 10px !important;
+        font-size: 12px !important;
+    }
+
+    /* Stats grid: 2×2 на мобільному */
+    .profile-stats-grid {
+        grid-template-columns: repeat(2, 1fr) !important;
+        gap: 14px !important;
+    }
+}
+
+/* На дуже малому екрані ховаємо назву логотипу */
+@media (max-width: 420px) {
+    .profile-header-title {
+        display: none !important;
+    }
+    .profile-header-label {
+        font-size: 11px !important;
+        font-weight: 600;
+    }
+}
 .infinite-spinner {
     display: inline-block;
     width: 14px;

@@ -141,23 +141,23 @@ const UserProfile = () => {
   return (
     <div className="min-h-screen" style={{background: '#f5f5f5'}}>
       {/* Header */}
-      <header className="fd-header sticky top-0 z-10" style={{background: '#fff', borderBottom: '1px solid #e3e3e3'}}>
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <img 
-              src="/logo.svg" 
-              alt="FarforDecor Logo" 
+      <header className="fd-header sticky top-0 z-10 profile-header" style={{background: '#fff', borderBottom: '1px solid #e3e3e3'}}>
+        <div className="profile-header-inner">
+          <div className="profile-header-brand">
+            <img
+              src="/logo.svg"
+              alt="FarforDecor Logo"
               style={{height: '40px', width: 'auto'}}
             />
-            <h1 className="text-xl font-bold" style={{color: '#333'}}>
+            <h1 className="text-xl font-bold profile-header-title" style={{color: '#333'}}>
               FarforDecorOrenda
             </h1>
-            <div className="w-px h-5" style={{background: '#e6e6e6'}}></div>
-            <span className="text-xs" style={{color: '#999', textTransform: 'uppercase'}}>
+            <div className="w-px h-5 profile-header-divider" style={{background: '#e6e6e6'}}></div>
+            <span className="text-xs profile-header-label" style={{color: '#999', textTransform: 'uppercase'}}>
               Особистий кабінет
             </span>
           </div>
-          <div className="flex items-center gap-4">
+          <div className="profile-header-actions">
             <button
               onClick={() => navigate('/')}
               className="fd-btn fd-btn-secondary"
@@ -190,12 +190,12 @@ const UserProfile = () => {
           <h2 style={{fontSize: '24px', fontWeight: '600', color: '#333', marginBottom: '16px'}}>
             Вітаємо, {user?.firstname}!
           </h2>
-          <div style={{display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '24px'}}>
+          <div className="profile-stats-grid">
             <div>
               <div style={{fontSize: '12px', color: '#999', textTransform: 'uppercase', marginBottom: '8px'}}>
                 Email
               </div>
-              <div style={{fontSize: '14px', color: '#333'}}>
+              <div style={{fontSize: '14px', color: '#333', wordBreak: 'break-word'}}>
                 {user?.email}
               </div>
             </div>
