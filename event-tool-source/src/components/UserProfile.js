@@ -1,5 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import {
+  Calendar, MapPin, ChevronDown, FileText, ShoppingBag, Check,
+  Package, PenLine, Info, CreditCard, Clock
+} from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import api from '../api/axios';
 import { ordersApi } from '../api/orders';
@@ -278,350 +282,399 @@ const UserProfile = () => {
                   const paymentLabel = PAYMENT_LABELS[o.payment_status] || (o.payment_status ? {text: o.payment_status, color: '#555', bg: '#eee'} : null);
                   const isOpen = openedOrderId === o.order_id;
                   const docs = docsByOrder[o.order_id] || [];
+                  // Єдиний стан розгортання: відкриваємо одночасно склад + документи
+                  const expanded = expandedItems === o.order_id;
+                  const toggleExpand = async () => {
+                    if (expanded) {
+                      setExpandedItems(null);
+                      setOpenedOrderId(null);
+                      return;
+                    }
+                    setExpandedItems(o.order_id);
+                    setOpenedOrderId(o.order_id);
+                    // Паралельно завантажуємо items і документи
+                    if (!orderDetailsCache[o.order_id]) {
+                      try {
+                        const detail = await ordersApi.get(o.order_id);
+                        setOrderDetailsCache(prev => ({...prev, [o.order_id]: detail}));
+                      } catch (e) { /* silent */ }
+                    }
+                    if (!docsByOrder[o.order_id]) {
+                      try {
+                        const d = await ordersApi.documents(o.order_id);
+                        setDocsByOrder(prev => ({...prev, [o.order_id]: Array.isArray(d) ? d : []}));
+                      } catch (e) {
+                        setDocsByOrder(prev => ({...prev, [o.order_id]: []}));
+                      }
+                    }
+                  };
+
                   return (
                     <div
                       key={o.order_id}
                       data-testid={`order-card-${o.order_id}`}
                       style={{
                         background: '#fff',
-                        borderRadius: '8px',
-                        padding: '20px 24px',
-                        boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
-                        border: '1px solid #ececec',
+                        borderRadius: '4px',
+                        padding: '18px 20px',
+                        border: '1px solid #e5e5e5',
+                        transition: 'border-color 0.2s',
+                        position: 'relative',
                       }}
                     >
-                      <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '16px', flexWrap: 'wrap'}}>
+                      {/* Клікабельний заголовок картки */}
+                      <div
+                        onClick={toggleExpand}
+                        data-testid={`order-card-header-${o.order_id}`}
+                        style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'flex-start',
+                          gap: '16px',
+                          cursor: 'pointer',
+                          userSelect: 'none',
+                        }}
+                      >
                         <div style={{flex: 1, minWidth: 0}}>
-                          <div style={{display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px', flexWrap: 'wrap'}}>
-                            <h4 style={{fontSize: '17px', fontWeight: '700', color: '#222', margin: 0}}>
+                          {/* Номер + статуси */}
+                          <div style={{display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px', flexWrap: 'wrap'}}>
+                            <h4 style={{fontSize: '15px', fontWeight: '600', color: '#1a1a1a', margin: 0, letterSpacing: '0.02em'}}>
                               {o.order_number || `#${o.order_id}`}
                             </h4>
                             <span style={{
-                              padding: '3px 10px',
-                              borderRadius: '999px',
-                              fontSize: '12px',
-                              fontWeight: '600',
+                              padding: '2px 10px',
+                              border: `1px solid ${status.color}`,
+                              borderRadius: '2px',
+                              fontSize: '10px',
+                              fontWeight: '500',
                               color: status.color,
-                              background: status.bg,
+                              background: 'transparent',
+                              textTransform: 'uppercase',
+                              letterSpacing: '0.05em',
                             }}>
                               {status.text}
                             </span>
                             {paymentLabel && (
                               <span style={{
-                                padding: '3px 10px',
-                                borderRadius: '999px',
-                                fontSize: '12px',
-                                fontWeight: '600',
-                                color: paymentLabel.color,
-                                background: paymentLabel.bg,
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                padding: '2px 8px',
+                                border: '1px solid #e5e5e5',
+                                borderRadius: '2px',
+                                fontSize: '10px',
+                                fontWeight: '500',
+                                color: '#666',
+                                textTransform: 'uppercase',
+                                letterSpacing: '0.05em',
                               }}>
-                                💳 {paymentLabel.text}
+                                <CreditCard size={11} strokeWidth={1.5}/>
+                                {paymentLabel.text}
                               </span>
                             )}
                           </div>
-                          <div style={{fontSize: '13px', color: '#666', marginBottom: '4px'}}>
-                            📅 {formatDate(o.rental_start_date)} → {formatDate(o.rental_end_date)}
-                            {o.rental_days ? ` (${o.rental_days} дн)` : ''}
+
+                          {/* Дати */}
+                          <div style={{display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: '#666', marginBottom: '4px'}}>
+                            <Calendar size={13} strokeWidth={1.5}/>
+                            <span>{formatDate(o.rental_start_date)} → {formatDate(o.rental_end_date)}</span>
+                            {o.rental_days ? <span style={{color: '#999'}}>· {o.rental_days} дн</span> : null}
                           </div>
                           {o.event_location && (
-                            <div style={{fontSize: '13px', color: '#666'}}>
-                              🎉 {o.event_location}
+                            <div style={{display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: '#666', marginBottom: '4px'}}>
+                              <MapPin size={13} strokeWidth={1.5}/>
+                              <span>{o.event_location}</span>
                             </div>
                           )}
-                          <div style={{fontSize: '12px', color: '#999', marginTop: '6px'}}>
-                            {o.items_count} позицій • створено {formatDate(o.created_at)}
+                          <div style={{display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', color: '#999', marginTop: '6px'}}>
+                            <ShoppingBag size={11} strokeWidth={1.5}/>
+                            <span>{o.items_count} позицій · {formatDate(o.created_at)}</span>
                             {o.updated_at && o.updated_at !== o.created_at && (
-                              <> • оновлено {formatDate(o.updated_at)}</>
+                              <span style={{color: '#bbb'}}>· оновлено {formatDate(o.updated_at)}</span>
                             )}
                           </div>
 
-                          {/* 📦 Прогрес комплектації */}
+                          {/* Прогрес комплектації */}
                           {typeof o.packing_progress === 'number' && o.packing_progress > 0 && (
-                            <div style={{marginTop: '10px'}} data-testid={`packing-progress-${o.order_id}`}>
-                              <div style={{display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: '#666', marginBottom: '4px'}}>
-                                <span>📦 Комплектація</span>
+                            <div style={{marginTop: '12px'}} data-testid={`packing-progress-${o.order_id}`}>
+                              <div style={{display: 'flex', justifyContent: 'space-between', fontSize: '10px', color: '#666', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.05em'}}>
+                                <span>Комплектація</span>
                                 <span style={{fontWeight: '600', color: '#0a3d2e'}}>{o.packing_progress}%</span>
                               </div>
-                              <div style={{width: '100%', height: '6px', background: '#eef2f0', borderRadius: '999px', overflow: 'hidden'}}>
+                              <div style={{width: '100%', height: '2px', background: '#eee', overflow: 'hidden'}}>
                                 <div style={{
                                   width: `${o.packing_progress}%`,
                                   height: '100%',
-                                  background: o.packing_progress >= 100 ? '#16a34a' : '#0a3d2e',
+                                  background: '#0a3d2e',
                                   transition: 'width 0.4s ease',
                                 }} />
                               </div>
                             </div>
                           )}
 
-                          {/* 💬 Коментар менеджера */}
+                          {/* Коментар менеджера */}
                           {o.manager_comment && o.manager_comment.trim() && (
                             <div style={{
-                              marginTop: '10px',
-                              padding: '8px 12px',
-                              background: '#fff7d6',
-                              borderLeft: '3px solid #b58a00',
-                              borderRadius: '4px',
+                              marginTop: '12px',
+                              padding: '10px 12px',
+                              background: '#fafafa',
+                              borderLeft: '2px solid #0a3d2e',
                               fontSize: '12px',
-                              color: '#5a4400',
+                              color: '#444',
+                              lineHeight: 1.5,
                             }} data-testid={`manager-comment-${o.order_id}`}>
-                              <strong>Менеджер:</strong> {o.manager_comment}
+                              <div style={{fontSize: '10px', color: '#999', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '4px'}}>Від менеджера</div>
+                              {o.manager_comment}
                             </div>
                           )}
                         </div>
-                        <div style={{textAlign: 'right'}}>
-                          <div style={{fontSize: '22px', fontWeight: '700', color: '#0a3d2e'}}>
+
+                        {/* Права частина: сума + шеврон */}
+                        <div style={{textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px'}}>
+                          <div style={{fontSize: '20px', fontWeight: '600', color: '#1a1a1a', letterSpacing: '-0.01em'}}>
                             ₴{(o.total_to_pay || o.total_price || 0).toFixed(2)}
                           </div>
-                          {/* Деталі суми: знижка / сервісний збір */}
                           {(o.discount_amount > 0 || o.service_fee > 0) && (
-                            <div style={{fontSize: '11px', color: '#888', marginTop: '2px'}}>
-                              {o.discount_amount > 0 && <>знижка −₴{o.discount_amount.toFixed(2)} </>}
+                            <div style={{fontSize: '10px', color: '#999'}}>
+                              {o.discount_amount > 0 && <>−₴{o.discount_amount.toFixed(2)} </>}
                               {o.service_fee > 0 && <>+сервіс ₴{o.service_fee.toFixed(2)}</>}
                             </div>
                           )}
                           {o.deposit_amount > 0 && (
-                            <div style={{fontSize: '12px', color: '#888', marginTop: '4px'}}>
-                              Завдаток: ₴{o.deposit_amount.toFixed(2)}
-                              {o.paid_deposit > 0 && (
-                                <span style={{color: '#2e7d32', fontWeight: '600'}}> (сплачено ₴{o.paid_deposit.toFixed(2)})</span>
-                              )}
+                            <div style={{fontSize: '11px', color: '#666'}}>
+                              Завдаток ₴{o.deposit_amount.toFixed(2)}
                             </div>
                           )}
                           {o.paid_rent > 0 && (
-                            <div style={{fontSize: '12px', color: '#2e7d32', marginTop: '2px', fontWeight: '600'}} data-testid={`paid-rent-${o.order_id}`}>
-                              ✅ Сплачено: ₴{o.paid_rent.toFixed(2)}
+                            <div style={{display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '11px', color: '#0a3d2e', fontWeight: '600'}} data-testid={`paid-rent-${o.order_id}`}>
+                              <Check size={11} strokeWidth={2}/>Сплачено ₴{o.paid_rent.toFixed(2)}
                             </div>
                           )}
-                          <div style={{display: 'flex', gap: '6px', marginTop: '10px', flexWrap: 'wrap', justifyContent: 'flex-end'}}>
-                            <button
-                              onClick={() => toggleOrderItems(o.order_id)}
-                              data-testid={`order-items-toggle-${o.order_id}`}
-                              style={{
-                                padding: '6px 12px',
-                                background: expandedItems === o.order_id ? '#0a3d2e' : '#f5f5f5',
-                                color: expandedItems === o.order_id ? '#fff' : '#0a3d2e',
-                                border: '1px solid #0a3d2e',
-                                borderRadius: '4px',
-                                cursor: 'pointer',
-                                fontSize: '12px',
-                                fontWeight: '600',
-                              }}
-                            >
-                              🛍 Склад {expandedItems === o.order_id ? '▲' : '▼'}
-                            </button>
-                            <button
-                              onClick={() => toggleOrderDocs(o.order_id)}
-                              data-testid={`order-docs-toggle-${o.order_id}`}
-                              style={{
-                                padding: '6px 12px',
-                                background: isOpen ? '#0a3d2e' : '#f5f5f5',
-                                color: isOpen ? '#fff' : '#0a3d2e',
-                                border: '1px solid #0a3d2e',
-                                borderRadius: '4px',
-                                cursor: 'pointer',
-                                fontSize: '12px',
-                                fontWeight: '600',
-                              }}
-                            >
-                              📄 Документи {isOpen ? '▲' : '▼'}
-                            </button>
-                          </div>
+                          {/* Шеврон для розгортання */}
+                          <ChevronDown
+                            size={20}
+                            strokeWidth={1.25}
+                            style={{
+                              color: '#999',
+                              transition: 'transform 0.2s ease',
+                              transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)',
+                              marginTop: '8px',
+                            }}
+                            data-testid={`order-expand-chevron-${o.order_id}`}
+                          />
                         </div>
                       </div>
 
-                      {/* Розгорнутий склад замовлення з фото, артикулом, цінами */}
-                      {expandedItems === o.order_id && (
+                      {/* Розгорнутий блок: ПОЗИЦІЇ + ДОКУМЕНТИ */}
+                      {expanded && (
                         <div
-                          data-testid={`order-items-${o.order_id}`}
-                          style={{marginTop: '16px', paddingTop: '16px', borderTop: '1px solid #f0f0f0'}}
+                          data-testid={`order-expanded-${o.order_id}`}
+                          style={{marginTop: '20px', paddingTop: '20px', borderTop: '1px solid #ececec'}}
                         >
-                          {!orderDetailsCache[o.order_id] ? (
-                            <div style={{fontSize: '13px', color: '#999'}}>Завантаження...</div>
-                          ) : (orderDetailsCache[o.order_id].items || []).length === 0 ? (
-                            <div style={{fontSize: '13px', color: '#999', fontStyle: 'italic'}}>
-                              Позицій ще немає (менеджер опрацьовує)
+                          {/* Секція ПОЗИЦІЇ */}
+                          <div style={{marginBottom: '24px'}}>
+                            <div style={{fontSize: '10px', fontWeight: '600', color: '#666', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '12px'}}>
+                              Позиції замовлення
                             </div>
-                          ) : (
-                            <>
-                              <div style={{fontSize: '13px', fontWeight: '600', color: '#444', marginBottom: '10px'}}>
-                                Позиції в замовленні (кількість діб встановлює менеджер):
+                            {!orderDetailsCache[o.order_id] ? (
+                              <div style={{fontSize: '12px', color: '#999'}}>Завантаження...</div>
+                            ) : (orderDetailsCache[o.order_id].items || []).length === 0 ? (
+                              <div style={{fontSize: '12px', color: '#999', fontStyle: 'italic'}}>
+                                Позицій ще не оформлено
                               </div>
-                              <div style={{display: 'flex', flexDirection: 'column', gap: '10px'}}>
-                                {(orderDetailsCache[o.order_id].items || []).map((it, idx) => (
-                                  <div key={idx} style={{
-                                    display: 'flex', gap: '12px', padding: '10px',
-                                    background: '#fafafa', borderRadius: '8px',
-                                    border: '1px solid #ececec', alignItems: 'flex-start',
-                                  }}>
-                                    {/* Фото */}
-                                    <div style={{
-                                      width: '64px', height: '64px', borderRadius: '6px',
-                                      background: '#fff', overflow: 'hidden', flexShrink: 0,
-                                      border: '1px solid #eee',
+                            ) : (
+                              <>
+                                <div style={{display: 'flex', flexDirection: 'column'}}>
+                                  {(orderDetailsCache[o.order_id].items || []).map((it, idx) => (
+                                    <div key={idx} style={{
+                                      display: 'flex',
+                                      gap: '12px',
+                                      padding: '12px 0',
+                                      borderTop: idx === 0 ? '1px solid #ececec' : 'none',
+                                      borderBottom: '1px solid #ececec',
+                                      alignItems: 'flex-start',
                                     }}>
-                                      {it.image_url ? (
-                                        <img src={it.image_url} alt={it.product_name}
-                                             style={{width: '100%', height: '100%', objectFit: 'cover'}}/>
-                                      ) : (
-                                        <div style={{width: '100%', height: '100%', background: '#f0f0f0',
-                                                     display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                                     fontSize: '20px', color: '#bbb'}}>📦</div>
-                                      )}
-                                    </div>
-                                    {/* Інфо */}
-                                    <div style={{flex: 1, minWidth: 0}}>
-                                      <div style={{fontWeight: '600', color: '#222', fontSize: '14px', lineHeight: 1.3}}>
-                                        {it.product_name}
-                                      </div>
-                                      {it.sku && (
-                                        <div style={{fontSize: '11px', color: '#888', marginTop: '2px'}}>
-                                          Артикул: <code style={{background: '#eee', padding: '1px 5px', borderRadius: '3px'}}>{it.sku}</code>
-                                        </div>
-                                      )}
-                                      {(it.color || it.material) && (
-                                        <div style={{fontSize: '11px', color: '#888', marginTop: '2px'}}>
-                                          {it.color && <>🎨 {it.color}</>}{it.color && it.material && ' · '}
-                                          {it.material && <>{it.material}</>}
-                                        </div>
-                                      )}
-                                      <div style={{fontSize: '12px', color: '#444', marginTop: '6px', display: 'flex', gap: '14px', flexWrap: 'wrap'}}>
-                                        <span><strong>×{it.quantity}</strong> шт</span>
-                                        <span style={{color: '#0a3d2e'}}>₴{(it.price_per_day || 0).toFixed(2)}/добу</span>
-                                        {it.deposit_per_unit > 0 && (
-                                          <span style={{color: '#b58a00'}}>застава: ₴{it.deposit_per_unit.toFixed(2)}/шт</span>
+                                      <div style={{
+                                        width: '56px', height: '56px',
+                                        background: '#fafafa', overflow: 'hidden', flexShrink: 0,
+                                        border: '1px solid #eee',
+                                      }}>
+                                        {it.image_url ? (
+                                          <img src={it.image_url} alt={it.product_name}
+                                               style={{width: '100%', height: '100%', objectFit: 'cover'}}/>
+                                        ) : (
+                                          <div style={{width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ccc'}}>
+                                            <Package size={20} strokeWidth={1}/>
+                                          </div>
                                         )}
                                       </div>
-                                      <div style={{fontSize: '12px', color: '#222', marginTop: '4px', fontWeight: '600'}}>
-                                        Разом за позицію: ₴{(it.total_rental || 0).toFixed(2)}
-                                        {it.total_deposit > 0 && <span style={{color: '#888', fontWeight: 'normal'}}> + застава ₴{it.total_deposit.toFixed(2)}</span>}
+                                      <div style={{flex: 1, minWidth: 0}}>
+                                        <div style={{fontWeight: '500', color: '#1a1a1a', fontSize: '13px', lineHeight: 1.3}}>
+                                          {it.product_name}
+                                        </div>
+                                        <div style={{fontSize: '11px', color: '#999', marginTop: '2px'}}>
+                                          {it.sku && <>Арт. <span style={{color: '#666', fontFamily: 'monospace'}}>{it.sku}</span></>}
+                                          {(it.color || it.material) && it.sku && <span> · </span>}
+                                          {it.color && <>{it.color}</>}
+                                          {it.color && it.material && <span> · </span>}
+                                          {it.material && <>{it.material}</>}
+                                        </div>
+                                        <div style={{fontSize: '11px', color: '#666', marginTop: '6px', display: 'flex', gap: '14px', flexWrap: 'wrap'}}>
+                                          <span>× <strong style={{color: '#1a1a1a'}}>{it.quantity}</strong> шт</span>
+                                          <span>₴{(it.price_per_day || 0).toFixed(2)} / добу</span>
+                                          {it.deposit_per_unit > 0 && (
+                                            <span style={{color: '#999'}}>застава ₴{it.deposit_per_unit.toFixed(2)} / шт</span>
+                                          )}
+                                        </div>
                                       </div>
+                                      <div style={{textAlign: 'right', flexShrink: 0}}>
+                                        <div style={{fontSize: '13px', fontWeight: '600', color: '#1a1a1a'}}>
+                                          ₴{(it.total_rental || 0).toFixed(2)}
+                                        </div>
+                                        {it.total_deposit > 0 && (
+                                          <div style={{fontSize: '10px', color: '#999', marginTop: '2px'}}>
+                                            +₴{it.total_deposit.toFixed(2)} застава
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                                {/* Підсумкова панель — кошториса */}
+                                <div style={{
+                                  marginTop: '14px', padding: '14px',
+                                  background: '#fafafa', border: '1px solid #ececec',
+                                }}>
+                                  <div style={{display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#666', marginBottom: '4px'}}>
+                                    <span>Оренда</span>
+                                    <span>₴{((o.total_price || 0)).toFixed(2)}</span>
+                                  </div>
+                                  {o.discount_amount > 0 && (
+                                    <div style={{display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#666', marginBottom: '4px'}}>
+                                      <span>Знижка</span>
+                                      <span>−₴{o.discount_amount.toFixed(2)}</span>
+                                    </div>
+                                  )}
+                                  {o.service_fee > 0 && (
+                                    <div style={{display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#666', marginBottom: '4px'}}>
+                                      <span>Сервісний збір</span>
+                                      <span>+₴{o.service_fee.toFixed(2)}</span>
+                                    </div>
+                                  )}
+                                  <div style={{display: 'flex', justifyContent: 'space-between', fontSize: '13px', fontWeight: '600', color: '#1a1a1a', marginTop: '8px', paddingTop: '8px', borderTop: '1px solid #ddd'}}>
+                                    <span>До сплати</span>
+                                    <span>₴{(o.total_to_pay || o.total_price || 0).toFixed(2)}</span>
+                                  </div>
+                                  {o.deposit_amount > 0 && (
+                                    <div style={{display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: '#999', marginTop: '4px'}}>
+                                      <span>Завдаток (повернеться)</span>
+                                      <span>₴{o.deposit_amount.toFixed(2)}</span>
+                                    </div>
+                                  )}
+                                </div>
+                                <div style={{display: 'flex', alignItems: 'flex-start', gap: '6px', marginTop: '10px', fontSize: '11px', color: '#999', lineHeight: 1.5}}>
+                                  <Info size={12} strokeWidth={1.5} style={{flexShrink: 0, marginTop: '1px'}}/>
+                                  <span>Кількість діб оренди фіксує менеджер за фактом видачі / повернення.</span>
+                                </div>
+                              </>
+                            )}
+                          </div>
+
+                          {/* Секція ДОКУМЕНТИ */}
+                          <div>
+                            <div style={{fontSize: '10px', fontWeight: '600', color: '#666', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '12px'}}>
+                              Документи
+                            </div>
+                            {docs.length === 0 ? (
+                              <div style={{fontSize: '12px', color: '#999', fontStyle: 'italic'}}>
+                                Документи ще не сформовано
+                              </div>
+                            ) : (
+                              <div style={{display: 'flex', flexDirection: 'column'}}>
+                                {docs.map((d, dIdx) => (
+                                  <div
+                                    key={d.id}
+                                    style={{
+                                      display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                                      padding: '12px 0',
+                                      borderTop: dIdx === 0 ? '1px solid #ececec' : 'none',
+                                      borderBottom: '1px solid #ececec',
+                                      gap: '12px', flexWrap: 'wrap',
+                                    }}
+                                  >
+                                    <div style={{flex: 1, minWidth: '150px'}}>
+                                      <div style={{display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap'}}>
+                                        <FileText size={14} strokeWidth={1.5} style={{color: '#666', flexShrink: 0}}/>
+                                        <span style={{fontWeight: '500', fontSize: '13px', color: '#1a1a1a'}}>
+                                          {d.doc_type_label}
+                                          {d.doc_number ? ` №${d.doc_number}` : ''}
+                                        </span>
+                                        {d.needs_client_signature && (
+                                          <span style={{fontSize: '9px', padding: '2px 6px', border: '1px solid #dc2626', color: '#dc2626', borderRadius: '2px', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.05em'}}>
+                                            Потребує підпису
+                                          </span>
+                                        )}
+                                        {d.status === 'signed' && (
+                                          <span style={{display: 'inline-flex', alignItems: 'center', gap: '3px', fontSize: '9px', padding: '2px 6px', border: '1px solid #0a3d2e', color: '#0a3d2e', borderRadius: '2px', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.05em'}}>
+                                            <Check size={9} strokeWidth={2.5}/>Підписано
+                                          </span>
+                                        )}
+                                        {d.is_signable && d.tenant_signed && !d.landlord_signed && (
+                                          <span style={{display: 'inline-flex', alignItems: 'center', gap: '3px', fontSize: '9px', padding: '2px 6px', border: '1px solid #b58a00', color: '#b58a00', borderRadius: '2px', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.05em'}}>
+                                            <Clock size={9} strokeWidth={1.5}/>Очікує менеджера
+                                          </span>
+                                        )}
+                                      </div>
+                                      <div style={{fontSize: '10px', color: '#999', marginTop: '4px', marginLeft: '20px'}}>
+                                        {formatDate(d.created_at)}
+                                      </div>
+                                    </div>
+                                    <div style={{display: 'flex', gap: '6px', flexWrap: 'wrap'}}>
+                                      <a
+                                        href={d.preview_url}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        style={{
+                                          padding: '5px 10px', background: 'transparent',
+                                          color: '#1a1a1a', border: '1px solid #1a1a1a',
+                                          borderRadius: '2px', fontSize: '11px', fontWeight: '500',
+                                          textDecoration: 'none', textTransform: 'uppercase', letterSpacing: '0.05em',
+                                        }}
+                                      >
+                                        Переглянути
+                                      </a>
+                                      <a
+                                        href={d.pdf_url}
+                                        style={{
+                                          padding: '5px 10px', background: '#1a1a1a',
+                                          color: '#fff', border: '1px solid #1a1a1a',
+                                          borderRadius: '2px', fontSize: '11px', fontWeight: '500',
+                                          textDecoration: 'none', textTransform: 'uppercase', letterSpacing: '0.05em',
+                                        }}
+                                      >
+                                        PDF
+                                      </a>
+                                      {d.needs_client_signature && (
+                                        <button
+                                          onClick={() => setSigningDoc({orderId: o.order_id, document: d})}
+                                          data-testid={`sign-doc-btn-${d.id}`}
+                                          style={{
+                                            display: 'inline-flex', alignItems: 'center', gap: '4px',
+                                            padding: '5px 10px', background: '#dc2626', color: '#fff',
+                                            border: '1px solid #dc2626', borderRadius: '2px',
+                                            fontSize: '11px', fontWeight: '600', cursor: 'pointer',
+                                            textTransform: 'uppercase', letterSpacing: '0.05em',
+                                          }}
+                                        >
+                                          <PenLine size={11} strokeWidth={1.5}/>Підписати
+                                        </button>
+                                      )}
                                     </div>
                                   </div>
                                 ))}
                               </div>
-                              <div style={{
-                                marginTop: '12px', padding: '10px',
-                                background: '#f0f9ff', borderLeft: '3px solid #0ea5e9',
-                                borderRadius: '4px', fontSize: '12px', color: '#0c4a6e',
-                              }}>
-                                💡 <strong>Звертайте увагу:</strong> ціна оренди за добу × кількість діб × кількість одиниць = сума за позицію.
-                                Кількість діб оренди визначає менеджер при підтвердженні замовлення (за фактом видачі/повернення).
-                              </div>
-                            </>
-                          )}
-                        </div>
-                      )}
-
-                      {isOpen && (
-                        <div
-                          data-testid={`order-docs-${o.order_id}`}
-                          style={{
-                            marginTop: '16px',
-                            paddingTop: '16px',
-                            borderTop: '1px solid #f0f0f0',
-                          }}
-                        >
-                          {docs.length === 0 ? (
-                            <div style={{fontSize: '13px', color: '#999', fontStyle: 'italic'}}>
-                              Документів по цьому замовленню ще немає. Менеджер сформує їх найближчим часом.
-                            </div>
-                          ) : (
-                            <div style={{display: 'flex', flexDirection: 'column', gap: '8px'}}>
-                              {docs.map(d => (
-                                <div
-                                  key={d.id}
-                                  style={{
-                                    display: 'flex',
-                                    justifyContent: 'space-between',
-                                    alignItems: 'center',
-                                    padding: '10px 14px',
-                                    background: d.needs_client_signature ? '#fef3c7' : '#fafafa',
-                                    borderRadius: '6px',
-                                    border: d.needs_client_signature ? '1px solid #fcd34d' : '1px solid #ececec',
-                                    gap: '8px',
-                                    flexWrap: 'wrap',
-                                  }}
-                                >
-                                  <div style={{flex: 1, minWidth: '160px'}}>
-                                    <div style={{fontWeight: '600', fontSize: '14px', color: '#222'}}>
-                                      {d.doc_type_label}
-                                      {d.doc_number ? ` №${d.doc_number}` : ''}
-                                      {d.needs_client_signature && (
-                                        <span style={{marginLeft: '8px', fontSize: '11px', padding: '2px 8px', background: '#dc2626', color: '#fff', borderRadius: '10px', fontWeight: '700'}}>
-                                          ПОТРЕБУЄ ВАШОГО ПІДПИСУ
-                                        </span>
-                                      )}
-                                      {d.status === 'signed' && (
-                                        <span style={{marginLeft: '8px', fontSize: '11px', padding: '2px 8px', background: '#16a34a', color: '#fff', borderRadius: '10px', fontWeight: '700'}}>
-                                          ✓ ПІДПИСАНО
-                                        </span>
-                                      )}
-                                      {d.is_signable && d.tenant_signed && !d.landlord_signed && (
-                                        <span style={{marginLeft: '8px', fontSize: '11px', padding: '2px 8px', background: '#f59e0b', color: '#fff', borderRadius: '10px', fontWeight: '700'}}>
-                                          ⏳ ОЧІКУЄ МЕНЕДЖЕРА
-                                        </span>
-                                      )}
-                                    </div>
-                                    <div style={{fontSize: '11px', color: '#999', marginTop: '2px'}}>
-                                      {formatDate(d.created_at)}
-                                    </div>
-                                  </div>
-                                  <div style={{display: 'flex', gap: '6px', flexWrap: 'wrap'}}>
-                                    <a
-                                      href={d.preview_url}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      style={{
-                                        padding: '6px 12px',
-                                        background: '#fff',
-                                        color: '#0a3d2e',
-                                        border: '1px solid #0a3d2e',
-                                        borderRadius: '4px',
-                                        fontSize: '12px',
-                                        fontWeight: '600',
-                                        textDecoration: 'none',
-                                      }}
-                                    >
-                                      Переглянути
-                                    </a>
-                                    <a
-                                      href={d.pdf_url}
-                                      style={{
-                                        padding: '6px 12px',
-                                        background: '#0a3d2e',
-                                        color: '#fff',
-                                        border: '1px solid #0a3d2e',
-                                        borderRadius: '4px',
-                                        fontSize: '12px',
-                                        fontWeight: '600',
-                                        textDecoration: 'none',
-                                      }}
-                                    >
-                                      PDF
-                                    </a>
-                                    {d.needs_client_signature && (
-                                      <button
-                                        onClick={() => setSigningDoc({orderId: o.order_id, document: d})}
-                                        data-testid={`sign-doc-btn-${d.id}`}
-                                        style={{
-                                          padding: '6px 12px',
-                                          background: '#dc2626',
-                                          color: '#fff',
-                                          border: '1px solid #dc2626',
-                                          borderRadius: '4px',
-                                          fontSize: '12px',
-                                          fontWeight: '700',
-                                          cursor: 'pointer',
-                                        }}
-                                      >
-                                        ✍️ Підписати
-                                      </button>
-                                    )}
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          )}
+                            )}
+                          </div>
                         </div>
                       )}
                     </div>
