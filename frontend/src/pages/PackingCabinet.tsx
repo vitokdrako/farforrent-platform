@@ -10,6 +10,7 @@ type OrderStatus = 'progress' | 'ready'
 interface PackingOrder {
   id: string
   order_id: string
+  order_number?: string
   client: string
   eventDate: string
   issueTime: string
