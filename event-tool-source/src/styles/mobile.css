@@ -277,8 +277,22 @@ html, body {
    КАТАЛОГ: 2 колонки, картки з закругленням
    ============================================================ */
 @media (max-width: 768px) {
-    .p-8 { padding: 10px !important; }
+    /* На мобільному прибираємо фіксовану висоту контейнера каталогу
+       (header 73px розраховано на десктоп — на мобільному це створює gap) */
+    .flex.h-\[calc\(100vh-73px\)\] {
+        height: auto !important;
+        min-height: calc(100vh - 60px);
+    }
+    /* Прибираємо padding-top щоб чіпси примикали до шапки впритул */
+    .p-8 {
+        padding: 0 10px 10px !important;
+    }
     .text-2xl.font-bold { font-size: 15px !important; }
+
+    /* Chips wrapper примикає до header без жодного відступу */
+    .category-chips-wrapper {
+        margin: 0 -10px 8px !important;
+    }
 
     .grid.grid-cols-1.md\:grid-cols-2 {
         grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
