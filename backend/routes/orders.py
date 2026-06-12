@@ -251,7 +251,7 @@ def parse_order_row(row, db: Session = None):
         order_dict = {
             "id": str(row[0]),
             "order_id": row[0],
-            "order_number": row[1],
+            "order_number": row[1] or f"#{row[0]}",
             "client_id": row[2],
             "client_name": row[3],
             "customer_name": row[3],  # Alias для календаря
@@ -288,7 +288,7 @@ def parse_order_row(row, db: Session = None):
         order_dict = {
             "id": str(row[0]),
             "order_id": row[0],
-            "order_number": row[1],
+            "order_number": row[1] or f"#{row[0]}",
             "client_id": row[2],
             "client_name": row[3],
             "customer_name": row[3],
@@ -319,7 +319,7 @@ def parse_order_row(row, db: Session = None):
         order_dict = {
             "id": str(row[0]),
             "order_id": row[0],
-            "order_number": row[1],
+            "order_number": row[1] or f"#{row[0]}",
             "client_id": row[2],
             "client_name": row[3],
             "customer_name": row[3],

@@ -104,8 +104,20 @@ async def list_clients(
     limit: int = 500,  # Збільшено ліміт для завантаження всіх клієнтів
     db: Session = Depends(get_rh_db)
 ):
-    """Список клієнтів з пошуком та фільтрами"""
-    
+    """Список клієнтів з пошуком та фільтрами
+
+    Об'єднує дані з client_users (нові клієнти з Event Tool) і
+    customers (legacy OpenCart) — щоб менеджер бачив усіх в одному місці.
+    """
+
+    # Перевіряємо чи існує legacy таблиця customers (OpenCart)
+    legacy_exists = False
+    try:
+        db.execute(text("SHOW COLUMNS FROM customers")).fetchall()
+        legacy_exists = True
+    except Exception:
+        legacy_exists = False
+
     sql = """
         SELECT 
             c.id, c.email, c.email_normalized, c.full_name, c.phone,
@@ -198,6 +210,76 @@ async def list_clients(
             clients = [c for c in clients if c["payers_count"] > 0]
         else:
             clients = [c for c in clients if c["payers_count"] == 0]
+
+    # ✨ LEGACY: додаємо клієнтів з OpenCart customers (якщо таблиця існує)
+    # Це показує менеджеру ВСІХ клієнтів в одному списку, незалежно від джерела.
+    if legacy_exists and not source:  # не показуємо legacy якщо явний фільтр source
+        try:
+            # Знаходимо доступні колонки в customers
+            cust_cols_rows = db.execute(text("SHOW COLUMNS FROM customers")).fetchall()
+            cust_cols = {r[0] for r in cust_cols_rows}
+            def cc(name, default="NULL"):
+                return name if name in cust_cols else default
+
+            legacy_sql = f"""
+                SELECT
+                    {cc('customer_id')} AS id,
+                    {cc('email', "''")} AS email,
+                    LOWER({cc('email', "''")}) AS email_normalized,
+                    CONCAT_WS(' ', {cc('firstname', "''")}, {cc('lastname', "''")}) AS full_name,
+                    {cc('telephone', "''")} AS phone,
+                    {cc('date_added')} AS created_at,
+                    {cc('status', '1')} AS is_active
+                FROM customers
+                WHERE 1=1
+                {("AND (CONCAT_WS(' ', " + cc('firstname',"''") + "," + cc('lastname',"''") + ") LIKE :s OR " + cc('email',"''") + " LIKE :s OR " + cc('telephone',"''") + " LIKE :s)") if search else ""}
+                ORDER BY {cc('date_added','customer_id')} DESC
+                LIMIT 500
+            """
+            legacy_params = {"s": f"%{search}%"} if search else {}
+            legacy_rows = db.execute(text(legacy_sql), legacy_params).fetchall()
+
+            # Email-и які вже є в client_users — щоб не дублювати
+            existing_emails = {(c.get("email") or "").lower() for c in clients}
+
+            for r in legacy_rows:
+                email_norm = (r[2] or "").lower().strip()
+                if email_norm and email_norm in existing_emails:
+                    continue  # вже є в client_users — пропускаємо дублікат
+                clients.append({
+                    "id": f"legacy_{r[0]}",   # префікс щоб не плутати з client_users.id
+                    "legacy_customer_id": r[0],
+                    "email": r[1] or "",
+                    "email_normalized": email_norm,
+                    "full_name": (r[3] or "").strip() or (r[1] or "—"),
+                    "phone": r[4] or "",
+                    "company_hint": None,
+                    "source": "opencart_legacy",
+                    "notes": None,
+                    "preferred_contact": None,
+                    "is_active": bool(r[6]) if r[6] is not None else True,
+                    "created_at": r[5].isoformat() if r[5] and hasattr(r[5], 'isoformat') else None,
+                    "updated_at": None,
+                    "payer_type": "individual",
+                    "tax_id": None,
+                    "bank_details": None,
+                    "orders_count": 0,
+                    "payers_count": 0,
+                    "default_payer_id": None,
+                    "has_agreement": False,
+                    "agreement_number": None,
+                    "agreement_status": None,
+                    "is_regular": False,
+                    "company": None,
+                    "rating": 0,
+                    "rating_labels": None,
+                    "internal_notes": None,
+                    "total_revenue": 0,
+                    "last_order_date": None,
+                    "instagram": None,
+                })
+        except Exception as legacy_err:
+            print(f"[clients.list] legacy customers query failed: {legacy_err}")
     
     return clients
 

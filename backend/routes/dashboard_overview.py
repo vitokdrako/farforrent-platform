@@ -106,9 +106,10 @@ async def get_dashboard_overview(
             for row in awaiting_result:
                 discount = float(row[15] or 0)
                 total_after_discount = float(row[4] or 0) - discount
+                _order_number = row[1] or f"#{row[0]}"  # fallback щоб UI не показувала NULL
                 result["orders_awaiting"].append({
                     "order_id": row[0],
-                    "order_number": row[1],
+                    "order_number": _order_number,
                     "customer_name": row[2],
                     "customer_phone": row[3],
                     "total_price": float(row[4] or 0),
@@ -156,9 +157,10 @@ async def get_dashboard_overview(
             for row in decor_result:
                 discount = float(row[16] or 0)
                 total_after_discount = float(row[4] or 0) - discount
+                _order_number = row[1] or f"#{row[0]}"
                 result["decor_orders"].append({
                     "order_id": row[0],
-                    "order_number": row[1],
+                    "order_number": _order_number,
                     "customer_name": row[2],
                     "customer_phone": row[3],
                     "total_price": float(row[4] or 0),

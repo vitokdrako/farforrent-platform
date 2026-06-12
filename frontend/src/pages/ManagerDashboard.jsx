@@ -604,7 +604,7 @@ export default function ManagerDashboard() {
               {(showAllPreparation ? filterBySearch(preparationCards) : filterBySearch(preparationCards).slice(0, 4)).map(card => (
                 <OrderCard 
                   key={card.id}
-                  id={`#${card.order_number || card.order_id}`}
+                  id={card.order_number || card.order_id}
                   order={card}
                   onDateUpdate={null}
                   onCancelByClient={handleCancelByClient}
@@ -644,7 +644,7 @@ export default function ManagerDashboard() {
               {(showAllReady ? filterBySearch(readyCards) : filterBySearch(readyCards).slice(0, 4)).map(card => (
                 <OrderCard 
                   key={card.id}
-                  id={`#${card.order_number || card.order_id}`}
+                  id={card.order_number || card.order_id}
                   name={card.customer_name || '—'}
                   phone={card.customer_phone || '—'}
                   rent={`₴ ${((card.total_after_discount || card.total_rental || 0) + (card.service_fee || 0)).toFixed(0)}`}
