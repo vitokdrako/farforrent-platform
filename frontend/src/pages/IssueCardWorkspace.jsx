@@ -505,7 +505,7 @@ setTimeout(()=>window.print(),500);
         issueDate={issueDate}
         returnDate={returnDate}
         createdAt={order?.created_at}
-        headerTitle={`Видача #${issueCard?.order_id || id}`}
+        headerTitle={`Видача #${order?.order_number || issueCard?.order_id || id}`}
         backUrl="/manager"
         loading={loading}
         
