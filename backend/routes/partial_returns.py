@@ -713,7 +713,7 @@ async def process_loss_from_damage_modal(
     ensure_tables_exist(db)
     
     try:
-        order_number = data.order_number or f"#{data.order_id}" if data.order_id else "Невідомо"
+        order_number = data.order_number or (f"#{data.order_id}" if data.order_id else "Невідомо")
         
         # 1. Зменшити кількість товару в products
         db.execute(text("""

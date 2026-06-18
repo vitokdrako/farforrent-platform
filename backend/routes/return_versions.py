@@ -437,7 +437,11 @@ async def return_version_item(
     item_id = data.get("item_id")
     sku = data.get("sku")
     qty_returned = data.get("qty", 1)
-    
+    mark_as_lost = bool(data.get("mark_as_lost", False))
+    loss_amount = float(data.get("loss_amount", 0) or 0)
+    loss_note = data.get("note", "")
+    user_name = data.get("created_by", "Manager")
+
     try:
         # Знайти товар
         if item_id:
@@ -453,41 +457,86 @@ async def return_version_item(
                 WHERE sku = :sku AND version_id = :vid AND status = 'pending'
                 LIMIT 1
             """), {"sku": sku, "vid": version_id}).fetchone()
-        
         if not item:
             raise HTTPException(status_code=404, detail="Товар не знайдено або вже повернено")
-        
-        # Оновити статус товару
+
+        new_status = 'lost' if mark_as_lost else 'returned'
+        # Оновити статус
         db.execute(text("""
             UPDATE partial_return_version_items
-            SET status = 'returned', returned_at = NOW()
+            SET status = :st, returned_at = NOW()
             WHERE item_id = :item_id
-        """), {"item_id": item[0]})
-        
-        # Перевірити чи всі товари повернено
-        pending_count = db.execute(text("""
-            SELECT COUNT(*) FROM partial_return_version_items
-            WHERE version_id = :vid AND status = 'pending'
-        """), {"vid": version_id}).scalar()
-        
-        all_returned = pending_count == 0
-        
-        if all_returned:
-            # Закрити версію
+        """), {"st": new_status, "item_id": item[0]})
+
+        # === Якщо ВТРАТА — повна логіка списання ===
+        if mark_as_lost:
+            order_id = db.execute(text(
+                "SELECT order_id FROM partial_return_versions WHERE version_id = :vid"
+            ), {"vid": version_id}).scalar()
+
+            # 1. Зменшити quantity товару
             db.execute(text("""
-                UPDATE partial_return_versions
-                SET status = 'returned', updated_at = NOW()
-                WHERE version_id = :vid
-            """), {"vid": version_id})
-        
+                UPDATE products
+                SET quantity = GREATEST(0, quantity - :qty)
+                WHERE product_id = :pid
+            """), {"pid": item[1], "qty": item[3]})
+
+            # 2. Запис у product_history
+            try:
+                db.execute(text("""
+                    INSERT INTO product_history (product_id, action, actor, details, created_at)
+                    VALUES (:pid, 'ПОВНА ВТРАТА', :actor, :details, NOW())
+                """), {
+                    "pid": item[1], "actor": user_name,
+                    "details": f"Версія повернення #{version_id}. Списано {item[3]} шт. ₴{loss_amount:.2f}",
+                })
+            except Exception as e:
+                print(f"[return-item lost] product_history skip: {e}")
+
+            # 3. Фінансова транзакція — через fin_payments (тригер створить fin_transactions)
+            if order_id and loss_amount > 0:
+                db.execute(text("""
+                    INSERT INTO fin_payments
+                      (payment_type, method, amount, currency, occurred_at, order_id, status, note, accepted_by_name, created_at)
+                    VALUES ('loss', 'cash', :amt, 'UAH', NOW(), :oid, 'posted', :note, :u, NOW())
+                """), {"amt": loss_amount, "oid": order_id,
+                       "note": f"ВТРАТА на поверненні: {item[2]} ×{item[3]}. {loss_note}",
+                       "u": user_name})
+
+            # 4. Запис у product_damage_history
+            try:
+                import uuid
+                db.execute(text("""
+                    INSERT INTO product_damage_history
+                      (id, product_id, sku, order_id, stage, damage_type, damage_code,
+                       severity, fee, qty, note, processing_type, processing_status, created_by, created_at)
+                    VALUES (:id, :pid, :sku, :oid, 'return', 'Повна втрата', 'TOTAL_LOSS',
+                            'critical', :fee, :qty, :note, 'total_loss', 'written_off', :u, NOW())
+                """), {"id": str(uuid.uuid4()), "pid": item[1], "sku": item[2],
+                       "oid": order_id, "fee": loss_amount, "qty": item[3],
+                       "note": loss_note or f"Списано через return version #{version_id}", "u": user_name})
+            except Exception as e:
+                print(f"[return-item lost] damage_history skip: {e}")
+
+        # Перевіряємо чи всі товари оброблено
+        pending_count = db.execute(text(
+            "SELECT COUNT(*) FROM partial_return_version_items WHERE version_id = :vid AND status = 'pending'"
+        ), {"vid": version_id}).scalar()
+        all_done = pending_count == 0
+        if all_done:
+            db.execute(text(
+                "UPDATE partial_return_versions SET status = 'returned', updated_at = NOW() WHERE version_id = :vid"
+            ), {"vid": version_id})
+
         db.commit()
-        
         return {
             "success": True,
             "item_id": item[0],
             "sku": item[2],
-            "all_returned": all_returned,
-            "pending_items": pending_count
+            "status": new_status,
+            "qty_reduced": item[3] if mark_as_lost else 0,
+            "all_returned": all_done,
+            "pending_items": pending_count,
         }
         
     except HTTPException:

@@ -15,6 +15,7 @@ export default function ZoneItemsReturn({
   onSetReturnedQty,     // (itemId, qty) => void
   onToggleSerial,       // (itemId, serial) => void
   onOpenDamage,         // (itemId) => void
+  onMarkAsLost,         // (itemId) => void
   readOnly = false,
   isCompleted = false,  // Чи завершено приймання
 }) {
@@ -43,6 +44,7 @@ export default function ZoneItemsReturn({
               onSetReturnedQty={onSetReturnedQty}
               onToggleSerial={onToggleSerial}
               onOpenDamage={onOpenDamage}
+              onMarkAsLost={onMarkAsLost}
               readOnly={readOnly}
               isCompleted={isCompleted}
             />
@@ -53,7 +55,7 @@ export default function ZoneItemsReturn({
   )
 }
 
-function CompactReturnCard({ item, onSetReturnedQty, onToggleSerial, onOpenDamage, readOnly, isCompleted }) {
+function CompactReturnCard({ item, onSetReturnedQty, onToggleSerial, onOpenDamage, onMarkAsLost, readOnly, isCompleted }) {
   const [expanded, setExpanded] = useState(false)
   const [showPhoto, setShowPhoto] = useState(false)
   const [showDamagePhoto, setShowDamagePhoto] = useState(null)
@@ -363,6 +365,21 @@ function CompactReturnCard({ item, onSetReturnedQty, onToggleSerial, onOpenDamag
             >
               Зафіксувати пошкодження
             </button>
+          )}
+          {/* Mark as Lost button — повна втрата, списується з quantity */}
+          {onMarkAsLost && !readOnly && item.status !== 'lost' && (
+            <button
+              onClick={() => onMarkAsLost(item.id)}
+              data-testid={`btn-mark-lost-${item.id}`}
+              className="w-full py-2 mt-1 rounded-lg border border-red-600 text-red-600 text-xs font-medium active:bg-red-50"
+            >
+              ❌ Повна втрата (списати)
+            </button>
+          )}
+          {item.status === 'lost' && (
+            <div className="w-full py-2 mt-1 rounded-lg bg-red-50 text-red-700 text-xs font-medium text-center">
+              ✓ Списано як втрату
+            </div>
           )}
         </div>
       )}

@@ -170,6 +170,39 @@ export default function PartialReturnVersionWorkspace() {
       console.error('[VersionWorkspace] Error updating qty:', err)
     }
   }, [items, versionId])
+
+  // Позначити товар як ВТРАЧЕНИЙ (повна втрата → списується з quantity + fin tx)
+  const handleMarkAsLost = useCallback(async (itemId) => {
+    const item = items.find(i => i.id === itemId)
+    if (!item) return
+    const fee = window.prompt(
+      `Сума втрати для "${item.name}" (×${item.rented_qty} шт):`,
+      String(((item.purchase_price || item.deposit || 0) * item.rented_qty).toFixed(2))
+    )
+    if (fee === null) return
+    const lossAmount = parseFloat(fee) || 0
+    const note = window.prompt('Коментар до втрати:', '') || ''
+
+    try {
+      await authFetch(`${BACKEND_URL}/api/return-versions/version/${versionId}/return-item`, {
+        method: 'POST',
+        body: JSON.stringify({
+          item_id: itemId,
+          qty: item.rented_qty,
+          mark_as_lost: true,
+          loss_amount: lossAmount,
+          note: note,
+        })
+      })
+      // Локально позначаємо як lost
+      setItems(prev => prev.map(it =>
+        it.id === itemId ? { ...it, status: 'lost', returned_qty: it.rented_qty } : it
+      ))
+    } catch (err) {
+      console.error('[VersionWorkspace] Mark as lost error:', err)
+      alert('Не вдалося списати втрату: ' + (err?.message || ''))
+    }
+  }, [items, versionId])
   
   // Відкрити модалку шкоди
   const handleOpenDamage = useCallback((itemId) => {
@@ -545,6 +578,7 @@ export default function PartialReturnVersionWorkspace() {
               onSetReturnedQty={handleSetReturnedQty}
               onToggleSerial={() => {}}
               onOpenDamage={handleOpenDamage}
+              onMarkAsLost={handleMarkAsLost}
               readOnly={isCompleted}
               isCompleted={isCompleted}
             />
