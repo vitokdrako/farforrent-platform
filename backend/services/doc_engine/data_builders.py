@@ -6,7 +6,63 @@ from datetime import datetime
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 import json
+import os
+import base64
+import mimetypes
+from pathlib import Path
 from services.company_config import get_company_config
+
+# ============================================================
+# ЗОБРАЖЕННЯ ТОВАРІВ — ЄДИНЕ ДЖЕРЕЛО ПРАВДИ
+# ============================================================
+# Шлях у БД: 'uploads/products/<file>'
+# У документах потрібен або absolute URL, або base64 (для PDF/email).
+
+_PRODUCTS_DIRS = [
+    Path("/var/www/farforrent/backend/uploads/products"),
+    Path("/home/farforre/farforrent.com.ua/rentalhub/backend/uploads/products"),
+    Path(__file__).parent.parent.parent / "uploads" / "products",
+]
+_PRODUCTS_DIR = next((p for p in _PRODUCTS_DIRS if p.exists()), _PRODUCTS_DIRS[-1])
+_BACKEND_PUBLIC_URL = os.environ.get('BACKEND_PUBLIC_URL', 'https://backrentalhub.farforrent.com.ua').rstrip('/')
+
+
+def resolve_product_image(path: str) -> str:
+    """
+    Конвертує `products.image_url` у URL/base64 для документа.
+    Пріоритет: локальний base64 → public URL → '' (порожньо).
+    """
+    if not path:
+        return ""
+    if path.startswith('data:') or path.startswith('http://') or path.startswith('https://'):
+        return path
+    rel = path.lstrip('/')
+    if rel.startswith('uploads/products/'):
+        filename = rel.split('/', 2)[2]
+    elif '/' in rel:
+        filename = rel.rsplit('/', 1)[-1]
+    else:
+        filename = rel
+    local = _PRODUCTS_DIR / filename
+    if local.exists() and local.is_file():
+        try:
+            mime, _ = mimetypes.guess_type(str(local))
+            with open(local, 'rb') as f:
+                data = base64.b64encode(f.read()).decode('utf-8')
+            return f"data:{mime or 'image/jpeg'};base64,{data}"
+        except Exception as e:
+            print(f"[resolve_product_image] base64 fail {local}: {e}")
+    return f"{_BACKEND_PUBLIC_URL}/uploads/products/{filename}"
+
+
+def pick_product_image(product_image: str | None, legacy_image: str | None = None) -> str:
+    """Єдине джерело правди: products.image_url, з фолбеком на legacy oi.image_url."""
+    if product_image and product_image.strip():
+        return resolve_product_image(product_image)
+    if legacy_image and legacy_image.strip():
+        # legacy OpenCart absolute URL
+        return legacy_image if legacy_image.startswith('http') else resolve_product_image(legacy_image)
+    return ""
 
 # ============================================================
 # КОНВЕРТАЦІЯ СУМИ В СЛОВА (УКРАЇНСЬКА)
@@ -183,12 +239,13 @@ def build_order_data(db: Session, order_id: str, options: dict) -> dict:
         "created_at": order_row[15].strftime("%d.%m.%Y %H:%M") if order_row[15] else ""
     }
     
-    # Позиції замовлення (RentalHub schema)
+    # Позиції замовлення (RentalHub schema) — єдине джерело фото: products.image_url
     items_result = db.execute(text("""
         SELECT 
             oi.product_name, oi.product_id, oi.quantity, 
             oi.price, oi.total_rental, oi.image_url,
-            p.sku, p.zone, p.aisle, p.shelf, p.price as damage_price
+            p.sku, p.zone, p.aisle, p.shelf, p.price as damage_price,
+            p.image_url AS product_image
         FROM order_items oi
         LEFT JOIN products p ON p.product_id = oi.product_id
         WHERE oi.order_id = :order_id
@@ -222,7 +279,7 @@ def build_order_data(db: Session, order_id: str, options: dict) -> dict:
             "deposit_per_item": deposit_per_item,
             "total_rent": total_rental,
             "total_deposit": item_deposit,
-            "image_url": row[5],
+            "image_url": pick_product_image(row[11] if len(row) > 11 else None, row[5]),
             "location": location
         })
         
@@ -783,7 +840,7 @@ def build_issue_card_data(db: Session, issue_card_id: str, options: dict) -> dic
                 "quantity": item_row[2] or 1,
                 "sku": item_row[3] or "",
                 "location": location,
-                "image_url": item_row[7]
+                "image_url": pick_product_image(item_row[7])
             })
     
     # Use customer_phone or phone fallback
@@ -1026,7 +1083,7 @@ def build_return_data(db: Session, order_id: str, options: dict) -> dict:
         order_items_map[pid] = {
             "name": r[0], "product_id": pid, "qty": r[2],
             "price_per_day": float(r[3] or 0), "sku": r[5] or "",
-            "image_url": r[6] or "",
+            "image_url": pick_product_image(r[6]),
         }
     
     # --- Damage records (ALL types) ---

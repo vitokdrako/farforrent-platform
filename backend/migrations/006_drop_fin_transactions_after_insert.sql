@@ -1,0 +1,16 @@
+-- ============================================================================
+-- Migration 006: Drop fin_transactions_after_insert (one-way sync fp → tx only)
+-- ============================================================================
+-- Reason: All Python code paths that touch financials write into fin_payments
+--   (or used to write into BOTH fin_payments and fin_transactions). With the
+--   fin_payments → fin_transactions mirror in place, the reverse mirror caused
+--   duplicate fin_payments rows for legacy double-insert endpoints.
+--
+-- Solution: Standardise on a single direction:
+--   - Python writes INSERT INTO fin_payments (...)
+--   - Trigger fin_payments_after_insert creates the matching fin_transactions row
+--   - Anywhere code used to write directly into fin_transactions (e.g.
+--     admin_finance.create_transaction) has been refactored to write into
+--     fin_payments instead.
+-- ============================================================================
+DROP TRIGGER IF EXISTS fin_transactions_after_insert;

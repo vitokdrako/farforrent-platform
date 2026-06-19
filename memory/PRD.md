@@ -17,6 +17,17 @@ See `/app/memory/test_credentials.md`
 
 ## What's Been Implemented (latest first)
 
+
+### 2026-02-13 — Fix P0: "Помилка збереження списання" + finance sync + doc photos
+- **Root cause (P0)**: MySQL trigger `fin_payments_after_insert` had self-referencing `UPDATE fin_payments SET tx_id = LAST_INSERT_ID()` inside an AFTER INSERT trigger → MySQL error 1442. Trigger `fin_transactions_after_insert` then mirrored back into `fin_payments` → circular insert. Effect: ANY `fin_payments` insert (payments, write-offs) silently failed.
+- **Fix applied**:
+  - Migration `005_fix_fin_triggers_recursion.sql`: removed recursive UPDATE, added `[from fp #...]` guard in mirror trigger.
+  - Migration `006_drop_fin_transactions_after_insert.sql`: dropped reverse-mirror trigger after refactoring `admin_finance.create_transaction` to write fin_payments only (trigger creates the matching tx).
+  - `routes/return_versions.py`: fixed `SELECT order_id FROM partial_return_versions` → `parent_order_id` (column was misnamed).
+- **Documents photo = single source of truth**: `services/doc_engine/data_builders.py` now resolves `products.image_url` via new `resolve_product_image()` / `pick_product_image()` helpers (base64 for local files, absolute URL via BACKEND_PUBLIC_URL otherwise). `oi.image_url` is now a legacy fallback only. All builders (rental_agreement, issue_card, return_act) use products as the canonical source.
+- **E2E validation** (`backend/tests/test_full_order_cycle.py`): registers Event Tool user → creates board with items → converts to order (IT-10001) → adds rent+deposit payments via admin/finance → creates return version → marks 3 items as TOTAL LOSS → verifies finance summary (paid_rent=500, paid_deposit=200, extra_charges=1500, debt=6400) with no duplicate fin_payments rows.
+- **Test cleanup**: VPS deploy is required to pick up new migrations — run `mysql ... < migrations/005...sql` and `migrations/006...sql` before restarting backend.
+
 ### 2026-02-05
 - **Repo cleanup**: видалено ~50 одноразових скриптів з `/app/backend/` (sync_*, check_*, migrate_*, fix_*, update_*, setup_rentalhub_*, test_* в корені, *.xlsx).
 - **Безпека**: `backend/.encryption_key` прибрано з git tracking + додано в `.gitignore`.

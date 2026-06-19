@@ -471,7 +471,7 @@ async def return_version_item(
         # === Якщо ВТРАТА — повна логіка списання ===
         if mark_as_lost:
             order_id = db.execute(text(
-                "SELECT order_id FROM partial_return_versions WHERE version_id = :vid"
+                "SELECT parent_order_id FROM partial_return_versions WHERE version_id = :vid"
             ), {"vid": version_id}).scalar()
 
             # 1. Зменшити quantity товару

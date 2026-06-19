@@ -115,18 +115,31 @@ async def create_transaction(
         raise HTTPException(400, "Amount must be positive")
 
     occ = payload.occurred_at or datetime.now()
+    # Записуємо в fin_payments — fin_transactions буде створено тригером
+    # (єдиний напрямок sync: fp → tx; запобігає дублікатам)
+    payment_type_map = {
+        'rent_payment': 'rent', 'deposit_payment': 'deposit',
+        'deposit_refund': 'deposit_refund', 'additional_payment': 'additional',
+        'damage_payment': 'damage', 'damage_deduction': 'loss',
+        'late_payment': 'late', 'collection': 'rent', 'charge': 'damage',
+    }
+    p_type = payment_type_map.get(payload.tx_type, 'rent')
     ins = db.execute(text("""
-        INSERT INTO fin_transactions
-          (tx_type, status, currency, amount, occurred_at, note,
-           entity_type, entity_id, created_at, accepted_by_name)
-        VALUES (:tt, 'posted', 'UAH', :amt, :occ, :note, 'order', :oid, NOW(), :acc)
+        INSERT INTO fin_payments
+          (payment_type, method, amount, currency, occurred_at, order_id,
+           status, note, accepted_by_name, created_at)
+        VALUES (:pt, 'cash', :amt, 'UAH', :occ, :oid, 'posted', :note, :acc, NOW())
     """), {
-        "tt": payload.tx_type, "amt": payload.amount, "occ": occ,
+        "pt": p_type, "amt": payload.amount, "occ": occ,
         "note": payload.note or "", "oid": order_id,
         "acc": user.get("name", None) if isinstance(user, dict) else None or 'Manager',
     })
     db.commit()
-    return {"id": ins.lastrowid, "ok": True}
+    # Повертаємо tx_id з створеного fin_transactions (через тригер)
+    tx = db.execute(text("""
+        SELECT id FROM fin_transactions WHERE note LIKE :n ORDER BY id DESC LIMIT 1
+    """), {"n": f"%[from fp #{ins.lastrowid}]%"}).fetchone()
+    return {"id": tx[0] if tx else None, "fp_id": ins.lastrowid, "ok": True}
 
 
 class TxUpdate(BaseModel):
