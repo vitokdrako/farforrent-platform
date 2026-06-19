@@ -2219,6 +2219,168 @@ async def sign_document_as_client(
 
 
 # ============================================================================
+# FAVORITES (ОБРАНЕ)
+# ============================================================================
+
+@router.get("/favorites")
+async def list_favorites(
+    db: Session = Depends(get_rh_db),
+    token: str = Depends(get_token_from_header)
+):
+    """Список ID товарів в обраному поточного користувача."""
+    user = get_current_customer(token, db)
+    rows = db.execute(text("""
+        SELECT product_id FROM event_favorites WHERE customer_id = :cid
+        ORDER BY created_at DESC
+    """), {"cid": user["customer_id"]}).fetchall()
+    return {"product_ids": [r[0] for r in rows]}
+
+
+@router.get("/favorites/products")
+async def list_favorite_products(
+    db: Session = Depends(get_rh_db),
+    token: str = Depends(get_token_from_header)
+):
+    """Повні картки товарів з обраного для сторінки 'Обране'."""
+    user = get_current_customer(token, db)
+    rows = db.execute(text("""
+        SELECT p.product_id, p.name, p.sku, p.price, p.image_url, p.quantity,
+               p.description, p.category_id, f.created_at
+        FROM event_favorites f
+        JOIN products p ON p.product_id = f.product_id
+        WHERE f.customer_id = :cid
+        ORDER BY f.created_at DESC
+    """), {"cid": user["customer_id"]}).fetchall()
+    return {"products": [{
+        "product_id": r[0], "name": r[1], "sku": r[2],
+        "price": float(r[3] or 0), "rental_price": float(r[3] or 0),
+        "image_url": r[4], "quantity": r[5] or 0,
+        "description": r[6], "category_id": r[7],
+        "favorited_at": r[8].isoformat() if r[8] else None,
+    } for r in rows]}
+
+
+@router.post("/favorites/{product_id}")
+async def add_favorite(
+    product_id: int,
+    db: Session = Depends(get_rh_db),
+    token: str = Depends(get_token_from_header)
+):
+    """Додати товар в обране."""
+    user = get_current_customer(token, db)
+    exists = db.execute(text("""
+        SELECT product_id FROM products WHERE product_id = :pid
+    """), {"pid": product_id}).scalar()
+    if not exists:
+        raise HTTPException(status_code=404, detail="Product not found")
+    db.execute(text("""
+        INSERT IGNORE INTO event_favorites (customer_id, product_id)
+        VALUES (:cid, :pid)
+    """), {"cid": user["customer_id"], "pid": product_id})
+    db.commit()
+    return {"ok": True, "product_id": product_id, "favorited": True}
+
+
+@router.delete("/favorites/{product_id}")
+async def remove_favorite(
+    product_id: int,
+    db: Session = Depends(get_rh_db),
+    token: str = Depends(get_token_from_header)
+):
+    """Видалити товар з обраного."""
+    user = get_current_customer(token, db)
+    db.execute(text("""
+        DELETE FROM event_favorites WHERE customer_id = :cid AND product_id = :pid
+    """), {"cid": user["customer_id"], "pid": product_id})
+    db.commit()
+    return {"ok": True, "product_id": product_id, "favorited": False}
+
+
+# ============================================================================
+# WEB PUSH NOTIFICATIONS
+# ============================================================================
+
+@router.get("/push/public-key")
+async def push_public_key():
+    """Return VAPID public key for the browser to use during subscription."""
+    return {"public_key": os.environ.get("VAPID_PUBLIC_KEY", "")}
+
+
+class PushSubscriptionRequest(BaseModel):
+    endpoint: str
+    keys: dict  # {p256dh, auth}
+    user_agent: Optional[str] = None
+
+
+@router.post("/push/subscribe")
+async def push_subscribe(
+    data: PushSubscriptionRequest,
+    db: Session = Depends(get_rh_db),
+    token: str = Depends(get_token_from_header)
+):
+    """Save (or refresh) a web-push subscription for current customer."""
+    user = get_current_customer(token, db)
+    p256dh = data.keys.get("p256dh", "")
+    auth_secret = data.keys.get("auth", "")
+    if not (data.endpoint and p256dh and auth_secret):
+        raise HTTPException(status_code=400, detail="Invalid subscription payload")
+    db.execute(text("""
+        INSERT INTO push_subscriptions
+          (customer_id, endpoint, p256dh, auth_secret, user_agent, last_used_at)
+        VALUES (:cid, :ep, :p256, :auth, :ua, NOW())
+        ON DUPLICATE KEY UPDATE
+          customer_id = VALUES(customer_id),
+          p256dh = VALUES(p256dh),
+          auth_secret = VALUES(auth_secret),
+          user_agent = VALUES(user_agent),
+          last_used_at = NOW()
+    """), {
+        "cid": user["customer_id"], "ep": data.endpoint,
+        "p256": p256dh, "auth": auth_secret, "ua": data.user_agent,
+    })
+    db.commit()
+    return {"ok": True}
+
+
+@router.post("/push/unsubscribe")
+async def push_unsubscribe(
+    data: dict,
+    db: Session = Depends(get_rh_db),
+    token: str = Depends(get_token_from_header)
+):
+    user = get_current_customer(token, db)
+    endpoint = data.get("endpoint", "")
+    if endpoint:
+        db.execute(text("""
+            DELETE FROM push_subscriptions
+            WHERE customer_id = :cid AND endpoint = :ep
+        """), {"cid": user["customer_id"], "ep": endpoint})
+    else:
+        db.execute(text("DELETE FROM push_subscriptions WHERE customer_id = :cid"),
+                   {"cid": user["customer_id"]})
+    db.commit()
+    return {"ok": True}
+
+
+@router.post("/push/test")
+async def push_test(
+    db: Session = Depends(get_rh_db),
+    token: str = Depends(get_token_from_header)
+):
+    """Send a test push to current customer (useful for UI 'Test notification' button)."""
+    from services.push_notifications import send_to_customer
+    user = get_current_customer(token, db)
+    result = send_to_customer(
+        db, user["customer_id"],
+        title="🎉 RentalHub: тестове сповіщення",
+        body="Push сповіщення працюють. Тепер ви будете отримувати оновлення про ваші замовлення.",
+        url="/profile", tag="test",
+    )
+    return result
+
+
+
+# ============================================================================
 # HEALTH CHECK
 # ============================================================================
 

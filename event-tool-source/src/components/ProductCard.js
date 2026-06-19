@@ -1,10 +1,14 @@
 import React, { useState } from 'react';
+import { Heart } from 'lucide-react';
 import AvailabilityBadge from './AvailabilityBadge';
 import { useAvailability } from '../hooks/useAvailability';
+import { useFavorites } from '../context/FavoritesContext';
 import './ProductCard.css';
 
 const ProductCard = ({ product, onAddToBoard, boardDates, onOpenDetails }) => {
   const [isAdding, setIsAdding] = useState(false);
+  const { isFavorite, toggle: toggleFav } = useFavorites();
+  const fav = isFavorite(product.product_id);
   const { availability, loading } = useAvailability(
     product.product_id,
     1,
@@ -49,9 +53,33 @@ const ProductCard = ({ product, onAddToBoard, boardDates, onOpenDetails }) => {
       <div
         className="product-card-image"
         onClick={() => onOpenDetails && onOpenDetails(product.product_id)}
-        style={{cursor: onOpenDetails ? 'pointer' : 'default'}}
+        style={{cursor: onOpenDetails ? 'pointer' : 'default', position: 'relative'}}
         data-testid={`product-card-image-${product.product_id}`}
       >
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); toggleFav(product.product_id); }}
+          aria-label={fav ? 'Видалити з обраного' : 'Додати в обране'}
+          data-testid={`favorite-btn-${product.product_id}`}
+          className={`product-card-fav-btn ${fav ? 'is-fav' : ''}`}
+          style={{
+            position: 'absolute', top: 8, right: 8, zIndex: 5,
+            width: 32, height: 32, borderRadius: '50%',
+            border: 'none', background: 'rgba(255,255,255,0.92)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            cursor: 'pointer', boxShadow: '0 1px 3px rgba(0,0,0,0.12)',
+            transition: 'transform 0.15s ease',
+          }}
+          onMouseDown={(e) => { e.currentTarget.style.transform = 'scale(0.85)'; }}
+          onMouseUp={(e) => { e.currentTarget.style.transform = 'scale(1)'; }}
+        >
+          <Heart
+            size={17}
+            color={fav ? '#e63946' : '#444'}
+            fill={fav ? '#e63946' : 'none'}
+            strokeWidth={fav ? 0 : 2}
+          />
+        </button>
         {getImageUrl() ? (
           <img
             src={getImageUrl()}

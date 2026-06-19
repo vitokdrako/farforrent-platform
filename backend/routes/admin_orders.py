@@ -170,6 +170,10 @@ class OrderFinanceUpdate(BaseModel):
 @router.put("/{order_id}")
 async def update_order_finance(order_id: int, data: OrderFinanceUpdate, db: Session = Depends(get_rh_db)):
     """Update order financial fields + status"""
+    # Capture previous status to detect transitions
+    old_status = db.execute(text("SELECT status FROM orders WHERE order_id = :oid"),
+                            {"oid": order_id}).scalar()
+
     fields = []
     params = {"order_id": order_id}
     
@@ -186,6 +190,16 @@ async def update_order_finance(order_id: int, data: OrderFinanceUpdate, db: Sess
     fields.append("updated_at = NOW()")
     db.execute(text(f"UPDATE orders SET {', '.join(fields)} WHERE order_id = :order_id"), params)
     db.commit()
+
+    # Trigger push notification on status change
+    if data.status and data.status != old_status:
+        try:
+            from services.push_notifications import notify_order_status_change
+            notify_order_status_change(db, order_id, data.status, old_status)
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning(f"push notify failed: {e}")
+
     return {"ok": True}
 
 

@@ -1,6 +1,16 @@
 """
 Return Cards routes - Картки повернення
-✅ MIGRATED: Using RentalHub DB
+
+⚠️  DEPRECATED (2026-02): Цей роутер та таблиця `return_cards` є legacy.
+    Сучасний потік повернень знаходиться у:
+      - routes/return_versions.py    (партіальні повернення з версіями)
+      - routes/partial_returns.py    (обробка пошкоджень/списань)
+
+    Ендпойнти `return_cards` залишені тільки для:
+      1) Зворотньої сумісності зі старим Admin UI (`archive.py` дивиться сюди)
+      2) Читання історичних записів (картки повернень створені до 2025-Q4)
+    Не використовуйте у нових фічах. Перед видаленням потрібно мігрувати
+    дані `return_cards` → `partial_return_versions`.
 """
 from fastapi import APIRouter, HTTPException, Depends
 from typing import List, Optional

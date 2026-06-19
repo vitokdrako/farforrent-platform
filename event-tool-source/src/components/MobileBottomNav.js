@@ -4,7 +4,8 @@
  */
 import React from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { BookOpen, ShoppingBag, User } from 'lucide-react';
+import { BookOpen, ShoppingBag, User, Heart } from 'lucide-react';
+import { useFavorites } from '../context/FavoritesContext';
 
 const Item = ({ Icon, label, active, onClick, badge, testid, large }) => (
   <button
@@ -23,6 +24,8 @@ const Item = ({ Icon, label, active, onClick, badge, testid, large }) => (
 const MobileBottomNav = ({ onOpenCart, cartCount = 0 }) => {
   const navigate = useNavigate();
   const { pathname } = useLocation();
+  const { favoriteIds } = useFavorites();
+  const favCount = favoriteIds.length;
 
   return (
     <nav className="mobile-bottom-nav" data-testid="mobile-bottom-nav">
@@ -32,6 +35,14 @@ const MobileBottomNav = ({ onOpenCart, cartCount = 0 }) => {
         active={pathname === '/rules'}
         onClick={() => navigate('/rules')}
         testid="bnav-rules"
+      />
+      <Item
+        Icon={Heart}
+        label="Обране"
+        active={pathname === '/favorites'}
+        onClick={() => navigate('/favorites')}
+        badge={favCount > 0 ? favCount : null}
+        testid="bnav-favorites"
       />
       <Item
         Icon={ShoppingBag}

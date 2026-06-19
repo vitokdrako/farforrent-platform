@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-route
 import { QueryClient, QueryClientProvider } from 'react-query';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { BoardProvider, useBoard } from './context/BoardContext';
+import { FavoritesProvider } from './context/FavoritesContext';
 import DateRangePicker from './components/DateRangePicker';
 import ProductCard from './components/ProductCard';
 import ProductDetailsModal from './components/ProductDetailsModal';
@@ -16,6 +17,7 @@ import ProductFilters from './components/ProductFilters';
 import CreateBoardModal from './components/CreateBoardModal';
 import UserProfile from './components/UserProfile';
 import RentalRules from './pages/RentalRules';
+import FavoritesPage from './pages/FavoritesPage';
 import './App.css';
 import api from './api/axios';
 
@@ -1014,31 +1016,41 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
-        <BoardProvider>
-          <BrowserRouter>
-            <Routes>
-              <Route path="/login" element={<LoginPage />} />
-              <Route
-                path="/"
-                element={
-                  <ProtectedRoute>
-                    <EventPlannerPage />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/profile"
-                element={
-                  <ProtectedRoute>
-                    <UserProfile />
-                  </ProtectedRoute>
-                }
-              />
-              <Route path="/rules" element={<RentalRules />} />
-            </Routes>
-            <BuildBadge />
-          </BrowserRouter>
-        </BoardProvider>
+        <FavoritesProvider>
+          <BoardProvider>
+            <BrowserRouter>
+              <Routes>
+                <Route path="/login" element={<LoginPage />} />
+                <Route
+                  path="/"
+                  element={
+                    <ProtectedRoute>
+                      <EventPlannerPage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/profile"
+                  element={
+                    <ProtectedRoute>
+                      <UserProfile />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/favorites"
+                  element={
+                    <ProtectedRoute>
+                      <FavoritesPage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route path="/rules" element={<RentalRules />} />
+              </Routes>
+              <BuildBadge />
+            </BrowserRouter>
+          </BoardProvider>
+        </FavoritesProvider>
       </AuthProvider>
     </QueryClientProvider>
   );

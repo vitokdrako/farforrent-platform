@@ -8,6 +8,7 @@ import { useAuth } from '../context/AuthContext';
 import api from '../api/axios';
 import { ordersApi } from '../api/orders';
 import SignDocumentModal from './SignDocumentModal';
+import NotificationToggle from './NotificationToggle';
 
 const ORDER_STATUS_LABELS = {
   pending: { text: 'Очікує підтвердження', color: '#b58a00' },
@@ -234,6 +235,11 @@ const UserProfile = () => {
               </div>
             </div>
           </div>
+        </div>
+
+        {/* Notification toggle */}
+        <div style={{ marginBottom: '24px' }}>
+          <NotificationToggle />
         </div>
 
         {/* Tabs */}

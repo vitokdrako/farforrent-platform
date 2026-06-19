@@ -18,6 +18,29 @@ See `/app/memory/test_credentials.md`
 ## What's Been Implemented (latest first)
 
 
+### 2026-02-13 (cont.) — P1 Backlog Execution
+- **P1 Invoice_legal**: Перевірено — шаблон рендериться коректно з усіма типами `payer_type` (individual / fop_simple / fop_general / llc_simple / llc_general). Помилку було усунено в попередніх ітераціях.
+- **P1 Favorites (♡)**:
+  - Backend: міграція `007_event_favorites.sql` + 4 ендпойнти: `GET /api/event/favorites`, `GET /favorites/products`, `POST /favorites/{id}`, `DELETE /favorites/{id}`.
+  - Frontend: `api/favorites.js`, `context/FavoritesContext.js` (з optimistic update + localStorage cache), кнопка ♡ на `ProductCard.js`, нова сторінка `pages/FavoritesPage.js` (route `/favorites`), пункт в `MobileBottomNav.js` з лічильником обраних.
+  - Працює і для гостей (локальний кеш), синкається на сервер при логіні. Протестовано через curl.
+- **P1 Web Push сповіщення**:
+  - Backend: `services/push_notifications.py` (з VAPID keys через `pywebpush`), міграція `008_push_subscriptions.sql`. Ендпойнти: `GET /push/public-key`, `POST /push/subscribe`, `POST /push/unsubscribe`, `POST /push/test`. Helpers: `notify_order_status_change()`, `notify_document_ready()`.
+  - Hook у `routes/admin_orders.py` `update_order_finance`: при зміні `status` клієнт отримає push.
+  - Frontend: Service Worker `public/sw.js`, `api/push.js`, компонент `NotificationToggle.js` в профілі клієнта (з кнопкою "Надіслати тестове сповіщення"). 
+  - VAPID keys згенеровано та збережено в `backend/.env` (`VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_PEM_BASE64`, `VAPID_SUBJECT`).
+  - pywebpush, py-vapid, http-ece додано до залежностей backend.
+- **Refactor**: `return_cards.py` помічено як DEPRECATED у docstring (видалення відкладено до міграції історичних даних в `partial_return_versions`).
+
+**ВАЖЛИВО для VPS-деплою** — додати у `.env` сервера:
+```
+VAPID_PUBLIC_KEY=BDv9Q_MFsHka2tT2hI-I5E0vVEWGajomsa3qZ2Ymmj55JvUoaF_r-veEsm51aL86gVHa3wO_bsq_UhjuaOYcY3I
+VAPID_PRIVATE_PEM_BASE64=<скопіювати з /app/backend/.env>
+VAPID_SUBJECT=mailto:info@farforrent.com.ua
+```
+Та запустити міграції `005, 006, 007, 008`.
+
+
 ### 2026-02-13 — Fix P0: "Помилка збереження списання" + finance sync + doc photos
 - **Root cause (P0)**: MySQL trigger `fin_payments_after_insert` had self-referencing `UPDATE fin_payments SET tx_id = LAST_INSERT_ID()` inside an AFTER INSERT trigger → MySQL error 1442. Trigger `fin_transactions_after_insert` then mirrored back into `fin_payments` → circular insert. Effect: ANY `fin_payments` insert (payments, write-offs) silently failed.
 - **Fix applied**:
