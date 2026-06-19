@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Send, Loader2, MessageCircle } from 'lucide-react';
+import { Send, Loader2, MessageCircle, Wifi, WifiOff } from 'lucide-react';
 import { chatAPI } from '../api/chat';
 
 const formatTime = (iso) => {
@@ -13,33 +13,135 @@ const formatTime = (iso) => {
   } catch { return ''; }
 };
 
+const wsUrl = (orderId, token) => {
+  // REACT_APP_BACKEND_URL → https://x.com  → wss://x.com/api/ws/...
+  const base = (process.env.REACT_APP_BACKEND_URL || window.location.origin)
+    .replace(/^http(s?):\/\//, (m, s) => `ws${s}://`);
+  return `${base}/api/ws/chat/client/${orderId}?token=${encodeURIComponent(token)}`;
+};
+
 const OrderChat = ({ orderId, orderNumber }) => {
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [text, setText] = useState('');
   const [error, setError] = useState('');
-  const scrollRef = useRef(null);
-  const pollRef = useRef(null);
+  const [wsConnected, setWsConnected] = useState(false);
+  const [typingPeer, setTypingPeer] = useState(false);
 
-  const load = async () => {
+  const scrollRef = useRef(null);
+  const wsRef = useRef(null);
+  const reconnectRef = useRef(null);
+  const pollRef = useRef(null);
+  const typingTimerRef = useRef(null);
+  const heartbeatRef = useRef(null);
+
+  // --- WebSocket connection ---
+  const connectWS = () => {
+    const token = localStorage.getItem('access_token');
+    if (!token) return;
     try {
-      const msgs = await chatAPI.list(orderId);
-      setMessages(msgs);
-      setError('');
+      const ws = new WebSocket(wsUrl(orderId, token));
+      wsRef.current = ws;
+
+      ws.onopen = () => {
+        setWsConnected(true);
+        setError('');
+        // Stop polling fallback
+        if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+        // Start heartbeat
+        heartbeatRef.current = setInterval(() => {
+          if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'ping' }));
+        }, 25000);
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          switch (data.type) {
+            case 'init':
+              setMessages(data.messages || []);
+              setLoading(false);
+              break;
+            case 'new_message':
+              setMessages((prev) => [...prev, data.message]);
+              break;
+            case 'typing':
+              setTypingPeer(!!data.is_typing);
+              if (data.is_typing) {
+                setTimeout(() => setTypingPeer(false), 3000);
+              }
+              break;
+            case 'read_receipt':
+              // Could update UI indicating peer has read messages
+              break;
+            case 'error':
+              setError(data.message || 'WS error');
+              break;
+            case 'pong':
+              // No-op heartbeat
+              break;
+            default:
+              break;
+          }
+        } catch (e) {
+          console.warn('Bad WS message:', e);
+        }
+      };
+
+      ws.onclose = (ev) => {
+        setWsConnected(false);
+        if (heartbeatRef.current) { clearInterval(heartbeatRef.current); heartbeatRef.current = null; }
+        // Auth-related close codes → fallback to polling, don't reconnect
+        if (ev.code === 4401 || ev.code === 4403 || ev.code === 4404) {
+          startPolling();
+          return;
+        }
+        // Reconnect with backoff
+        reconnectRef.current = setTimeout(connectWS, 3000);
+      };
+
+      ws.onerror = (e) => {
+        console.warn('WS error:', e);
+      };
     } catch (e) {
-      console.error(e);
-      setError('Не вдалося завантажити повідомлення');
-    } finally {
-      setLoading(false);
+      console.warn('connectWS failed:', e);
+      startPolling();
     }
   };
 
+  // --- Polling fallback (when WS unavailable) ---
+  const loadHttp = async () => {
+    try {
+      const msgs = await chatAPI.list(orderId);
+      setMessages(msgs);
+      setLoading(false);
+      setError('');
+    } catch (e) {
+      setError('Не вдалося завантажити повідомлення');
+    }
+  };
+  const startPolling = () => {
+    if (pollRef.current) return;
+    loadHttp();
+    pollRef.current = setInterval(loadHttp, 10000);
+  };
+
   useEffect(() => {
-    load();
-    // Poll every 10s while chat is open
-    pollRef.current = setInterval(load, 10000);
-    return () => pollRef.current && clearInterval(pollRef.current);
+    if (typeof window !== 'undefined' && 'WebSocket' in window) {
+      connectWS();
+    } else {
+      startPolling();
+    }
+    return () => {
+      if (wsRef.current) {
+        try { wsRef.current.close(); } catch (e) { /* noop */ }
+        wsRef.current = null;
+      }
+      if (reconnectRef.current) clearTimeout(reconnectRef.current);
+      if (pollRef.current) clearInterval(pollRef.current);
+      if (heartbeatRef.current) clearInterval(heartbeatRef.current);
+    };
   }, [orderId]);
 
   useEffect(() => {
@@ -48,19 +150,38 @@ const OrderChat = ({ orderId, orderNumber }) => {
     }
   }, [messages]);
 
+  // --- Send message ---
   const handleSend = async (e) => {
     e?.preventDefault();
     const msg = text.trim();
     if (!msg || sending) return;
     setSending(true);
     try {
-      const updated = await chatAPI.send(orderId, msg);
-      setMessages(updated);
-      setText('');
+      if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+        wsRef.current.send(JSON.stringify({ type: 'send', message: msg }));
+        setText('');
+      } else {
+        const updated = await chatAPI.send(orderId, msg);
+        setMessages(updated);
+        setText('');
+      }
     } catch (err) {
       setError(err?.response?.data?.detail || 'Не вдалося надіслати');
     } finally {
       setSending(false);
+    }
+  };
+
+  // --- Typing indicator (debounced) ---
+  const handleTyping = () => {
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ type: 'typing', is_typing: true }));
+      if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
+      typingTimerRef.current = setTimeout(() => {
+        if (wsRef.current?.readyState === WebSocket.OPEN) {
+          wsRef.current.send(JSON.stringify({ type: 'typing', is_typing: false }));
+        }
+      }, 2000);
     }
   };
 
@@ -78,7 +199,12 @@ const OrderChat = ({ orderId, orderNumber }) => {
         display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, fontWeight: 600,
       }}>
         <MessageCircle size={16} />
-        Чат з менеджером {orderNumber ? `· ${orderNumber}` : ''}
+        <span style={{ flex: 1 }}>
+          Чат з менеджером {orderNumber ? `· ${orderNumber}` : ''}
+        </span>
+        <span title={wsConnected ? 'Real-time підключено' : 'Працює через опитування'}>
+          {wsConnected ? <Wifi size={14} /> : <WifiOff size={14} style={{ opacity: 0.5 }} />}
+        </span>
       </div>
 
       <div
@@ -133,6 +259,14 @@ const OrderChat = ({ orderId, orderNumber }) => {
             );
           })
         )}
+        {typingPeer && (
+          <div
+            data-testid="typing-indicator"
+            style={{ alignSelf: 'flex-start', color: '#888', fontSize: 12, padding: '4px 8px' }}
+          >
+            Менеджер пише…
+          </div>
+        )}
       </div>
 
       {error && (
@@ -154,7 +288,7 @@ const OrderChat = ({ orderId, orderNumber }) => {
         <textarea
           rows={1}
           value={text}
-          onChange={(e) => setText(e.target.value)}
+          onChange={(e) => { setText(e.target.value); handleTyping(); }}
           onKeyDown={(e) => {
             if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); }
           }}

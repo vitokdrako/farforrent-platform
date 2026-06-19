@@ -552,16 +552,16 @@ async def get_order_lifecycle(
                 "created_by_name": ic_row[5] or "Manager"
             })
     
-    # 4. Отримати інформацію про return card (повернення)
+    # 4. Отримати інформацію про повернення (з partial_return_versions — єдине джерело правди)
     return_result = db.execute(text("""
-        SELECT id, status, returned_at, received_by
-        FROM return_cards 
-        WHERE order_id = :order_id 
+        SELECT version_id, status, completed_at, customer_name
+        FROM partial_return_versions
+        WHERE parent_order_id = :order_id
         ORDER BY created_at ASC
     """), {"order_id": order_id})
     
     for rc_row in return_result:
-        if rc_row[2]:  # returned_at
+        if rc_row[2]:  # completed_at
             lifecycle.append({
                 "stage": "returned",
                 "notes": "Замовлення повернуто",
@@ -807,32 +807,35 @@ async def get_order_details(
             "created_at": i_row[7].isoformat() if i_row[7] else None
         })
     
-    # Get return cards
+    # Get returns (з partial_return_versions — єдине джерело правди)
     return_result = db.execute(text("""
-        SELECT id, status, items_expected, items_returned,
-               items_ok, items_dirty, items_damaged, items_missing,
-               cleaning_fee, late_fee, returned_at, checked_at, created_at
-        FROM return_cards
-        WHERE order_id = :order_id
-        ORDER BY created_at DESC
+        SELECT prv.version_id, prv.status, prv.display_number, prv.notes,
+               prv.created_at, prv.completed_at,
+               (SELECT COUNT(*) FROM partial_return_version_items WHERE version_id = prv.version_id AND status = 'returned') AS items_ok,
+               (SELECT COUNT(*) FROM partial_return_version_items WHERE version_id = prv.version_id AND status = 'damaged') AS items_damaged,
+               (SELECT COUNT(*) FROM partial_return_version_items WHERE version_id = prv.version_id AND status = 'lost') AS items_missing
+        FROM partial_return_versions prv
+        WHERE prv.parent_order_id = :order_id
+        ORDER BY prv.created_at DESC
     """), {"order_id": order_id})
-    
+
     return_cards = []
     for r_row in return_result:
         return_cards.append({
             "id": r_row[0],
             "status": r_row[1],
-            "items_expected": json.loads(r_row[2]) if r_row[2] else [],
-            "items_returned": json.loads(r_row[3]) if r_row[3] else [],
-            "items_ok": r_row[4],
-            "items_dirty": r_row[5],
-            "items_damaged": r_row[6],
-            "items_missing": r_row[7],
-            "cleaning_fee": float(r_row[8]) if r_row[8] else 0.0,
-            "late_fee": float(r_row[9]) if r_row[9] else 0.0,
-            "returned_at": r_row[10].isoformat() if r_row[10] else None,
-            "checked_at": r_row[11].isoformat() if r_row[11] else None,
-            "created_at": r_row[12].isoformat() if r_row[12] else None
+            "display_number": r_row[2],
+            "items_expected": [],
+            "items_returned": [],
+            "items_ok": int(r_row[6] or 0),
+            "items_dirty": 0,
+            "items_damaged": int(r_row[7] or 0),
+            "items_missing": int(r_row[8] or 0),
+            "cleaning_fee": 0.0,
+            "late_fee": 0.0,
+            "returned_at": r_row[5].isoformat() if r_row[5] else None,
+            "checked_at": r_row[5].isoformat() if r_row[5] else None,
+            "created_at": r_row[4].isoformat() if r_row[4] else None,
         })
     
     # Get damages (тепер з product_damage_history)

@@ -185,30 +185,35 @@ async def get_order_full_history(
                 "details": f"Видав: {card['issued_by']}"
             })
     
-    # Return cards (повернення)
+    # Returns from new system (partial_return_versions + items) — single source of truth
     return_result = db.execute(text("""
-        SELECT id, status, received_by, checked_by, items_ok, items_damaged, 
-               items_missing, cleaning_fee, late_fee, returned_at, checked_at, created_at
-        FROM return_cards
-        WHERE order_id = :order_id
-        ORDER BY created_at
+        SELECT prv.version_id, prv.status, prv.customer_name, prv.notes,
+               prv.created_at, prv.completed_at,
+               (SELECT COUNT(*) FROM partial_return_version_items WHERE version_id = prv.version_id AND status = 'returned') AS items_ok,
+               (SELECT COUNT(*) FROM partial_return_version_items WHERE version_id = prv.version_id AND status = 'damaged') AS items_damaged,
+               (SELECT COUNT(*) FROM partial_return_version_items WHERE version_id = prv.version_id AND status = 'lost') AS items_missing,
+               prv.display_number
+        FROM partial_return_versions prv
+        WHERE prv.parent_order_id = :order_id
+        ORDER BY prv.created_at
     """), {"order_id": order_id})
-    
+
     return_cards = []
     for r_row in return_result:
         card = {
             "id": r_row[0],
             "status": r_row[1],
             "received_by": r_row[2],
-            "checked_by": r_row[3],
-            "items_ok": r_row[4],
-            "items_damaged": r_row[5],
-            "items_missing": r_row[6],
-            "cleaning_fee": float(r_row[7]) if r_row[7] else 0.0,
-            "late_fee": float(r_row[8]) if r_row[8] else 0.0,
-            "returned_at": r_row[9].isoformat() if r_row[9] else None,
-            "checked_at": r_row[10].isoformat() if r_row[10] else None,
-            "created_at": r_row[11].isoformat() if r_row[11] else None
+            "checked_by": r_row[2],
+            "items_ok": int(r_row[6] or 0),
+            "items_damaged": int(r_row[7] or 0),
+            "items_missing": int(r_row[8] or 0),
+            "cleaning_fee": 0.0,
+            "late_fee": 0.0,
+            "returned_at": r_row[5].isoformat() if r_row[5] else None,
+            "checked_at": r_row[5].isoformat() if r_row[5] else None,
+            "created_at": r_row[4].isoformat() if r_row[4] else None,
+            "display_number": r_row[9],
         }
         return_cards.append(card)
         
@@ -216,6 +221,8 @@ async def get_order_full_history(
             details = f"Прийняв: {card['received_by'] or '—'}"
             if card["items_damaged"]:
                 details += f", Пошкоджено: {card['items_damaged']}"
+            if card["items_missing"]:
+                details += f", Списано: {card['items_missing']}"
             timeline.append({
                 "timestamp": card["returned_at"],
                 "type": "return",

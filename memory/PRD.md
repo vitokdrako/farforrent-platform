@@ -18,6 +18,28 @@ See `/app/memory/test_credentials.md`
 ## What's Been Implemented (latest first)
 
 
+### 2026-02-13 (cont. 3) — P3 Backlog Execution
+- **WebSockets real-time chat**: 
+  - Backend: `routes/order_chat_ws.py` — WS-роутер на `/api/ws/chat/client/{order_id}?token=...` (JWT-auth) і `/api/ws/chat/admin/{order_id}`. In-memory `ChatRoom` pub/sub з broadcast'ом між учасниками. Підтримує `init/new_message/typing/read_receipt/ping/pong`.
+  - Frontend `OrderChat.js` повністю переписаний: WebSocket з auto-reconnect (3s backoff), fallback на polling при відмові, heartbeat 25s, typing indicator з debouncing. Іконка Wifi/WifiOff показує тип з'єднання.
+  - Push клієнту відправляється тільки коли клієнт НЕ підключений по WS (логічна оптимізація: не дублюємо real-time повідомлення).
+  - Встановлено `websockets` пакет (для тестування + uvicorn WS bridge).
+  - E2E тест WS: init → send (client) → broadcast → send (admin) → typing → ping/pong → PASS.
+
+- **Centralized Company Profiles**:
+  - Міграція `011_company_profiles.sql` створює таблицю + 2 колонки в `orders` (`company_profile_id`, `company_snapshot_json`).
+  - Seed: дефолтна компанія "FarforDecorOrenda" з `system_settings`.
+  - Backend: `routes/company_profiles.py` з CRUD (`GET / / /default / /{id}`, `POST / PUT / PATCH / DELETE` soft-delete) + assign-to-order + snapshot pattern. Префікс: `/api/admin/company-profiles`.
+  - `data_builders.build_order_data` тепер бере company-info з пріоритетом: `orders.company_snapshot_json` → `company_profiles` (live by id) → `get_company_config` (fallback system_settings/defaults). Підтримує `logo_url` та `stamp_url` у документах.
+  - Підтримується багато юр. осіб (ФОП/ТОВ/Individual), кожна може бути дефолтом, по умовчанню активний один.
+
+- **Data migration `return_cards` → `partial_return_versions`**:
+  - Скрипт: `migrate_return_cards.py` (з `--dry-run`).
+  - Реальне виконання: 1 запис мігровано → версія 289 з 2 items, статус→active, note містить trace до оригіналу.
+  - `archive.py` та `orders.py` тепер читають returns з `partial_return_versions`+`partial_return_version_items` (єдине джерело правди). Поле `return_cards` у відповідях API залишено для backward-compatibility frontend (та сама форма даних, але з нового джерела).
+  - `return_cards.py` роут НЕ видалено — досі обслуговує endpoint `/api/decor-orders/{id}/complete-return` (legacy decor flow) та має ON DUPLICATE KEY savepoints. Marked DEPRECATED у docstring. Видалення = окрема ітерація після рефактору `complete-return`.
+
+
 ### 2026-02-13 (cont. 2) — P2 Backlog Execution
 - **P2 Moodboard Export**: додано `html-to-image` (yarn add), кнопка "Завантажити PNG" у хедері `MoodboardCanvas.js`. Експорт враховує zoom (зберігає у 1200×800 @ 2x), пропускає елементи `moveable-control-box`, ставить вибраний background. PNG-файл з безпечним кирилично-латинським іменем.
 - **P2 Inline погодження кошторису**:

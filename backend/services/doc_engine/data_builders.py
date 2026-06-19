@@ -361,15 +361,67 @@ def build_order_data(db: Session, order_id: str, options: dict) -> dict:
     executor = EXECUTORS.get(executor_type, EXECUTORS["fop"])
     
     company = get_company_config(db)
+
+    # === COMPANY PROFILE OVERRIDE ===
+    # Перевага: snapshot з orders.company_snapshot_json → live company_profiles → defaults
+    try:
+        cp_row = db.execute(text("""
+            SELECT company_profile_id, company_snapshot_json FROM orders WHERE order_id = :oid
+        """), {"oid": order_id_int}).fetchone()
+        cp_data = None
+        if cp_row and cp_row[1]:
+            try:
+                cp_data = json.loads(cp_row[1]) if isinstance(cp_row[1], str) else cp_row[1]
+            except Exception:
+                cp_data = None
+        if not cp_data and cp_row and cp_row[0]:
+            live = db.execute(text("""
+                SELECT display_name, legal_name, payer_type, tax_status, edrpou, iban, bank_name,
+                       address, warehouse_address, director_name, signer_name, signer_role,
+                       is_vat_payer, phone, email, website, logo_url, stamp_url
+                FROM company_profiles WHERE id = :id
+            """), {"id": cp_row[0]}).fetchone()
+            if live:
+                cp_data = {
+                    "display_name": live[0], "legal_name": live[1], "payer_type": live[2],
+                    "tax_status": live[3], "edrpou": live[4], "iban": live[5], "bank_name": live[6],
+                    "address": live[7], "warehouse_address": live[8], "director_name": live[9],
+                    "signer_name": live[10], "signer_role": live[11], "is_vat_payer": bool(live[12]),
+                    "phone": live[13], "email": live[14], "website": live[15],
+                    "logo_url": live[16], "stamp_url": live[17],
+                }
+        if cp_data:
+            company.update({
+                "name": cp_data.get("display_name") or company.get("name"),
+                "legal_name": cp_data.get("legal_name") or company.get("legal_name"),
+                "short_name": cp_data.get("display_name") or company.get("short_name"),
+                "tax_status": cp_data.get("tax_status") or company.get("tax_status"),
+                "tax_id": cp_data.get("edrpou") or company.get("tax_id"),
+                "edrpou": cp_data.get("edrpou") or company.get("edrpou"),
+                "iban": cp_data.get("iban") or company.get("iban"),
+                "bank_name": cp_data.get("bank_name") or company.get("bank_name"),
+                "address": cp_data.get("address") or company.get("address"),
+                "warehouse": cp_data.get("warehouse_address") or company.get("warehouse"),
+                "director_name": cp_data.get("director_name") or company.get("director_name"),
+                "signer_name": cp_data.get("signer_name") or company.get("signer_name"),
+                "phone": cp_data.get("phone") or company.get("phone"),
+                "email": cp_data.get("email") or company.get("email"),
+                "website": cp_data.get("website") or company.get("website"),
+                "logo_url": cp_data.get("logo_url"),
+                "stamp_url": cp_data.get("stamp_url"),
+            })
+    except Exception as e:
+        print(f"[company_profile] override skipped: {e}")
+
     # Merge executor-specific data
     company.update({
-        "tax_id": executor.get("edrpou", company["tax_id"]),
-        "edrpou": executor.get("edrpou", company["edrpou"]),
-        "iban": executor.get("iban", company["iban"]),
+        "tax_id": company.get("tax_id") or executor.get("edrpou"),
+        "edrpou": company.get("edrpou") or executor.get("edrpou"),
+        "iban": company.get("iban") or executor.get("iban"),
         "mfo": executor.get("mfo", ""),
-        "bank_name": executor.get("bank", company["bank_name"]),
-        "director_name": executor.get("director", company["director_name"]),
-        "tax_status": executor.get("tax_status", company["tax_status"]),
+        "bank_name": company.get("bank_name") or executor.get("bank"),
+        "director_name": company.get("director_name") or executor.get("director"),
+        "tax_status": company.get("tax_status") or executor.get("tax_status"),
         # Правові документи
         "terms_url": "https://www.farforrent.com.ua/terms",
         "privacy_url": "https://www.farforrent.com.ua/privacy",
