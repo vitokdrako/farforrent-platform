@@ -18,6 +18,22 @@ See `/app/memory/test_credentials.md`
 ## What's Been Implemented (latest first)
 
 
+### 2026-02-13 (cont. 2) — P2 Backlog Execution
+- **P2 Moodboard Export**: додано `html-to-image` (yarn add), кнопка "Завантажити PNG" у хедері `MoodboardCanvas.js`. Експорт враховує zoom (зберігає у 1200×800 @ 2x), пропускає елементи `moveable-control-box`, ставить вибраний background. PNG-файл з безпечним кирилично-латинським іменем.
+- **P2 Inline погодження кошторису**:
+  - Backend: новий ендпойнт `POST /api/event/orders/{order_id}/documents/{doc_id}/approve` (тільки для `doc_type ∈ {estimate, invoice_offer, quote, preliminary_estimate}` або `category=quote`). Створює `document_signatures` рядок з `signer_role='tenant', signature_image='APPROVED_INLINE'`, переводить документ у `status='approved'`, логує `order_lifecycle.estimate_approved`.
+  - Frontend: кнопка "✓ Погодити" та бейдж "Погоджено" у списку документів `UserProfile.js`.
+- **P2 Двосторонній чат менеджер↔клієнт**:
+  - Backend: новий модуль `routes/order_chat.py` з двома роутерами (client + admin), міграція `009_order_chat.sql`. Endpoint'и: `GET/POST /chat/messages` та `GET /chat/unread_count`. Read-receipts для обох сторін (`read_by_client_at`, `read_by_manager_at`). При повідомленні менеджера — автоматичний Web Push клієнту.
+  - Frontend: компонент `OrderChat.js` з polling (10s), bubble-UI, авто-скрол, Enter→send, Shift+Enter→новий рядок. Інтегрований у розгорнуту картку замовлення в `UserProfile.js`.
+  - API клієнт: `api/chat.js`.
+- **Migration 010 — document_signatures**: таблиця згадувалася у коді, але не була явно створена. Тепер є + міграційний файл.
+- **E2E test**: `tests/test_p2_chat_approval.py` — повністю верифікує чат-flow + inline-approve + відмову для non-estimate доків.
+
+### Database refresh tool
+- Створено `deploy/refresh_db_from_cloud.sh` — безпечне (з бекапом) копіювання cloud DB на VPS. Запускається на VPS, дампить cloud → дропає локальну → імпортує. Чітка статистика по orders/products/fin_payments після завершення.
+
+
 ### 2026-02-13 (cont.) — P1 Backlog Execution
 - **P1 Invoice_legal**: Перевірено — шаблон рендериться коректно з усіма типами `payer_type` (individual / fop_simple / fop_general / llc_simple / llc_general). Помилку було усунено в попередніх ітераціях.
 - **P1 Favorites (♡)**:

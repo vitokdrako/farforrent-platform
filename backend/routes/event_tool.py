@@ -3,7 +3,7 @@ Event Tool API Routes
 Інтеграція каталогу декораторів з RentalHub
 Всі endpoints під /api/event/*
 """
-from fastapi import APIRouter, Depends, HTTPException, status, Header, Response
+from fastapi import APIRouter, Depends, HTTPException, status, Header, Response, Body
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 from typing import List, Optional
@@ -2216,6 +2216,117 @@ async def sign_document_as_client(
         traceback.print_exc()
         logger.error(f"[sign_document_as_client] {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/orders/{order_id}/documents/{document_id}/approve")
+async def approve_document_as_client(
+    order_id: int,
+    document_id: str,
+    payload: dict = Body(default={}),
+    db: Session = Depends(get_rh_db),
+    token: str = Depends(get_token_from_header)
+):
+    """
+    Inline-погодження кошторису (estimate / invoice_offer / quote) клієнтом.
+    Не вимагає малювання підпису — фіксує згоду одним натиском.
+    Створює запис у document_signatures з signer_role='tenant',
+    signature_image='APPROVED_INLINE', signer_name=ПІБ клієнта.
+    """
+    try:
+        customer = get_current_customer(token, db)
+        email = (customer.get("email") or "").lower().strip()
+
+        cu = db.execute(
+            text("SELECT id FROM client_users WHERE email_normalized = :e LIMIT 1"),
+            {"e": email}
+        ).fetchone()
+        client_user_id = cu[0] if cu else None
+
+        cols_rows = db.execute(text("SHOW COLUMNS FROM orders")).fetchall()
+        existing_cols = {r[0] for r in cols_rows}
+        cuid_col = "client_user_id" if "client_user_id" in existing_cols else "NULL"
+        email_col = "customer_email" if "customer_email" in existing_cols else "''"
+
+        # Доступ + перевірка типу документа (тільки документи-кошториси)
+        doc = db.execute(text(f"""
+            SELECT d.id, d.doc_type, d.category, d.status
+            FROM documents d
+            JOIN orders o ON CAST(d.entity_id AS UNSIGNED) = o.order_id
+            WHERE d.id = :doc_id
+              AND d.entity_type = 'order'
+              AND o.order_id = :oid
+              AND ({cuid_col} = :cuid OR {email_col} = :email)
+            LIMIT 1
+        """), {
+            "doc_id": document_id, "oid": order_id,
+            "cuid": client_user_id, "email": email
+        }).fetchone()
+
+        if not doc:
+            raise HTTPException(status_code=404, detail="Document not found or access denied")
+
+        # Дозволяємо inline-погодження тільки для кошторисів
+        allowed_doc_types = {"estimate", "invoice_offer", "quote", "preliminary_estimate"}
+        allowed_categories = {"quote", "estimate"}
+        if doc[1] not in allowed_doc_types and (doc[2] or "") not in allowed_categories:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Документ типу '{doc[1]}' потребує повноцінного підпису, не inline-погодження"
+            )
+
+        # Чи вже погоджений
+        existing = db.execute(text("""
+            SELECT id FROM document_signatures
+            WHERE document_id = :doc_id AND signer_role = 'tenant'
+        """), {"doc_id": document_id}).fetchone()
+        if existing:
+            raise HTTPException(status_code=400, detail="Документ вже погоджено")
+
+        signer_name = (
+            payload.get("signer_name")
+            or f"{customer.get('firstname','')} {customer.get('lastname','')}".strip()
+            or email
+        )
+
+        db.execute(text("""
+            INSERT INTO document_signatures
+              (document_id, signer_role, signature_image, signer_name, signed_at)
+            VALUES (:doc_id, 'tenant', 'APPROVED_INLINE', :name, NOW())
+        """), {"doc_id": document_id, "name": signer_name})
+
+        # Позначаємо документ як approved
+        db.execute(text("UPDATE documents SET status = 'approved' WHERE id = :id"),
+                   {"id": document_id})
+
+        # Лог в order_lifecycle
+        try:
+            db.execute(text("""
+                INSERT INTO order_lifecycle (order_id, event_type, event_data, created_at)
+                VALUES (:oid, 'estimate_approved',
+                        JSON_OBJECT('document_id', :doc_id, 'approved_by', :name), NOW())
+            """), {"oid": order_id, "doc_id": document_id, "name": signer_name})
+        except Exception:
+            pass  # таблиця може бути відсутня
+
+        db.commit()
+
+        # Push менеджеру? Зараз notify сповіщає клієнта; для менеджера — окремий потік (Telegram/email).
+        return {
+            "success": True,
+            "document_id": document_id,
+            "status": "approved",
+            "approved_by": signer_name,
+            "message": "Кошторис погоджено!"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        import traceback; traceback.print_exc()
+        logger.error(f"[approve_document_as_client] {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 
 
 # ============================================================================

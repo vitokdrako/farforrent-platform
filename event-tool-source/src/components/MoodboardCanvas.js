@@ -1,5 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import Moveable from 'react-moveable';
+import { Download } from 'lucide-react';
+import { toPng } from 'html-to-image';
 
 // Layout templates based on the provided image
 const LAYOUT_TEMPLATES = [
@@ -87,6 +89,45 @@ const MoodboardCanvas = ({ board, onClose, onSave }) => {
   const [showColorPicker, setShowColorPicker] = useState(false);
   const [showTemplates, setShowTemplates] = useState(false);
   const canvasRef = useRef(null);
+  const [exporting, setExporting] = useState(false);
+
+  const handleExport = async () => {
+    if (!canvasRef.current || exporting) return;
+    setExporting(true);
+    try {
+      // Save current zoom and reset to 1 for export (so output is 1200x800 not scaled)
+      const prevTransform = canvasRef.current.style.transform;
+      canvasRef.current.style.transform = 'scale(1)';
+      // Brief wait for repaint
+      await new Promise((r) => setTimeout(r, 100));
+
+      const dataUrl = await toPng(canvasRef.current, {
+        pixelRatio: 2,
+        cacheBust: true,
+        backgroundColor: background,
+        skipFonts: false,
+        filter: (node) => {
+          // Skip moveable controls if rendered inside
+          if (node?.classList?.contains?.('moveable-control-box')) return false;
+          if (node?.classList?.contains?.('moveable-line')) return false;
+          return true;
+        },
+      });
+      canvasRef.current.style.transform = prevTransform;
+
+      // Trigger download
+      const link = document.createElement('a');
+      const safeName = (board.board_name || 'moodboard').replace(/[^a-zа-яёіїєґ0-9_-]/gi, '_');
+      link.download = `${safeName}_${new Date().toISOString().slice(0, 10)}.png`;
+      link.href = dataUrl;
+      link.click();
+    } catch (e) {
+      console.error('Moodboard export failed:', e);
+      alert(`Не вдалося експортувати мудборд: ${e?.message || e}`);
+    } finally {
+      setExporting(false);
+    }
+  };
 
   // Helper function to get correct image URL — same-origin з нашого бекенду
   const getImageUrl = (imageUrl) => {
@@ -252,6 +293,16 @@ const MoodboardCanvas = ({ board, onClose, onSave }) => {
           </button>
           <button onClick={handleSaveCanvas} className="fd-btn fd-btn-secondary">
             Зберегти
+          </button>
+          <button
+            onClick={handleExport}
+            disabled={exporting}
+            data-testid="moodboard-export-btn"
+            className="fd-btn fd-btn-secondary"
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+          >
+            <Download size={14} />
+            {exporting ? 'Експорт...' : 'Завантажити PNG'}
           </button>
         </div>
       </div>

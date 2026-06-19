@@ -9,6 +9,8 @@ import api from '../api/axios';
 import { ordersApi } from '../api/orders';
 import SignDocumentModal from './SignDocumentModal';
 import NotificationToggle from './NotificationToggle';
+import OrderChat from './OrderChat';
+import { documentApprovalAPI } from '../api/chat';
 
 const ORDER_STATUS_LABELS = {
   pending: { text: 'Очікує підтвердження', color: '#b58a00' },
@@ -689,11 +691,61 @@ const UserProfile = () => {
                                           <PenLine size={11} strokeWidth={1.5}/>Підписати
                                         </button>
                                       )}
+                                      {/* Inline-погодження кошторису */}
+                                      {(['estimate', 'invoice_offer', 'quote', 'preliminary_estimate'].includes(d.doc_type)
+                                        || (d.category || '') === 'quote')
+                                        && d.status !== 'approved' && d.status !== 'signed'
+                                        && !d.tenant_signed && (
+                                        <button
+                                          data-testid={`approve-estimate-btn-${d.id}`}
+                                          onClick={async () => {
+                                            if (!window.confirm(`Погодити кошторис ${d.doc_number || ''}?`)) return;
+                                            try {
+                                              await documentApprovalAPI.approve(o.order_id, d.id);
+                                              const detail = await ordersApi.get(o.order_id);
+                                              setOrderDetailsCache(prev => ({...prev, [o.order_id]: detail}));
+                                            } catch (e) {
+                                              alert(e?.response?.data?.detail || 'Не вдалося погодити');
+                                            }
+                                          }}
+                                          style={{
+                                            display: 'inline-flex', alignItems: 'center', gap: '4px',
+                                            padding: '5px 10px', background: '#0a3d2e', color: '#fff',
+                                            border: '1px solid #0a3d2e', borderRadius: '2px',
+                                            fontSize: '11px', fontWeight: '600', cursor: 'pointer',
+                                            textTransform: 'uppercase', letterSpacing: '0.05em',
+                                          }}
+                                        >
+                                          <Check size={11} strokeWidth={2.5}/>Погодити
+                                        </button>
+                                      )}
+                                      {d.status === 'approved' && (
+                                        <span style={{
+                                          display: 'inline-flex', alignItems: 'center', gap: '3px',
+                                          fontSize: '10px', padding: '4px 8px',
+                                          background: '#e8f5e9', color: '#0a3d2e',
+                                          borderRadius: '2px', fontWeight: '600',
+                                          textTransform: 'uppercase', letterSpacing: '0.05em',
+                                        }}>
+                                          <Check size={10} strokeWidth={2.5}/>Погоджено
+                                        </span>
+                                      )}
                                     </div>
                                   </div>
                                 ))}
                               </div>
                             )}
+                          </div>
+
+                          {/* Секція ЧАТ з менеджером */}
+                          <div style={{ marginTop: '24px', marginBottom: '24px' }}>
+                            <div style={{
+                              fontSize: '10px', fontWeight: '600', color: '#666',
+                              textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '12px',
+                            }}>
+                              Чат з менеджером
+                            </div>
+                            <OrderChat orderId={o.order_id} orderNumber={o.order_number} />
                           </div>
 
                           {/* Секція ІСТОРІЯ ЗМІН */}
