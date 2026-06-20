@@ -50,7 +50,6 @@ const MobileBottomNav = ({ onOpenCart, cartCount = 0 }) => {
         active={false}
         onClick={onOpenCart}
         badge={cartCount > 0 ? cartCount : null}
-        large
         testid="bnav-cart"
       />
       <Item

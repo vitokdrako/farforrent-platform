@@ -12,7 +12,11 @@ export const useBoard = () => {
 
 export const BoardProvider = ({ children }) => {
   const [activeBoard, setActiveBoard] = useState(null);
-  const [isSidePanelOpen, setIsSidePanelOpen] = useState(true);
+  // За замовчуванням панель закрита на мобільному (≤768px), відкрита на desktop
+  const [isSidePanelOpen, setIsSidePanelOpen] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return window.innerWidth > 768;
+  });
 
   const toggleSidePanel = () => {
     setIsSidePanelOpen((prev) => !prev);

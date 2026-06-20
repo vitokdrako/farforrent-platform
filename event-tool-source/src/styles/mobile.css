@@ -422,18 +422,23 @@ html, body {
     }
     .mobile-bottom-nav-badge {
         position: absolute;
-        top: -2px;
-        right: -2px;
+        top: 4px;
+        right: calc(50% - 22px);
         background: #c62828;
         color: #fff;
         font-size: 10px;
         font-weight: 700;
-        padding: 2px 6px;
+        padding: 1px 5px;
         border-radius: 999px;
-        min-width: 18px;
+        min-width: 16px;
+        height: 16px;
+        box-sizing: border-box;
         text-align: center;
-        line-height: 1;
-        border: 2px solid #fff;
+        line-height: 14px;
+        border: 1.5px solid #fff;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.12);
+        pointer-events: none;
+        z-index: 2;
     }
     /* Контент потребує padding-bottom щоб не ховатися за nav */
     body {
