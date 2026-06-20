@@ -19,6 +19,7 @@ const CategoryChips = ({
   categories, subcategories, colors,
   selectedCategory, selectedSubcategory, selectedColor,
   onSelectCategory, onSelectSubcategory, onSelectColor,
+  minQuantity = 0, onMinQuantityChange, maxQuantity = 100,
 }) => {
   return (
     <div className="category-chips-wrapper" data-testid="category-chips-wrapper">
@@ -52,6 +53,26 @@ const CategoryChips = ({
             <Chip key={color} label={color} active={selectedColor === color}
               onClick={() => onSelectColor(color)} testid={`color-chip-${color}`} />
           ))}
+        </div>
+      )}
+
+      {/* Ряд 4: повзунок мін. кількості */}
+      {onMinQuantityChange && (
+        <div className="quantity-slider-row" data-testid="quantity-slider-row">
+          <span className="quantity-slider-label">
+            На складі: <strong>{minQuantity > 0 ? `≥ ${minQuantity}` : 'будь-яка'}</strong>
+          </span>
+          <input
+            type="range"
+            min={0}
+            max={maxQuantity}
+            step={1}
+            value={minQuantity}
+            onChange={(e) => onMinQuantityChange(Number(e.target.value))}
+            data-testid="mobile-min-quantity-slider"
+            className="filter-range quantity-slider-input"
+            style={{ '--fill': `${(minQuantity / Math.max(1, maxQuantity)) * 100}%` }}
+          />
         </div>
       )}
     </div>

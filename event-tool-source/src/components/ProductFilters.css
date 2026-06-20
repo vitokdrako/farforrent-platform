@@ -15,6 +15,55 @@
     flex: 1;
 }
 
+.filter-group-quantity {
+    min-width: 220px;
+    padding: 4px 4px 2px;
+}
+
+.filter-range {
+    -webkit-appearance: none;
+    appearance: none;
+    height: 4px;
+    border-radius: 3px;
+    background: linear-gradient(to right, #0a3d2e var(--fill, 0%), #e6e1d2 var(--fill, 0%));
+    outline: none;
+    margin: 8px 0 2px;
+}
+
+.filter-range::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: #0a3d2e;
+    cursor: pointer;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+    border: 2px solid #fff;
+    transition: transform 0.1s ease;
+}
+
+.filter-range::-webkit-slider-thumb:hover,
+.filter-range::-webkit-slider-thumb:active {
+    transform: scale(1.15);
+}
+
+.filter-range::-moz-range-thumb {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: #0a3d2e;
+    cursor: pointer;
+    border: 2px solid #fff;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+.filter-range::-moz-range-track {
+    height: 4px;
+    border-radius: 3px;
+    background: #e6e1d2;
+}
+
 .filter-label {
     font-family: 'Montserrat', Arial, sans-serif;
     font-size: 11px;

@@ -198,6 +198,7 @@ const EventPlannerPage = () => {
   const [selectedCategory, setSelectedCategory] = useState(null);
   const [selectedSubcategory, setSelectedSubcategory] = useState(null);
   const [selectedColor, setSelectedColor] = useState(null);
+  const [minQuantity, setMinQuantity] = useState(0);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
@@ -535,8 +536,10 @@ const EventPlannerPage = () => {
     
     const matchesColor = !selectedColor || 
       (p.color && p.color.split(',').some(c => c.trim() === selectedColor));
+
+    const matchesQuantity = !minQuantity || (Number(p.quantity) || 0) >= minQuantity;
     
-    return matchesSearch && matchesCategory && matchesSubcategory && matchesColor;
+    return matchesSearch && matchesCategory && matchesSubcategory && matchesColor && matchesQuantity;
   });
 
   const calculateBoardTotal = () => {
@@ -639,6 +642,12 @@ const EventPlannerPage = () => {
                 onCategoryChange={setSelectedCategory}
                 onSubcategoryChange={setSelectedSubcategory}
                 onColorChange={setSelectedColor}
+                minQuantity={minQuantity}
+                onMinQuantityChange={setMinQuantity}
+                maxQuantity={Math.max(
+                  100,
+                  ...products.map((p) => Number(p.quantity) || 0)
+                )}
               />
             </div>
 
@@ -653,6 +662,12 @@ const EventPlannerPage = () => {
               onSelectCategory={setSelectedCategory}
               onSelectSubcategory={setSelectedSubcategory}
               onSelectColor={setSelectedColor}
+              minQuantity={minQuantity}
+              onMinQuantityChange={setMinQuantity}
+              maxQuantity={Math.max(
+                100,
+                ...products.map((p) => Number(p.quantity) || 0)
+              )}
             />
 
             {/* Products Count */}

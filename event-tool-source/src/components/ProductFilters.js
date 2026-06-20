@@ -10,7 +10,10 @@ const ProductFilters = ({
   selectedColor,
   onCategoryChange,
   onSubcategoryChange,
-  onColorChange
+  onColorChange,
+  minQuantity = 0,
+  onMinQuantityChange,
+  maxQuantity = 100,
 }) => {
   return (
     <div className="product-filters">
@@ -90,6 +93,46 @@ const ProductFilters = ({
         </select>
       </div>
 
+      {/* Повзунок: мінімальна кількість на складі */}
+      {onMinQuantityChange && (
+        <div className="filter-group filter-group-quantity">
+          <label className="filter-label" htmlFor="qty-slider">
+            Мінімум на складі
+            <span style={{
+              marginLeft: '6px', color: minQuantity > 0 ? '#0a3d2e' : '#999',
+              fontWeight: minQuantity > 0 ? 600 : 'normal',
+            }}>
+              {minQuantity > 0 ? `≥ ${minQuantity} шт` : 'будь-яка'}
+            </span>
+          </label>
+          <input
+            id="qty-slider"
+            type="range"
+            min={0}
+            max={maxQuantity}
+            step={1}
+            value={minQuantity}
+            onChange={(e) => onMinQuantityChange(Number(e.target.value))}
+            data-testid="filter-min-quantity"
+            className="filter-range"
+            style={{
+              width: '100%',
+              accentColor: '#0a3d2e',
+              cursor: 'pointer',
+              '--fill': `${(minQuantity / Math.max(1, maxQuantity)) * 100}%`,
+            }}
+          />
+          <div style={{
+            display: 'flex', justifyContent: 'space-between',
+            fontSize: 11, color: '#aaa', marginTop: 4,
+          }}>
+            <span>0</span>
+            <span>{Math.round(maxQuantity / 2)}</span>
+            <span>{maxQuantity}+</span>
+          </div>
+        </div>
+      )}
+
       {/* Active Filters Display */}
       <div className="filter-active-tags">
         {selectedCategory && (
@@ -119,13 +162,24 @@ const ProductFilters = ({
             {selectedColor} ✕
           </button>
         )}
-        {(selectedCategory || selectedSubcategory || selectedColor) && (
+        {minQuantity > 0 && onMinQuantityChange && (
+          <button
+            className="filter-tag"
+            onClick={() => onMinQuantityChange(0)}
+            title="Скинути фільтр кількості"
+            data-testid="filter-clear-qty"
+          >
+            ≥ {minQuantity} шт ✕
+          </button>
+        )}
+        {(selectedCategory || selectedSubcategory || selectedColor || minQuantity > 0) && (
           <button 
             className="filter-tag filter-tag-clear"
             onClick={() => {
               onCategoryChange(null);
               onSubcategoryChange(null);
               onColorChange(null);
+              if (onMinQuantityChange) onMinQuantityChange(0);
             }}
             title="Очистити всі фільтри"
           >
