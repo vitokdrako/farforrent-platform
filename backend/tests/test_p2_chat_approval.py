@@ -1,4 +1,7 @@
-"""E2E test for P2 features: chat + inline estimate approval."""
+"""E2E test for P2 features: chat + inline estimate approval.
+
+⚠️  Створює реальне замовлення → реєструє hard-cleanup на atexit.
+"""
 import sys, os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import requests, time
@@ -26,6 +29,11 @@ order = requests.post(f"{EVT}/boards/{bid}/convert-to-order", json={
 }, headers=H).json()
 oid = order["order_id"]
 print(f"\n✓ Order created: {order['order_number']} (id={oid})")
+
+# 🛡️ Hard cleanup at exit — навіть при падінні тесту
+from tests._test_cleanup import register_order_cleanup
+register_order_cleanup(order_id=oid, board_id=bid, email=email,
+                       product_id=pid, restore_qty=1)
 
 # === CHAT ===
 print("\n=== CHAT ===")

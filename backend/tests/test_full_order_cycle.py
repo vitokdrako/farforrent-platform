@@ -2,8 +2,13 @@
 End-to-end integration test:
   Event Tool → Order → Quantity change → Payment → Return + Total Loss
 Tests the entire backend pipeline that the user requested to validate.
+
+⚠️  ВАЖЛИВО: цей тест створює реальне замовлення через /convert-to-order,
+що з'їдає auto_increment ID у `orders` таблиці (спільно з OpenCart).
+Cleanup ОБОВ'ЯЗКОВИЙ навіть при падінні — інакше OC-cron не зможе
+підтягнути замовлення з тим самим ID.
 """
-import sys, os
+import sys, os, atexit
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import requests
 import time
@@ -89,6 +94,12 @@ order = r.json()
 jprint("convert-to-order", order)
 order_id = order["order_id"]
 order_number = order["order_number"]
+
+# 🛡️  HARD CLEANUP — гарантовано видалить ID, навіть якщо тест впаде
+from tests._test_cleanup import register_order_cleanup
+register_order_cleanup(order_id=order_id, board_id=board_id,
+                       email=email, product_id=test_product["product_id"],
+                       restore_qty=3)
 
 # 7. Get order from admin side
 r = requests.get(f"{BASE}/orders/{order_id}")
