@@ -1,9 +1,12 @@
 """E2E test for P2 features: chat + inline estimate approval.
 
 ⚠️  Створює реальне замовлення → реєструє hard-cleanup на atexit.
+🛑 За замовчуванням НЕ запускається проти прод-БД (см. tests/_safety.py).
 """
 import sys, os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from tests._safety import assert_not_production
+assert_not_production()
 import requests, time
 
 BASE = "http://localhost:8001/api"

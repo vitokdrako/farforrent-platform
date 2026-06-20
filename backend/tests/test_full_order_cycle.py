@@ -7,9 +7,13 @@ Tests the entire backend pipeline that the user requested to validate.
 що з'їдає auto_increment ID у `orders` таблиці (спільно з OpenCart).
 Cleanup ОБОВ'ЯЗКОВИЙ навіть при падінні — інакше OC-cron не зможе
 підтягнути замовлення з тим самим ID.
+
+🛑 За замовчуванням НЕ запускається проти прод-БД (см. tests/_safety.py).
 """
 import sys, os, atexit
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from tests._safety import assert_not_production
+assert_not_production()
 import requests
 import time
 
