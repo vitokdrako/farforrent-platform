@@ -63,7 +63,7 @@ const ProductCard = ({ product, onAddToBoard, boardDates, onOpenDetails }) => {
           data-testid={`favorite-btn-${product.product_id}`}
           className={`product-card-fav-btn ${fav ? 'is-fav' : ''}`}
           style={{
-            position: 'absolute', top: 8, right: 8, zIndex: 5,
+            position: 'absolute', top: 8, left: 8, zIndex: 5,
             width: 32, height: 32, borderRadius: '50%',
             border: 'none', background: 'rgba(255,255,255,0.92)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
