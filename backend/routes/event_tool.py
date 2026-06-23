@@ -378,12 +378,18 @@ async def get_products(
     # Якщо є search — тягнемо широку вибірку без LIKE, потім скоримо в Python
     use_smart_search = bool(search and search.strip())
     
-    sql = """
+    # Перевіряємо чи є колонка `deposit` у products (для застави)
+    prod_cols_res = db.execute(text("SHOW COLUMNS FROM products")).fetchall()
+    prod_cols_set = {r[0] for r in prod_cols_res}
+    deposit_col_sql = "deposit" if "deposit" in prod_cols_set else "price"
+    
+    sql = f"""
         SELECT product_id, sku, name, category_name, subcategory_name,
                rental_price, image_url, color, material, size,
                quantity, frozen_quantity, description, price,
                height_cm, diameter_cm, width_cm, depth_cm, shape,
-               components, hashtags
+               components, hashtags,
+               {deposit_col_sql} AS deposit_amount
         FROM products
         WHERE status = 1
     """
@@ -539,7 +545,8 @@ async def get_products(
             "available": available,
             "is_available": available > 0,
             "description": row[12],
-            "price": float(row[13]) if row[13] else 0
+            "price": float(row[13]) if row[13] else 0,
+            "deposit": float(row[21]) if len(row) > 21 and row[21] else 0,
         })
     
     return products
@@ -575,7 +582,8 @@ async def get_product(product_id: int, db: Session = Depends(get_rh_db)):
             {col('diameter', 'NULL')} AS diameter,
             {col('weight', 'NULL')} AS weight,
             {col('set_contents', "''")} AS set_contents,
-            {col('complectation', "''")} AS complectation
+            {col('complectation', "''")} AS complectation,
+            {col('deposit', col('price', '0'))} AS deposit_amount
         FROM products WHERE product_id = :id
     """
     row = db.execute(text(sql), {"id": product_id}).fetchone()
@@ -632,6 +640,7 @@ async def get_product(product_id: int, db: Session = Depends(get_rh_db)):
         # Комплектація
         "set_contents": row[20] or "",
         "complectation": row[21] or "",
+        "deposit": float(row[22]) if len(row) > 22 and row[22] is not None else 0,
     }
 
 @router.get("/categories")

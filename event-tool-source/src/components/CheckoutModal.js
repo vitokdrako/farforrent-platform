@@ -36,8 +36,11 @@ const CheckoutModal = ({ board, user, onClose, onSuccess }) => {
     return s + price * (i.quantity || 0) * rentalDays;
   }, 0) || 0;
 
-  // Застава = сума (price / 2 * quantity) — половина вартості товару
+  // Застава = сума окремого поля `deposit` з product (як в RentalHub).
+  // Fallback на price/2 якщо застави немає (старі товари).
   const totalDeposit = board?.items?.reduce((s, i) => {
+    const dep = Number(i.product?.deposit);
+    if (dep > 0) return s + dep * (i.quantity || 0);
     const fullPrice = Number(i.product?.price) || 0;
     return s + (fullPrice / 2) * (i.quantity || 0);
   }, 0) || 0;

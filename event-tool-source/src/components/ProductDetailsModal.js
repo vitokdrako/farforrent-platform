@@ -287,15 +287,43 @@ const ProductDetailsModal = ({ productId, boardDates, onClose, onAddToBoard }) =
                 </div>
               )}
 
-              {/* Ціна */}
+              {/* Ціна + застава */}
               <div style={{
                 background: '#f8fafc', borderRadius: '8px', padding: '16px',
-                marginBottom: '16px', display: 'flex', alignItems: 'baseline', gap: '8px',
+                marginBottom: '16px',
               }}>
-                <span style={{fontSize: '32px', fontWeight: '800', color: '#0a3d2e'}}>
-                  ₴{(product.rental_price || 0).toLocaleString('uk-UA')}
-                </span>
-                <span style={{fontSize: '14px', color: '#64748b'}}>/день</span>
+                <div style={{display: 'flex', alignItems: 'baseline', gap: '8px', marginBottom: '8px'}}>
+                  <span style={{fontSize: '32px', fontWeight: '800', color: '#0a3d2e'}}>
+                    ₴{(product.rental_price || 0).toLocaleString('uk-UA')}
+                  </span>
+                  <span style={{fontSize: '14px', color: '#64748b'}}>/день</span>
+                </div>
+                {/* Застава (повертається) */}
+                {(() => {
+                  const dep = Number(product.deposit) > 0
+                    ? Number(product.deposit)
+                    : (Number(product.price) || 0) / 2;
+                  if (!dep) return null;
+                  return (
+                    <div
+                      data-testid="product-deposit"
+                      style={{
+                        display: 'flex',
+                        alignItems: 'baseline',
+                        gap: '6px',
+                        borderTop: '1px dashed #cbd5e1',
+                        paddingTop: '8px',
+                        marginTop: '6px',
+                      }}
+                    >
+                      <span style={{fontSize: '12px', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.6px'}}>Застава:</span>
+                      <span style={{fontSize: '18px', fontWeight: '700', color: '#b08d2e'}}>
+                        ₴{dep.toLocaleString('uk-UA', {minimumFractionDigits: 0, maximumFractionDigits: 0})}
+                      </span>
+                      <span style={{fontSize: '11px', color: '#64748b', marginLeft: 'auto'}}>повертається після здачі</span>
+                    </div>
+                  );
+                })()}
               </div>
 
               {/* Лічильник + кнопка */}
