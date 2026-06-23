@@ -4,6 +4,7 @@
  */
 import React, { useState, useEffect } from 'react';
 import api from '../api/axios';
+import { calculateRentalDays, PICKUP_TIME_SLOTS, RETURN_TIME } from '../utils/rentalDays';
 
 const CheckoutModal = ({ board, user, onClose, onSuccess }) => {
   const [form, setForm] = useState({
@@ -12,6 +13,7 @@ const CheckoutModal = ({ board, user, onClose, onSuccess }) => {
     customer_email: user?.email || '',
     notes: '',
     payment_method: 'cash',
+    pickup_time_slot: '11:00-12:00',
   });
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
@@ -22,15 +24,22 @@ const CheckoutModal = ({ board, user, onClose, onSuccess }) => {
   const update = (k) => (e) => setForm(prev => ({...prev, [k]: e.target.value}));
 
   const totalItems = board?.items?.reduce((s, i) => s + (i.quantity || 0), 0) || 0;
-  const rentalDays = (() => {
-    if (!board?.rental_start_date || !board?.rental_end_date) return 0;
-    const d1 = new Date(board.rental_start_date);
-    const d2 = new Date(board.rental_end_date);
-    return Math.max(1, Math.round((d2 - d1) / (1000 * 60 * 60 * 24)));
-  })();
+
+  // Розрахунок діб за правилами Farfor Decor (повернення до 17:00)
+  const { days: rentalDays, isStandard, hint: daysHint } = calculateRentalDays(
+    board?.rental_start_date,
+    board?.rental_end_date
+  );
+
   const totalPrice = board?.items?.reduce((s, i) => {
     const price = i.product?.rental_price || 0;
     return s + price * (i.quantity || 0) * rentalDays;
+  }, 0) || 0;
+
+  // Застава = сума (price / 2 * quantity) — половина вартості товару
+  const totalDeposit = board?.items?.reduce((s, i) => {
+    const fullPrice = Number(i.product?.price) || 0;
+    return s + (fullPrice / 2) * (i.quantity || 0);
   }, 0) || 0;
 
   const handleSubmit = async (e) => {
@@ -51,9 +60,11 @@ const CheckoutModal = ({ board, user, onClose, onSuccess }) => {
 
       const res = await api.post(`/event/boards/${board.id}/convert-to-order`, {
         customer_name: form.customer_name,
-        phone: form.customer_phone,           // ← бекенд чекає `phone`
-        customer_comment: fullComment,         // ← бекенд чекає `customer_comment`
+        phone: form.customer_phone,
+        customer_comment: fullComment,
         payer_type: 'individual',
+        pickup_time_slot: form.pickup_time_slot,
+        return_time: RETURN_TIME,
       });
       setSuccess(res.data);
       if (onSuccess) onSuccess(res.data);
@@ -86,9 +97,21 @@ const CheckoutModal = ({ board, user, onClose, onSuccess }) => {
           <div style={{fontSize: '13px', color: '#94a3b8', marginBottom: '24px'}}>
             Менеджер зв'яжеться з вами найближчим часом для підтвердження.
           </div>
-          <button onClick={onClose} className="fd-btn fd-btn-black" style={{padding: '12px 32px'}}>
-            Закрити
-          </button>
+          <div style={{display: 'flex', gap: '10px', justifyContent: 'center', flexWrap: 'wrap'}}>
+            <a
+              href={`${process.env.REACT_APP_BACKEND_URL || ''}/api/event/orders/${success.order_id}/estimate.html?token=${encodeURIComponent(localStorage.getItem('access_token') || '')}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              data-testid="checkout-view-estimate"
+              className="fd-btn"
+              style={{padding: '12px 22px', background: '#fff', border: '1px solid #0a3d2e', color: '#0a3d2e', textDecoration: 'none', borderRadius: '8px', fontWeight: 600}}
+            >
+              📄 Переглянути кошторис
+            </a>
+            <button onClick={onClose} className="fd-btn fd-btn-black" style={{padding: '12px 22px'}}>
+              Закрити
+            </button>
+          </div>
         </div>
       </Overlay>
     );
@@ -101,9 +124,9 @@ const CheckoutModal = ({ board, user, onClose, onSuccess }) => {
         data-testid="checkout-modal"
         style={{
           padding: isMobile ? '20px' : '32px',
-          maxWidth: '560px',
+          maxWidth: isMobile ? '100%' : '880px',
           width: '100%',
-          maxHeight: isMobile ? '100vh' : '90vh',
+          maxHeight: isMobile ? '100vh' : '92vh',
           overflowY: 'auto',
         }}
       >
@@ -119,48 +142,92 @@ const CheckoutModal = ({ board, user, onClose, onSuccess }) => {
           >×</button>
         </div>
 
-        {/* Підсумок */}
+        {/* Підсумок з заставою та поясненням діб */}
         <div style={{
-          padding: '14px', background: '#f8fafc', borderRadius: '8px', marginBottom: '20px',
-          display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px 16px', fontSize: '13px',
+          padding: '16px', background: '#f8fafc', borderRadius: '8px', marginBottom: '20px',
+          display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(3, 1fr)', gap: '12px 20px', fontSize: '13px',
         }}>
           <div>
             <div style={{color: '#94a3b8', textTransform: 'uppercase', fontSize: '10px', letterSpacing: '0.8px'}}>Позицій</div>
             <div style={{fontWeight: '600', color: '#0f172a'}}>{board?.items?.length || 0} ({totalItems} шт)</div>
           </div>
           <div>
-            <div style={{color: '#94a3b8', textTransform: 'uppercase', fontSize: '10px', letterSpacing: '0.8px'}}>Днів</div>
-            <div style={{fontWeight: '600', color: '#0f172a'}}>{rentalDays}</div>
+            <div style={{color: '#94a3b8', textTransform: 'uppercase', fontSize: '10px', letterSpacing: '0.8px'}}>
+              Діб {isStandard ? '✓' : '~'}
+            </div>
+            <div style={{fontWeight: '600', color: '#0f172a'}}>
+              {rentalDays || '—'}
+            </div>
+            {daysHint && (
+              <div style={{fontSize: '11px', color: '#64748b', marginTop: '2px', lineHeight: 1.3}}>
+                {daysHint}
+              </div>
+            )}
           </div>
-          <div style={{gridColumn: '1 / -1', borderTop: '1px solid #e2e8f0', paddingTop: '10px', marginTop: '4px'}}>
-            <div style={{color: '#94a3b8', textTransform: 'uppercase', fontSize: '10px', letterSpacing: '0.8px'}}>Разом</div>
-            <div style={{fontSize: '24px', fontWeight: '800', color: '#0a3d2e'}}>
-              ₴{totalPrice.toLocaleString('uk-UA', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+          <div>
+            <div style={{color: '#94a3b8', textTransform: 'uppercase', fontSize: '10px', letterSpacing: '0.8px'}}>Застава</div>
+            <div style={{fontWeight: '700', color: '#b08d2e', fontSize: '16px'}}>
+              ₴{totalDeposit.toLocaleString('uk-UA', {minimumFractionDigits: 0, maximumFractionDigits: 0})}
+            </div>
+            <div style={{fontSize: '11px', color: '#64748b', marginTop: '2px'}}>
+              повертається після здачі
+            </div>
+          </div>
+          <div style={{gridColumn: '1 / -1', borderTop: '1px solid #e2e8f0', paddingTop: '12px', marginTop: '4px'}}>
+            <div style={{color: '#94a3b8', textTransform: 'uppercase', fontSize: '10px', letterSpacing: '0.8px'}}>До сплати при отриманні</div>
+            <div style={{fontSize: '26px', fontWeight: '800', color: '#0a3d2e'}}>
+              ₴{(totalPrice + totalDeposit).toLocaleString('uk-UA', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+            </div>
+            <div style={{fontSize: '12px', color: '#64748b', marginTop: '2px'}}>
+              Оренда ₴{totalPrice.toLocaleString('uk-UA', {minimumFractionDigits: 0})} + застава ₴{totalDeposit.toLocaleString('uk-UA', {minimumFractionDigits: 0})}
             </div>
           </div>
         </div>
 
-        {/* Контактні дані */}
-        <Section title="Ваші дані">
-          <Input label="ПІБ *" value={form.customer_name} onChange={update('customer_name')} data-testid="checkout-name" />
-          <Input label="Телефон *" type="tel" value={form.customer_phone} onChange={update('customer_phone')} placeholder="+380..." data-testid="checkout-phone" />
-          <Input label="Email" type="email" value={form.customer_email} onChange={update('customer_email')} data-testid="checkout-email" />
-        </Section>
-
-        {/* Деталі івенту */}
-        <Section title="Деталі івенту">
-          <div style={{marginBottom: '14px'}}>
-            <label style={labelStyle}>Коментар менеджеру</label>
-            <textarea
-              value={form.notes}
-              onChange={update('notes')}
-              rows={3}
-              placeholder="Особливі побажання, час видачі, тощо..."
-              data-testid="checkout-notes"
-              style={{...inputStyle, resize: 'vertical', minHeight: '70px'}}
-            />
+        {/* Двоколонкова сітка на десктопі: ліворуч контакти, праворуч деталі */}
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr',
+          gap: isMobile ? 0 : '24px',
+        }}>
+          <div>
+            <Section title="Ваші дані">
+              <Input label="ПІБ *" value={form.customer_name} onChange={update('customer_name')} data-testid="checkout-name" />
+              <Input label="Телефон *" type="tel" value={form.customer_phone} onChange={update('customer_phone')} placeholder="+380..." data-testid="checkout-phone" />
+              <Input label="Email" type="email" value={form.customer_email} onChange={update('customer_email')} data-testid="checkout-email" />
+            </Section>
           </div>
-        </Section>
+
+          <div>
+            <Section title="Час видачі">
+              <select
+                value={form.pickup_time_slot}
+                onChange={update('pickup_time_slot')}
+                data-testid="checkout-pickup-slot"
+                style={inputStyle}
+              >
+                {PICKUP_TIME_SLOTS.map(s => (
+                  <option key={s.value} value={s.value}>{s.label}</option>
+                ))}
+              </select>
+              <div style={{fontSize: '12px', color: '#64748b', marginTop: '6px'}}>
+                Повернення завжди до <strong>{RETURN_TIME}</strong> у вказаний день.
+              </div>
+            </Section>
+
+            <Section title="Деталі івенту">
+              <label style={labelStyle}>Коментар менеджеру</label>
+              <textarea
+                value={form.notes}
+                onChange={update('notes')}
+                rows={3}
+                placeholder="Особливі побажання..."
+                data-testid="checkout-notes"
+                style={{...inputStyle, resize: 'vertical', minHeight: '70px'}}
+              />
+            </Section>
+          </div>
+        </div>
 
         {/* Оплата */}
         <Section title="Спосіб оплати">

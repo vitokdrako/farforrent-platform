@@ -3,7 +3,8 @@ Event Tool API Routes
 Інтеграція каталогу декораторів з RentalHub
 Всі endpoints під /api/event/*
 """
-from fastapi import APIRouter, Depends, HTTPException, status, Header, Response, Body
+from fastapi import APIRouter, Depends, HTTPException, status, Header, Response, Body, Request
+from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 from typing import List, Optional
@@ -100,6 +101,10 @@ class OrderCreate(BaseModel):
     
     # Коментар (опціонально)
     customer_comment: Optional[str] = None
+
+    # Час видачі/повернення (опціонально)
+    pickup_time_slot: Optional[str] = None  # "11:00-12:00"
+    return_time: Optional[str] = "17:00"
 
 # ============================================================================
 # AUTH HELPERS
@@ -1510,6 +1515,8 @@ async def convert_to_order(
             "source": "event_tool",
             "event_board_id": board_id,
             "client_user_id": client_user_id,
+            "pickup_time_slot": data.pickup_time_slot,
+            "return_time": data.return_time or "17:00",
         }
 
         # Залишаємо тільки ті ключі, для яких реально існує колонка в БД
@@ -1811,7 +1818,9 @@ async def get_my_order_details(
                 {col('return_date')} AS return_date,
                 {col('service_fee', '0')} AS service_fee,
                 {col('discount_amount', '0')} AS discount_amount,
-                {col('manager_comment', "''")} AS manager_comment
+                {col('manager_comment', "''")} AS manager_comment,
+                {col('pickup_time_slot', "''")} AS pickup_time_slot,
+                {col('return_time', "''")} AS return_time
             FROM orders
             WHERE order_id = :oid
               AND ({col('client_user_id', 'NULL')} = :cuid OR {col('customer_email', "''")} = :email)
@@ -1937,6 +1946,8 @@ async def get_my_order_details(
             "discount_amount": discount_amount,
             "total_to_pay": total_to_pay,
             "manager_comment": order_row[22] or "",
+            "pickup_time_slot": order_row[23] or "",
+            "return_time": order_row[24] or "17:00",
             "packing_progress": packing_progress,
             "paid_rent": paid_rent,
             "paid_deposit": paid_deposit,
@@ -2044,6 +2055,164 @@ async def get_my_order_timeline(
         logger.error(f"[get_my_order_timeline] {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+
+
+@router.get("/orders/{order_id}/estimate.html", response_class=HTMLResponse)
+async def get_order_estimate_html(
+    order_id: int,
+    request: Request,
+    db: Session = Depends(get_rh_db),
+):
+    """
+    Попередній HTML-кошторис для клієнта.
+    Auth: або Authorization header (Bearer), або ?token=... query (для прямого посилання з email).
+    Клієнт може зберегти його як PDF через Ctrl+P → "Зберегти як PDF" у браузері.
+    """
+    # Дістаємо токен з header АБО query
+    token = None
+    auth = request.headers.get("Authorization")
+    if auth and auth.startswith("Bearer "):
+        token = auth.replace("Bearer ", "", 1).strip()
+    if not token:
+        token = request.query_params.get("token")
+    if not token:
+        raise HTTPException(401, "Token required")
+
+    customer = get_current_customer(token, db)
+    email = (customer.get("email") or "").lower().strip()
+
+    # Деталі замовлення (через існуючий endpoint логіку — спрощений варіант)
+    cols_rows = db.execute(text("SHOW COLUMNS FROM orders")).fetchall()
+    existing_cols = {r[0] for r in cols_rows}
+    def col(name, default="NULL"):
+        return name if name in existing_cols else default
+
+    sql = f"""
+        SELECT
+            order_id,
+            {col('order_number', "''")} AS order_number,
+            {col('status', "''")} AS status,
+            {col('rental_start_date')} AS rental_start_date,
+            {col('rental_end_date')} AS rental_end_date,
+            {col('rental_days', '0')} AS rental_days,
+            {col('event_date')} AS event_date,
+            {col('total_price', col('total_amount', '0'))} AS total_price,
+            {col('deposit_amount', '0')} AS deposit_amount,
+            {col('customer_name', "''")} AS customer_name,
+            {col('customer_phone', "''")} AS customer_phone,
+            {col('customer_email', "''")} AS customer_email,
+            {col('pickup_time_slot', "''")} AS pickup_time_slot,
+            {col('return_time', "''")} AS return_time,
+            {col('notes', "''")} AS notes
+        FROM orders
+        WHERE order_id = :oid
+          AND ({col('customer_email', "''")} = :email)
+    """
+    o = db.execute(text(sql), {"oid": order_id, "email": email}).fetchone()
+    if not o:
+        raise HTTPException(404, "Order not found")
+
+    items = db.execute(text("""
+        SELECT product_name, quantity, price, total_rental, image_url
+        FROM order_items WHERE order_id = :oid
+    """), {"oid": order_id}).fetchall()
+
+    rental_days = int(o[5] or 1)
+    total_price = float(o[7] or 0)
+    deposit = float(o[8] or 0)
+    total_pay = total_price + deposit
+
+    rows_html = ""
+    for it in items:
+        line_total = float(it[3] or 0)
+        rows_html += f"""
+        <tr>
+          <td>{it[0] or ''}</td>
+          <td style="text-align:center">{it[1] or 0}</td>
+          <td style="text-align:right">₴{float(it[2] or 0):.2f}</td>
+          <td style="text-align:right">{rental_days}</td>
+          <td style="text-align:right;font-weight:600">₴{line_total:.2f}</td>
+        </tr>"""
+
+    pickup_str = f"{o[3]} {o[12] or ''}".strip() if o[3] else "—"
+    return_str = f"{o[4]} до {o[13] or '17:00'}".strip() if o[4] else "—"
+
+    html = f"""<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="UTF-8">
+<title>Кошторис #{o[1] or o[0]}</title>
+<style>
+  @page {{ size: A4; margin: 18mm; }}
+  body {{ font-family: -apple-system, 'Segoe UI', Roboto, sans-serif; color: #0f172a; max-width: 800px; margin: 20px auto; padding: 0 24px; line-height: 1.5; }}
+  .head {{ display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #0a3d2e; padding-bottom: 16px; margin-bottom: 24px; }}
+  h1 {{ font-size: 26px; color: #0a3d2e; margin: 0 0 6px; }}
+  .muted {{ color: #64748b; font-size: 13px; }}
+  .grid {{ display: grid; grid-template-columns: 1fr 1fr; gap: 14px 28px; margin: 18px 0 28px; padding: 18px; background: #f8fafc; border-radius: 8px; }}
+  .grid .label {{ font-size: 11px; text-transform: uppercase; letter-spacing: 0.6px; color: #94a3b8; margin-bottom: 4px; }}
+  .grid .value {{ font-size: 14px; font-weight: 600; }}
+  table {{ width: 100%; border-collapse: collapse; margin: 16px 0; }}
+  th {{ background: #0a3d2e; color: #fff; padding: 10px 12px; text-align: left; font-size: 12px; }}
+  td {{ padding: 10px 12px; border-bottom: 1px solid #e5e7eb; font-size: 13px; }}
+  tfoot td {{ font-weight: 700; padding-top: 14px; border-top: 2px solid #0a3d2e; }}
+  .pay {{ background: linear-gradient(135deg, #0a3d2e 0%, #145a45 100%); color: #fff; padding: 18px 24px; border-radius: 10px; margin-top: 24px; }}
+  .pay .total {{ font-size: 32px; font-weight: 800; }}
+  .pay .sub {{ font-size: 13px; opacity: 0.9; margin-top: 4px; }}
+  .actions {{ margin: 28px 0 12px; text-align: center; }}
+  .btn {{ display: inline-block; padding: 12px 28px; background: #0a3d2e; color: #fff; border-radius: 8px; text-decoration: none; font-weight: 600; cursor: pointer; border: none; font-size: 14px; }}
+  @media print {{ .actions {{ display: none; }} body {{ margin: 0; }} }}
+  .note {{ font-size: 12px; color: #64748b; margin-top: 18px; padding: 12px; background: #fef9e7; border-left: 3px solid #b08d2e; border-radius: 4px; }}
+</style>
+</head>
+<body>
+  <div class="head">
+    <div>
+      <h1>Кошторис #{o[1] or o[0]}</h1>
+      <div class="muted">Попередній — менеджер уточнить фінальні умови</div>
+    </div>
+    <div style="text-align:right">
+      <div style="font-weight:700;color:#0a3d2e">Farfor Decor</div>
+      <div class="muted">farforrent.com.ua</div>
+    </div>
+  </div>
+
+  <div class="grid">
+    <div><div class="label">Клієнт</div><div class="value">{o[9] or '—'}</div></div>
+    <div><div class="label">Телефон</div><div class="value">{o[10] or '—'}</div></div>
+    <div><div class="label">Дата івенту</div><div class="value">{o[6] or '—'}</div></div>
+    <div><div class="label">Діб оренди</div><div class="value">{rental_days}</div></div>
+    <div><div class="label">Видача</div><div class="value">{pickup_str}</div></div>
+    <div><div class="label">Повернення</div><div class="value">{return_str}</div></div>
+  </div>
+
+  <table>
+    <thead>
+      <tr><th>Найменування</th><th style="text-align:center">К-сть</th><th style="text-align:right">Ціна/доба</th><th style="text-align:right">Діб</th><th style="text-align:right">Сума</th></tr>
+    </thead>
+    <tbody>{rows_html}</tbody>
+    <tfoot>
+      <tr><td colspan="4" style="text-align:right">Оренда:</td><td style="text-align:right">₴{total_price:.2f}</td></tr>
+      <tr><td colspan="4" style="text-align:right">Застава (повертається):</td><td style="text-align:right">₴{deposit:.2f}</td></tr>
+    </tfoot>
+  </table>
+
+  <div class="pay">
+    <div class="sub">До сплати при отриманні</div>
+    <div class="total">₴{total_pay:.2f}</div>
+    <div class="sub">Оренда ₴{total_price:.2f} + застава ₴{deposit:.2f}</div>
+  </div>
+
+  <div class="note">
+    📌 Це <strong>попередній</strong> кошторис. Фінальну вартість підтвердить менеджер після перевірки наявності та погодження часу видачі.
+    Застава повертається у повному обсязі при здачі товару у належному стані.
+  </div>
+
+  <div class="actions">
+    <button class="btn" onclick="window.print()">🖨️ Зберегти / друкувати</button>
+  </div>
+</body>
+</html>"""
+    return HTMLResponse(content=html)
 
 
 @router.get("/orders/{order_id}/documents")
