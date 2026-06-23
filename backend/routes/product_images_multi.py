@@ -45,6 +45,21 @@ def _sanitize_sku(sku: str) -> str:
     return re.sub(r"[^A-Za-z0-9_\-]", "_", sku)
 
 
+def _resolve_product_id(db, product_id_or_sku: str) -> int:
+    """Перетворює SKU або числовий product_id у числовий product_id."""
+    try:
+        return int(product_id_or_sku)
+    except (ValueError, TypeError):
+        pass
+    row = db.execute(
+        text("SELECT product_id FROM products WHERE sku = :sku LIMIT 1"),
+        {"sku": product_id_or_sku},
+    ).fetchone()
+    if not row:
+        raise HTTPException(404, f"Товар з SKU/ID '{product_id_or_sku}' не знайдено")
+    return int(row[0])
+
+
 def _make_thumb(image_path: str, size: tuple, subdir: str) -> str | None:
     """Створює thumbnail заданого розміру, повертає шлях"""
     try:
@@ -70,9 +85,10 @@ def _make_thumb(image_path: str, size: tuple, subdir: str) -> str | None:
 # GET /api/products/{product_id}/images
 # ─────────────────────────────────────────────────────────────────
 @router.get("/{product_id}/images")
-async def list_product_images(product_id: int, db=Depends(get_rh_db_sync)):
+async def list_product_images(product_id: str, db=Depends(get_rh_db_sync)):
     """Повертає всі фото товару, відсортовані по sort_order"""
     try:
+        product_id = _resolve_product_id(db, product_id)
         rows = db.execute(text("""
             SELECT id, product_id, image_url, sort_order, is_primary, source, created_at
             FROM product_images
@@ -122,12 +138,13 @@ async def list_product_images(product_id: int, db=Depends(get_rh_db_sync)):
 # ─────────────────────────────────────────────────────────────────
 @router.post("/{product_id}/images")
 async def upload_product_images(
-    product_id: int,
+    product_id: str,
     files: List[UploadFile] = File(...),
     db=Depends(get_rh_db_sync),
 ):
     """Завантажити кілька фото одночасно для товара"""
     try:
+        product_id = _resolve_product_id(db, product_id)
         # Перевірка товара + дістати SKU
         prod = db.execute(text(
             "SELECT product_id, COALESCE(sku, 'no-sku') FROM products WHERE product_id = :pid"
@@ -327,9 +344,10 @@ class ReorderRequest(BaseModel):
 
 
 @router.put("/{product_id}/images/reorder")
-async def reorder_images(product_id: int, payload: ReorderRequest, db=Depends(get_rh_db_sync)):
+async def reorder_images(product_id: str, payload: ReorderRequest, db=Depends(get_rh_db_sync)):
     """Зміна порядку фото (drag&drop)"""
     try:
+        product_id = _resolve_product_id(db, product_id)
         for item in payload.items:
             db.execute(text("""
                 UPDATE product_images
