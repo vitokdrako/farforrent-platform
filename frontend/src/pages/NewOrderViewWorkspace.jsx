@@ -933,12 +933,26 @@ export default function NewOrderViewWorkspace() {
         issueTime={issueTime}
         returnTime={returnTime}
         rentalDays={rentalDays}
-        onUpdate={(dates) => {
+        onUpdate={async (dates) => {
           setIssueDate(dates.issueDate)
           setReturnDate(dates.returnDate)
           setIssueTime(dates.issueTime)
           setReturnTime(dates.returnTime)
           setRentalDays(dates.rentalDays)
+          // Авто-збереження дат у БД
+          try {
+            await axios.put(`${BACKEND_URL}/api/decor-orders/${orderId}`, {
+              rental_start_date: dates.issueDate,
+              rental_end_date: dates.returnDate,
+              issue_time: dates.issueTime,
+              return_time: dates.returnTime,
+              rental_days: dates.rentalDays,
+            })
+            toast({ title: '✅ Дати збережено', description: `Оренда на ${dates.rentalDays} ${dates.rentalDays === 1 ? 'добу' : 'доби'}` })
+          } catch (e) {
+            console.error('Save dates failed', e)
+            toast({ title: '❌ Не вдалося зберегти', description: e?.response?.data?.detail || e?.message, variant: 'destructive' })
+          }
         }}
       />
       
