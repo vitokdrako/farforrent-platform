@@ -2581,11 +2581,24 @@ async def list_favorite_products(
 ):
     """Повні картки товарів з обраного для сторінки 'Обране'."""
     user = get_current_customer(token, db)
-    rows = db.execute(text("""
+    # Динамічно перевіряємо які колонки існують у products
+    prod_cols = {r[0] for r in db.execute(text("SHOW COLUMNS FROM products")).fetchall()}
+    def pc(col, default="NULL"):
+        return f"p.{col}" if col in prod_cols else default
+
+    rental_col = pc("rental_price", "p.price")
+    deposit_col = f"COALESCE({pc('deposit', 'NULL')}, p.price, 0)"
+    color_col = pc("color", "''")
+    material_col = pc("material", "''")
+    desc_col = pc("description", "''")
+    cat_col = pc("category_id", "NULL")
+
+    rows = db.execute(text(f"""
         SELECT p.product_id, p.name, p.sku, p.price, p.image_url, p.quantity,
-               p.description, p.category_id, f.created_at,
-               p.rental_price, COALESCE(p.deposit, p.price, 0) AS deposit_amount,
-               p.color, p.material
+               {desc_col} AS description, {cat_col} AS category_id, f.created_at,
+               {rental_col} AS rental_price,
+               {deposit_col} AS deposit_amount,
+               {color_col} AS color, {material_col} AS material
         FROM event_favorites f
         JOIN products p ON p.product_id = f.product_id
         WHERE f.customer_id = :cid
