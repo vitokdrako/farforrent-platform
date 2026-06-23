@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { Heart } from 'lucide-react';
 import AvailabilityBadge from './AvailabilityBadge';
-import { useAvailability } from '../hooks/useAvailability';
 import { useFavorites } from '../context/FavoritesContext';
 import './ProductCard.css';
 
@@ -9,12 +8,10 @@ const ProductCard = ({ product, onAddToBoard, boardDates, onOpenDetails }) => {
   const [isAdding, setIsAdding] = useState(false);
   const { isFavorite, toggle: toggleFav } = useFavorites();
   const fav = isFavorite(product.product_id);
-  const { availability, loading } = useAvailability(
-    product.product_id,
-    1,
-    boardDates?.startDate,
-    boardDates?.endDate
-  );
+
+  // Використовуємо available з API (бекенд вже рахує з урахуванням дат через date_from/date_to)
+  const availableQty = Number(product.available ?? product.quantity ?? 0);
+  const isAvailable = product.is_available !== undefined ? !!product.is_available : availableQty > 0;
 
   const handleAdd = async () => {
     if (!boardDates?.startDate || !boardDates?.endDate) {
@@ -22,8 +19,8 @@ const ProductCard = ({ product, onAddToBoard, boardDates, onOpenDetails }) => {
       return;
     }
 
-    if (availability && !availability.is_available) {
-      alert(availability.message || 'Товар недоступний на вибрані дати');
+    if (!isAvailable) {
+      alert('Товар недоступний на вибрані дати');
       return;
     }
 
@@ -96,19 +93,15 @@ const ProductCard = ({ product, onAddToBoard, boardDates, onOpenDetails }) => {
           <div className="product-card-image-placeholder">🎨</div>
         )}
         
-        {/* Availability badge overlay */}
+        {/* Availability badge overlay (з даних API) */}
         {boardDates?.startDate && boardDates?.endDate && (
           <div className="product-availability-badge">
-            {loading ? (
-              <span>⏳ Перевірка...</span>
-            ) : availability ? (
-              <AvailabilityBadge
-                available={availability.available ?? availability.available_quantity ?? 0}
-                total={product.quantity}
-                requested={1}
-                compact={true}
-              />
-            ) : null}
+            <AvailabilityBadge
+              available={availableQty}
+              total={product.quantity}
+              requested={1}
+              compact={true}
+            />
           </div>
         )}
       </div>
@@ -131,7 +124,7 @@ const ProductCard = ({ product, onAddToBoard, boardDates, onOpenDetails }) => {
 
         <button
           onClick={handleAdd}
-          disabled={isAdding || (availability && !availability.is_available)}
+          disabled={isAdding || !isAvailable}
           className={`product-card-button ${isAdding ? 'adding' : ''}`}
         >
           {isAdding ? 'Додавання...' : 'Додати в підбірку'}

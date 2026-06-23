@@ -211,9 +211,18 @@ const EventPlannerPage = () => {
     loadInitialData();
   }, []);
 
-  // Перезавантажуємо товари коли змінилися дати оренди — щоб availability була актуальною
+  // Перезавантажуємо товари коли користувач ВРУЧНУ змінив дати оренди (але не при першій ініціалізації)
+  const initialDatesRef = React.useRef(null);
   useEffect(() => {
     if (!activeBoard?.rental_start_date || !activeBoard?.rental_end_date) return;
+    const key = `${activeBoard.rental_start_date}|${activeBoard.rental_end_date}`;
+    // Перший раз — лише запам'ятовуємо (loadInitialData вже завантажив products з цими датами)
+    if (initialDatesRef.current === null) {
+      initialDatesRef.current = key;
+      return;
+    }
+    if (initialDatesRef.current === key) return;
+    initialDatesRef.current = key;
     reloadProductsForDates(activeBoard.rental_start_date, activeBoard.rental_end_date);
   }, [activeBoard?.rental_start_date, activeBoard?.rental_end_date]);
 
@@ -267,28 +276,37 @@ const EventPlannerPage = () => {
   const loadInitialData = async () => {
     setLoading(true);
     try {
-      // Завантажити перші 100 товарів для швидкого старту
-      const [productsData, categoriesData, subcategoriesData, boardsData] = await Promise.all([
-        api.get('/event/products?limit=100').then(r => r.data),
+      // 1) Спочатку — boards/categories/subcategories паралельно (знаємо дати найактивнішого борду)
+      const [categoriesData, subcategoriesData, boardsData] = await Promise.all([
         api.get('/event/categories').then(r => r.data),
         api.get('/event/subcategories').then(r => r.data),
         api.get('/event/boards').then(r => r.data),
       ]);
 
-      // `/event/categories` повертає {categories: [...], colors, materials} — беремо саме .categories
       const categoriesList = Array.isArray(categoriesData)
         ? categoriesData
         : (categoriesData?.categories || []);
 
-      setProducts(Array.isArray(productsData) ? productsData : []);
       setCategories(categoriesList);
       setAllSubcategories(Array.isArray(subcategoriesData) ? subcategoriesData : []);
       setAllColors(Array.isArray(categoriesData?.colors) ? categoriesData.colors : []);
       setBoards(Array.isArray(boardsData) ? boardsData : []);
 
-      if (Array.isArray(boardsData) && boardsData.length > 0) {
-        setActiveBoard(boardsData[0]);
+      const initialBoard = (Array.isArray(boardsData) && boardsData.length > 0) ? boardsData[0] : null;
+      if (initialBoard) {
+        setActiveBoard(initialBoard);
       }
+
+      // 2) Products завантажуємо одразу з датами активного борду — щоб НЕ було подвійного fetch
+      const productsUrl = buildProductsUrl(
+        0,
+        100,
+        initialBoard?.rental_start_date,
+        initialBoard?.rental_end_date
+      );
+      const productsData = await api.get(productsUrl).then(r => r.data);
+      setProducts(Array.isArray(productsData) ? productsData : []);
+      setHasMore(Array.isArray(productsData) && productsData.length === 100);
     } catch (error) {
       console.error('Failed to load data:', error);
     }
