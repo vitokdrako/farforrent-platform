@@ -25,8 +25,7 @@ const AddToBoardModal = ({ product, onClose, onAdded, quantity = 1 }) => {
   useEffect(() => {
     (async () => {
       try {
-        // Тягнемо всі борди без фільтра — менш ламке (якщо бекенд не приймає ?status=draft)
-        const all = await boardsAPI.list();
+        const all = await boardsAPI.getBoards();
         const list = Array.isArray(all) ? all : (all?.boards || []);
         setBoards(list);
       } catch (e) {

@@ -46,28 +46,45 @@ const CreateBoardModal = ({ onClose, onCreateBoard }) => {
 
   const handleImageChange = (e) => {
     const file = e.target.files[0];
-    if (file) {
-      // Validate file type
-      if (!file.type.startsWith('image/')) {
-        alert('Будь ласка, оберіть файл зображення');
-        return;
-      }
-      
-      // Validate file size (max 5MB)
-      if (file.size > 5 * 1024 * 1024) {
-        alert('Розмір файлу не повинен перевищувати 5MB');
-        return;
-      }
-      
-      setImageFile(file);
-      
-      // Create preview
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setImagePreview(reader.result);
-      };
-      reader.readAsDataURL(file);
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      alert('Будь ласка, оберіть файл зображення');
+      return;
     }
+    if (file.size > 5 * 1024 * 1024) {
+      alert('Розмір файлу не повинен перевищувати 5MB');
+      return;
+    }
+
+    setImageFile(file);
+
+    // Стискаємо до max 800x800, JPEG q=0.7 (~50-150 KB у base64)
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const img = new Image();
+      img.onload = () => {
+        const MAX = 800;
+        let { width: w, height: h } = img;
+        if (w > MAX || h > MAX) {
+          if (w > h) { h = Math.round(h * MAX / w); w = MAX; }
+          else { w = Math.round(w * MAX / h); h = MAX; }
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(0, 0, w, h);
+        ctx.drawImage(img, 0, 0, w, h);
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
+        setImagePreview(dataUrl);
+      };
+      img.onerror = () => {
+        // Fallback — без стиснення
+        setImagePreview(ev.target.result);
+      };
+      img.src = ev.target.result;
+    };
+    reader.readAsDataURL(file);
   };
 
   const handleImageUrlChange = (e) => {
