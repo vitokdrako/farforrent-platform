@@ -539,25 +539,16 @@ const EventPlannerPage = () => {
   }, [searchTerm, selectedCategory, selectedSubcategory, selectedColor]);
 
   const filteredProducts = products.filter(p => {
-    // Smart search - checks name, SKU, category, subcategory, color, material
-    const matchesSearch = !searchTerm || 
-      p.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      p.sku?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      p.category_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      p.subcategory_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      p.color?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      p.material?.toLowerCase().includes(searchTerm.toLowerCase());
-    
+    // ВАЖЛИВО: при наявності searchTerm — сервер уже виконав розумний пошук (smart_search.py
+    // з підтримкою опечаток, розмірних слів та усіх полів). Не фільтруємо повторно на клієнті
+    // інакше відсіемо результати які знайшов smart-search але без точного збігу підрядка.
     const matchesCategory = !selectedCategory || p.category_name === selectedCategory;
-    
     const matchesSubcategory = !selectedSubcategory || p.subcategory_name === selectedSubcategory;
-    
-    const matchesColor = !selectedColor || 
+    const matchesColor = !selectedColor ||
       (p.color && p.color.split(',').some(c => c.trim() === selectedColor));
-
     const matchesQuantity = !minQuantity || (Number(p.quantity) || 0) >= minQuantity;
-    
-    return matchesSearch && matchesCategory && matchesSubcategory && matchesColor && matchesQuantity;
+
+    return matchesCategory && matchesSubcategory && matchesColor && matchesQuantity;
   });
 
   const calculateBoardTotal = () => {
