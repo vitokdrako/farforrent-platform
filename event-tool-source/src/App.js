@@ -5,6 +5,7 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import { BoardProvider, useBoard } from './context/BoardContext';
 import { FavoritesProvider } from './context/FavoritesContext';
 import DateRangePicker from './components/DateRangePicker';
+import { calculateRentalDays } from './utils/rentalDays';
 import ProductCard from './components/ProductCard';
 import ProductDetailsModal from './components/ProductDetailsModal';
 import CheckoutModal from './components/CheckoutModal';
@@ -829,11 +830,17 @@ const EventPlannerPage = () => {
                     onEndDateChange={(date) => handleUpdateBoardDates(activeBoard.id, activeBoard.rental_start_date, date)}
                   />
                   
-                  {activeBoard.rental_days && (
-                    <p className="text-center mt-1" style={{fontSize: '10px', color: '#999'}}>
-                      {activeBoard.rental_days} днів оренди
-                    </p>
-                  )}
+                  {(() => {
+                    const calc = calculateRentalDays(activeBoard.rental_start_date, activeBoard.rental_end_date);
+                    if (!calc.days) return null;
+                    return (
+                      <p className="text-center mt-1" style={{fontSize: '11px', color: '#666', lineHeight: 1.3}}>
+                        <strong>{calc.days} {calc.days === 1 ? 'доба' : calc.days < 5 ? 'доби' : 'діб'}</strong>
+                        {' оренди'}
+                        {!calc.isStandard && ' (орієнтовно)'}
+                      </p>
+                    );
+                  })()}
                 </div>
 
                 {/* Items List - Більше місця для товарів */}
@@ -848,7 +855,7 @@ const EventPlannerPage = () => {
                             startDate: activeBoard.rental_start_date,
                             endDate: activeBoard.rental_end_date,
                           }}
-                          rentalDays={activeBoard.rental_days}
+                          rentalDays={calculateRentalDays(activeBoard.rental_start_date, activeBoard.rental_end_date).days}
                           onUpdate={handleUpdateItem}
                           onRemove={handleRemoveFromBoard}
                         />
