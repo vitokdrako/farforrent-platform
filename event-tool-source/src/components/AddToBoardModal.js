@@ -25,18 +25,13 @@ const AddToBoardModal = ({ product, onClose, onAdded, quantity = 1 }) => {
   useEffect(() => {
     (async () => {
       try {
-        // Активні (не cancelled, не completed)
-        const data = await boardsAPI.list({ status: 'draft' });
-        let list = Array.isArray(data) ? data : (data?.boards || []);
-        // Show drafts + active first; allow completed too but mark
-        if (list.length === 0) {
-          // Try without filter
-          const all = await boardsAPI.list();
-          list = Array.isArray(all) ? all : (all?.boards || []);
-        }
+        // Тягнемо всі борди без фільтра — менш ламке (якщо бекенд не приймає ?status=draft)
+        const all = await boardsAPI.list();
+        const list = Array.isArray(all) ? all : (all?.boards || []);
         setBoards(list);
       } catch (e) {
-        setError('Не вдалося завантажити проєкти');
+        console.error('Failed to load boards:', e);
+        setError(`Не вдалося завантажити проєкти: ${e?.response?.data?.detail || e?.message || 'Невідома помилка'}`);
       } finally {
         setLoading(false);
       }

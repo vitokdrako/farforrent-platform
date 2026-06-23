@@ -541,8 +541,16 @@ const UserProfile = () => {
                                         border: '1px solid #eee',
                                       }}>
                                         {it.image_url ? (
-                                          <img src={it.image_url} alt={it.product_name}
-                                               style={{width: '100%', height: '100%', objectFit: 'cover'}}/>
+                                          <img
+                                            src={
+                                              it.image_url.startsWith('http') || it.image_url.startsWith('data:')
+                                                ? it.image_url
+                                                : `${process.env.REACT_APP_BACKEND_URL || ''}/${it.image_url.replace(/^\/+/, '')}`
+                                            }
+                                            alt={it.product_name}
+                                            onError={(e) => { e.target.style.display = 'none'; }}
+                                            style={{width: '100%', height: '100%', objectFit: 'cover'}}
+                                          />
                                         ) : (
                                           <div style={{width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ccc'}}>
                                             <Package size={20} strokeWidth={1}/>
@@ -936,7 +944,7 @@ const UserProfile = () => {
                         background: '#f9f9f9',
                         borderRadius: '4px'
                       }}>
-                        📅 {formatDate(board.event_date)}
+                        {formatDate(board.event_date)}
                         {board.event_type && ` • ${board.event_type}`}
                       </div>
                     )}
@@ -1016,7 +1024,7 @@ const UserProfile = () => {
                 const img = p.image_url
                   ? (p.image_url.startsWith('http') || p.image_url.startsWith('data:')
                       ? p.image_url
-                      : `${process.env.REACT_APP_BACKEND_URL || ''}/api/uploads/products/${p.image_url.split('/').pop()}`)
+                      : `${process.env.REACT_APP_BACKEND_URL || ''}/${p.image_url.replace(/^\/+/, '')}`)
                   : '/logo.svg';
                 return (
                   <div

@@ -11,7 +11,7 @@ const FavoriteCard = ({ product, onAddToProject, onRemove }) => {
   const img = product.image_url
     ? (product.image_url.startsWith('http') || product.image_url.startsWith('data:')
         ? product.image_url
-        : `${process.env.REACT_APP_BACKEND_URL || ''}/api/uploads/products/${product.image_url.split('/').pop()}`)
+        : `${process.env.REACT_APP_BACKEND_URL || ''}/${product.image_url.replace(/^\/+/, '')}`)
     : PLACEHOLDER;
   return (
     <div

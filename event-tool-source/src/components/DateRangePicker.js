@@ -9,7 +9,7 @@ const DateRangePicker = ({ startDate, endDate, onStartDateChange, onEndDateChang
     <div className={`grid grid-cols-2 gap-3 ${className}`}>
       <div>
         <label className="fd-label">
-          📅 Початок оренди
+          Початок оренди
         </label>
         <input
           type="date"
@@ -21,7 +21,7 @@ const DateRangePicker = ({ startDate, endDate, onStartDateChange, onEndDateChang
       </div>
       <div>
         <label className="fd-label">
-          📅 Кінець оренди
+          Кінець оренди
         </label>
         <input
           type="date"
