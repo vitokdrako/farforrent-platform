@@ -18,6 +18,7 @@ import time
 
 from database_rentalhub import get_rh_db
 from utils.image_helper import normalize_image_url
+from utils.smart_search import filter_and_rank, parse_query
 
 logger = logging.getLogger(__name__)
 
@@ -369,18 +370,23 @@ async def get_products(
     
     response.headers["Cache-Control"] = "public, max-age=30"
     
+    # Якщо є search — тягнемо широку вибірку без LIKE, потім скоримо в Python
+    use_smart_search = bool(search and search.strip())
+    
     sql = """
         SELECT product_id, sku, name, category_name, subcategory_name,
                rental_price, image_url, color, material, size,
-               quantity, frozen_quantity, description, price
+               quantity, frozen_quantity, description, price,
+               height_cm, diameter_cm, width_cm, depth_cm, shape,
+               components, hashtags
         FROM products
         WHERE status = 1
     """
     params = {}
     
-    if search:
-        sql += " AND (name LIKE :search OR sku LIKE :search OR color LIKE :search OR material LIKE :search)"
-        params["search"] = f"%{search}%"
+    if not use_smart_search:
+        # Старий швидкий шлях без пошуку
+        pass
     
     if category_name:
         sql += " AND category_name = :category_name"
@@ -395,15 +401,51 @@ async def get_products(
         params["color"] = f"%{color}%"
     
     # Сортування — новинки зверху (за ID DESC). Якщо клієнт явно фільтрує — лишаємо групування
-    sql += " ORDER BY product_id DESC LIMIT :limit OFFSET :skip"
-    params["limit"] = limit
-    params["skip"] = skip
+    if use_smart_search:
+        # При smart search тягнемо ВСЕ що пройшло інші фільтри (статус/категорія/колір)
+        # Skip/limit застосуємо ПІСЛЯ скорингу
+        sql += " ORDER BY product_id DESC"
+    else:
+        sql += " ORDER BY product_id DESC LIMIT :limit OFFSET :skip"
+        params["limit"] = limit
+        params["skip"] = skip
     
     result = db.execute(text(sql), params)
     rows = result.fetchall()
     
     if not rows:
         return []
+    
+    # Якщо smart search — перетворюємо rows у dicts і фільтруємо/ранжуємо
+    if use_smart_search:
+        all_items = []
+        for row in rows:
+            all_items.append({
+                "product_id": row[0],
+                "sku": row[1],
+                "name": row[2],
+                "category_name": row[3],
+                "subcategory_name": row[4],
+                "color": row[7],
+                "material": row[8],
+                "size": row[9],
+                "description": row[12],
+                "height_cm": row[14],
+                "diameter_cm": row[15],
+                "width_cm": row[16],
+                "depth_cm": row[17],
+                "shape": row[18],
+                "components": row[19],
+                "hashtags": row[20],
+                "_row": row,  # збережемо для подальшого використання
+            })
+        # Ранжуємо
+        ranked = filter_and_rank(all_items, search, threshold=65.0)
+        # skip/limit
+        ranked = ranked[skip: skip + limit] if limit else ranked[skip:]
+        rows = [item["_row"] for item in ranked]
+        if not rows:
+            return []
     
     product_ids = [row[0] for row in rows]
     
