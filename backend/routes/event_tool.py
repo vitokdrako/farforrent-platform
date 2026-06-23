@@ -2583,7 +2583,9 @@ async def list_favorite_products(
     user = get_current_customer(token, db)
     rows = db.execute(text("""
         SELECT p.product_id, p.name, p.sku, p.price, p.image_url, p.quantity,
-               p.description, p.category_id, f.created_at
+               p.description, p.category_id, f.created_at,
+               p.rental_price, COALESCE(p.deposit, p.price, 0) AS deposit_amount,
+               p.color, p.material
         FROM event_favorites f
         JOIN products p ON p.product_id = f.product_id
         WHERE f.customer_id = :cid
@@ -2591,9 +2593,13 @@ async def list_favorite_products(
     """), {"cid": user["customer_id"]}).fetchall()
     return {"products": [{
         "product_id": r[0], "name": r[1], "sku": r[2],
-        "price": float(r[3] or 0), "rental_price": float(r[3] or 0),
+        "price": float(r[3] or 0),
+        "rental_price": float(r[9] or 0),
+        "deposit": float(r[10] or 0),
         "image_url": r[4], "quantity": r[5] or 0,
         "description": r[6], "category_id": r[7],
+        "color": r[11] or "",
+        "material": r[12] or "",
         "favorited_at": r[8].isoformat() if r[8] else None,
     } for r in rows]}
 
