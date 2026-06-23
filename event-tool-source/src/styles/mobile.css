@@ -55,9 +55,28 @@ html, body {
         top: 58px;            /* висота нашого мобільного хедера */
         z-index: 40;
         background: #fff;
-        margin: 0 -10px 8px;
+        margin: 0 -10px 0;
+        padding: 0;
         border-bottom: 1px solid #f0f0f0;
         box-shadow: 0 2px 4px rgba(0, 0, 0, 0.02);
+    }
+
+    /* Прибираємо сірий простір між header і chips:
+       контейнери пошуку/фільтрів які приховані на мобайлі мають margin/padding — обнуляємо */
+    .product-filters,
+    .filters-container,
+    .filters-bar,
+    .corp-search-bar,
+    .desktop-only-filters {
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+    /* Контейнер каталогу — без верхніх відступів */
+    .catalog-panel,
+    .main-content,
+    main {
+        padding-top: 0 !important;
+        margin-top: 0 !important;
     }
 
     /* Ряд 1 — категорії */
