@@ -56,7 +56,7 @@ const FavoriteCard = ({ product, onAddToProject, onRemove }) => {
           fontSize: 13, fontWeight: 600, color: '#0a3d2e',
           display: 'flex', justifyContent: 'space-between', alignItems: 'center',
         }}>
-          <span>₴{Math.round(product.rental_price || product.price || 0)}/день</span>
+          <span>₴{Math.round(product.rental_price || 0)}/день</span>
           <span style={{ fontSize: 11, color: '#888', fontWeight: 400 }}>
             {product.quantity || 0} шт
           </span>

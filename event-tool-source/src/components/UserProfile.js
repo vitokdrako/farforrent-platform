@@ -1064,7 +1064,7 @@ const UserProfile = () => {
                         fontSize: 13, fontWeight: 600, color: '#0a3d2e',
                         display: 'flex', justifyContent: 'space-between',
                       }}>
-                        <span>₴{Math.round(p.rental_price || p.price || 0)}/день</span>
+                        <span>₴{Math.round(p.rental_price || 0)}/день</span>
                         <span style={{ fontSize: 11, color: '#888', fontWeight: 400 }}>
                           {p.quantity || 0} шт
                         </span>
