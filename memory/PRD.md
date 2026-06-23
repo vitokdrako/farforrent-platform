@@ -18,6 +18,35 @@ See `/app/memory/test_credentials.md`
 ## What's Been Implemented (latest first)
 
 
+### 2026-02-21 — VPS Deployment Recovery + OpenCart Image Sync 🔥
+**Контекст:** VPS `173.242.49.48` (Ubuntu 24.04). Локальна БД `farforrent` була дропнута битим `cron_refresh_db.sh` (маскував помилки `2>/dev/null`). Бекенд лежав. Python deps не ставились через PEP 668.
+
+**Що зроблено:**
+- ✅ Створена ізольована БД-копія `farforre_vps` на `farforre.mysql.tools` (user: `farforre_vps`/`EDt869Up6y`). Продакшн `farforre_rentalhub` залишається недоторканим.
+- ✅ `backend/.env` переключено на `farforre_vps` (RH_DB_HOST/USERNAME/PASSWORD/DATABASE).
+- ✅ Всі Python deps вже були у venv (`/var/www/farforrent/backend/venv/`): `python-dotenv 1.2.1`, `pywebpush 2.3.0`, `websockets 16.0`, `pymysql 1.1.2`, `cryptography 46.0.3`. Глобальний `pip install` не потрібен.
+- ✅ Створено таблицю `product_images` (її не було в копії) — `CREATE TABLE IF NOT EXISTS product_images (id, product_id, image_url, sort_order, is_primary, source, created_at)`. Створення товарів через адмінку запрацювало.
+- ✅ Видалені 9777 битих "PNG" файлів (насправді HTML-сторінки помилок з failed wget) → перенесені в `/var/www/farforrent/db_backups/broken_pngs/`.
+- ✅ Скрипт `/var/www/farforrent/backend/populate_product_images_from_thumbnails.py` — мапить файли з `thumbnails/oc_{pid}_{pid}_{N}_{ts}.jpg` → `product_images` + `products.image_url`. Заповнив **7248 товарів** з 9409 файлів.
+- ✅ `image_url` обнулено для ~440 товарів з битими посиланнями (тепер фронт показує placeholder замість 404).
+- ✅ Cron `cron_refresh_db.sh` (drop+import) вимкнено з кронтабу — більше не дропає БД.
+- ✅ `event-tool-backend.service` зупинений+disabled (267k+ рестартів з `status=203/EXEC`, файл `sync_all.py` не існував).
+
+**OpenCart image-only sync (НОВЕ):**
+- ✅ `/var/www/farforrent/backend/sync_images_only.py` — легкий sync лише фото (без замовлень/продуктів).
+  - Підключається до OC БД (`farforre_db`/`gPpAHTvv` на `farforre.mysql.tools`) READ-ONLY
+  - Тягне фото з `https://www.farforrent.com.ua/image/{oc_path}` для товарів з `image_url IS NULL`
+  - Зберігає у `/var/www/farforrent/backend/uploads/products/{SKU}_{TIMESTAMP}.{ext}`
+  - Створює thumbnails (300x300) і medium (800x800)
+  - Оновлює `farforre_vps.products.image_url` + `product_images` (source='opencart_sync')
+  - BATCH=100 на запуск
+- ✅ Cron `*/30 * * * * /usr/local/bin/farforrent-image-sync.sh` → log у `/var/log/farforrent/image_sync.log`
+- ✅ Перший прогін: 99 ок, 0 fail, 1 skip (RH-9828 — тестовий товар без OC).
+
+**Поточний стан:** Сайт працює (БД 541 orders, 7740 products). Event Tool, Admin, створення/редагування — все ОК. Залишилось 340 товарів без фото — догнаються наступними прогонами cron.
+
+
+
 ### 2026-02-13 (cont. 3) — P3 Backlog Execution
 - **WebSockets real-time chat**: 
   - Backend: `routes/order_chat_ws.py` — WS-роутер на `/api/ws/chat/client/{order_id}?token=...` (JWT-auth) і `/api/ws/chat/admin/{order_id}`. In-memory `ChatRoom` pub/sub з broadcast'ом між учасниками. Підтримує `init/new_message/typing/read_receipt/ping/pong`.
