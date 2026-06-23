@@ -90,15 +90,15 @@ const AddToBoardModal = ({ product, onClose, onAdded, quantity = 1 }) => {
       onClick={(e) => { if (e.target === e.currentTarget) onClose && onClose(); }}
       style={{
         position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 1000,
-        display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
-        padding: '0', animation: 'fadeIn 0.2s ease',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        padding: '16px', animation: 'fadeIn 0.2s ease',
       }}
     >
       <div
         style={{
-          background: '#fff', borderRadius: '20px 20px 0 0', width: '100%', maxWidth: 520,
+          background: '#fff', borderRadius: '16px', width: '100%', maxWidth: 520,
           maxHeight: '85vh', overflow: 'hidden', display: 'flex', flexDirection: 'column',
-          boxShadow: '0 -4px 24px rgba(0,0,0,0.15)',
+          boxShadow: '0 8px 40px rgba(0,0,0,0.25)',
         }}
       >
         {/* Header */}

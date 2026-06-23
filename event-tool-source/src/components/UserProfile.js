@@ -13,6 +13,7 @@ import SignDocumentModal from './SignDocumentModal';
 import NotificationToggle from './NotificationToggle';
 import OrderChat from './OrderChat';
 import AddToBoardModal from './AddToBoardModal';
+import ProductCard from './ProductCard';
 import { documentApprovalAPI } from '../api/chat';
 
 const ORDER_STATUS_LABELS = {
@@ -980,17 +981,10 @@ const UserProfile = () => {
         {/* Обране */}
         {activeTab === 'favorites' && (
         <div data-testid="profile-favorites-section">
-          <div className="flex items-center justify-between mb-6">
+          <div className="mb-6">
             <h3 style={{fontSize: '20px', fontWeight: '600', color: '#333'}}>
               Обрані товари
             </h3>
-            <button
-              onClick={() => navigate('/')}
-              className="fd-btn"
-              style={{background: '#fff', color: '#0a3d2e', border: '1px solid #0a3d2e'}}
-            >
-              + Знайти ще
-            </button>
           </div>
 
           {favLoading ? (
@@ -1015,82 +1009,24 @@ const UserProfile = () => {
               </button>
             </div>
           ) : (
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fill, minmax(170px, 1fr))',
-              gap: 12,
-            }}>
-              {favProducts.map((p) => {
-                const img = p.image_url
-                  ? (p.image_url.startsWith('http') || p.image_url.startsWith('data:')
-                      ? p.image_url
-                      : `${process.env.REACT_APP_BACKEND_URL || ''}/${p.image_url.replace(/^\/+/, '')}`)
-                  : '/logo.svg';
-                return (
-                  <div
-                    key={p.product_id}
-                    data-testid={`profile-fav-card-${p.product_id}`}
-                    style={{
-                      background: '#fff', borderRadius: 12, overflow: 'hidden',
-                      boxShadow: '0 1px 4px rgba(0,0,0,0.06)', display: 'flex',
-                      flexDirection: 'column', position: 'relative',
-                    }}
-                  >
-                    <button
-                      onClick={async () => {
-                        await toggleFav(p.product_id);
-                        setFavProducts((prev) => prev.filter((x) => x.product_id !== p.product_id));
-                        refreshFav();
-                      }}
-                      data-testid={`profile-fav-remove-${p.product_id}`}
-                      aria-label="Прибрати"
-                      style={{
-                        position: 'absolute', top: 6, right: 6, zIndex: 2,
-                        width: 26, height: 26, borderRadius: '50%',
-                        background: 'rgba(255,255,255,0.92)', border: 'none',
-                        cursor: 'pointer', display: 'flex',
-                        alignItems: 'center', justifyContent: 'center',
-                        boxShadow: '0 1px 2px rgba(0,0,0,0.1)', fontSize: 14,
-                        color: '#c62828',
-                      }}
-                    >×</button>
-                    <div style={{
-                      width: '100%', aspectRatio: '1 / 1', background: '#f7f5ee',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    }}>
-                      <img src={img} alt={p.name}
-                           onError={(e) => { e.currentTarget.src = '/logo.svg'; }}
-                           style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
-                    </div>
-                    <div style={{ padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 4 }}>
-                      <div style={{
-                        fontSize: 13, color: '#222', fontWeight: 500,
-                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                      }}>{p.name}</div>
-                      <div style={{ fontSize: 11, color: '#aaa' }}>{p.sku || ''}</div>
-                      <div style={{
-                        fontSize: 13, fontWeight: 600, color: '#0a3d2e',
-                        display: 'flex', justifyContent: 'space-between',
-                      }}>
-                        <span>₴{Math.round(p.rental_price || 0)}/день</span>
-                        <span style={{ fontSize: 11, color: '#888', fontWeight: 400 }}>
-                          {p.quantity || 0} шт
-                        </span>
-                      </div>
-                      <button
-                        onClick={() => setAddToBoardProduct(p)}
-                        data-testid={`profile-fav-add-project-${p.product_id}`}
-                        style={{
-                          marginTop: 4, padding: '8px 12px', borderRadius: 999,
-                          background: '#0a3d2e', color: '#fff', border: 'none',
-                          cursor: 'pointer', fontSize: 12, fontWeight: 500,
-                          textTransform: 'uppercase', letterSpacing: '0.04em',
-                        }}
-                      >+ В проєкт</button>
-                    </div>
-                  </div>
-                );
-              })}
+            <div
+              className="product-grid"
+              data-testid="profile-favorites-grid"
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
+                gap: 16,
+              }}
+            >
+              {favProducts.map((p) => (
+                <ProductCard
+                  key={p.product_id}
+                  product={p}
+                  onAddToBoard={() => setAddToBoardProduct(p)}
+                  boardDates={{}}
+                  onOpenDetails={null}
+                />
+              ))}
             </div>
           )}
         </div>
