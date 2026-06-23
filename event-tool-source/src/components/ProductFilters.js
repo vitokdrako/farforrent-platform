@@ -93,10 +93,10 @@ const ProductFilters = ({
         </select>
       </div>
 
-      {/* Повзунок: мінімальна кількість на складі */}
+      {/* Поле: мінімальна кількість на складі (швидкий ввід числа) */}
       {onMinQuantityChange && (
         <div className="filter-group filter-group-quantity">
-          <label className="filter-label" htmlFor="qty-slider">
+          <label className="filter-label" htmlFor="qty-input">
             Мінімум на складі
             <span style={{
               marginLeft: '6px', color: minQuantity > 0 ? '#0a3d2e' : '#999',
@@ -105,30 +105,75 @@ const ProductFilters = ({
               {minQuantity > 0 ? `≥ ${minQuantity} шт` : 'будь-яка'}
             </span>
           </label>
-          <input
-            id="qty-slider"
-            type="range"
-            min={0}
-            max={maxQuantity}
-            step={1}
-            value={minQuantity}
-            onChange={(e) => onMinQuantityChange(Number(e.target.value))}
-            data-testid="filter-min-quantity"
-            className="filter-range"
-            style={{
-              width: '100%',
-              accentColor: '#0a3d2e',
-              cursor: 'pointer',
-              '--fill': `${(minQuantity / Math.max(1, maxQuantity)) * 100}%`,
-            }}
-          />
-          <div style={{
-            display: 'flex', justifyContent: 'space-between',
-            fontSize: 11, color: '#aaa', marginTop: 4,
-          }}>
-            <span>0</span>
-            <span>{Math.round(maxQuantity / 2)}</span>
-            <span>{maxQuantity}+</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <input
+              id="qty-input"
+              type="number"
+              inputMode="numeric"
+              min={0}
+              max={maxQuantity}
+              step={1}
+              value={minQuantity || ''}
+              placeholder="0"
+              onChange={(e) => {
+                const v = e.target.value;
+                if (v === '') { onMinQuantityChange(0); return; }
+                const n = Math.max(0, Math.min(maxQuantity, parseInt(v, 10) || 0));
+                onMinQuantityChange(n);
+              }}
+              onFocus={(e) => e.target.select()}
+              data-testid="filter-min-quantity"
+              style={{
+                flex: 1,
+                padding: '8px 12px',
+                fontSize: 14,
+                border: '1px solid #d4cab8',
+                borderRadius: 6,
+                background: '#fffdf7',
+                color: '#0a3d2e',
+                outline: 'none',
+                fontWeight: 600,
+              }}
+            />
+            {[1, 5, 10].map(preset => (
+              <button
+                key={preset}
+                type="button"
+                onClick={() => onMinQuantityChange(preset)}
+                data-testid={`qty-preset-${preset}`}
+                style={{
+                  padding: '6px 10px',
+                  fontSize: 12,
+                  border: minQuantity === preset ? '1px solid #0a3d2e' : '1px solid #d4cab8',
+                  background: minQuantity === preset ? '#0a3d2e' : '#fffdf7',
+                  color: minQuantity === preset ? '#fff' : '#0a3d2e',
+                  borderRadius: 6,
+                  cursor: 'pointer',
+                  fontWeight: 600,
+                }}
+              >
+                {preset}
+              </button>
+            ))}
+            {minQuantity > 0 && (
+              <button
+                type="button"
+                onClick={() => onMinQuantityChange(0)}
+                data-testid="qty-clear"
+                title="Скинути"
+                style={{
+                  padding: '6px 10px',
+                  fontSize: 14,
+                  border: '1px solid #e7d5d5',
+                  background: '#fff',
+                  color: '#a44',
+                  borderRadius: 6,
+                  cursor: 'pointer',
+                }}
+              >
+                ✕
+              </button>
+            )}
           </div>
         </div>
       )}
