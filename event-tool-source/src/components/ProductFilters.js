@@ -124,7 +124,7 @@ const ProductFilters = ({
               onFocus={(e) => e.target.select()}
               data-testid="filter-min-quantity"
               style={{
-                flex: 1,
+                width: '100%',
                 padding: '8px 12px',
                 fontSize: 14,
                 border: '1px solid #d4cab8',
@@ -135,45 +135,6 @@ const ProductFilters = ({
                 fontWeight: 600,
               }}
             />
-            {[1, 5, 10].map(preset => (
-              <button
-                key={preset}
-                type="button"
-                onClick={() => onMinQuantityChange(preset)}
-                data-testid={`qty-preset-${preset}`}
-                style={{
-                  padding: '6px 10px',
-                  fontSize: 12,
-                  border: minQuantity === preset ? '1px solid #0a3d2e' : '1px solid #d4cab8',
-                  background: minQuantity === preset ? '#0a3d2e' : '#fffdf7',
-                  color: minQuantity === preset ? '#fff' : '#0a3d2e',
-                  borderRadius: 6,
-                  cursor: 'pointer',
-                  fontWeight: 600,
-                }}
-              >
-                {preset}
-              </button>
-            ))}
-            {minQuantity > 0 && (
-              <button
-                type="button"
-                onClick={() => onMinQuantityChange(0)}
-                data-testid="qty-clear"
-                title="Скинути"
-                style={{
-                  padding: '6px 10px',
-                  fontSize: 14,
-                  border: '1px solid #e7d5d5',
-                  background: '#fff',
-                  color: '#a44',
-                  borderRadius: 6,
-                  cursor: 'pointer',
-                }}
-              >
-                ✕
-              </button>
-            )}
           </div>
         </div>
       )}
