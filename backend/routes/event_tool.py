@@ -20,6 +20,7 @@ import time
 from database_rentalhub import get_rh_db
 from utils.image_helper import normalize_image_url
 from utils.smart_search import filter_and_rank, parse_query
+from utils.rental_days import calculate_rental_days as _calc_days
 
 logger = logging.getLogger(__name__)
 
@@ -1438,9 +1439,10 @@ async def convert_to_order(
         if not board["rental_start_date"] or not board["rental_end_date"]:
             raise HTTPException(status_code=400, detail="Rental dates required. Please set rental period first.")
     
-        # Отримати items
+        # Отримати items (з повним полем застави)
         items_result = db.execute(text("""
-            SELECT ebi.product_id, ebi.quantity, p.rental_price, p.name, p.image_url, p.sku
+            SELECT ebi.product_id, ebi.quantity, p.rental_price, p.name, p.image_url, p.sku,
+                   COALESCE(p.deposit, p.price, 0) AS deposit_each
             FROM event_board_items ebi
             JOIN products p ON ebi.product_id = p.product_id
             WHERE ebi.board_id = :board_id
@@ -1450,10 +1452,11 @@ async def convert_to_order(
         if not items:
             raise HTTPException(status_code=400, detail="Board has no items")
         
-        # Розрахувати total
-        rental_days = board["rental_days"] or 1
+        # Розрахувати rental_days за правилами Farfor (єдине джерело правди)
+        rental_days = _calc_days(board["rental_start_date"], board["rental_end_date"]) or 1
         total_price = sum(float(item[2] or 0) * item[1] * rental_days for item in items)
-        deposit_amount = total_price * 0.3  # 30% депозит
+        # Застава = сума deposit товарів (як у RentalHub)
+        deposit_amount = sum(float(item[6] or 0) * item[1] for item in items)
         
         # Генерувати order_number з префіксом IT- для Ivent-tool
         # Починаємо з 10000 для IT замовлень
@@ -1929,13 +1932,17 @@ async def get_my_order_details(
         discount_amount = float(order_row[21] or 0)
         total_to_pay = round(max(0, total_rental - discount_amount) + service_fee, 2)
 
+        # Якщо є дати — рахуємо за правилами Farfor (override застарілого rental_days з БД)
+        _calc = _calc_days(order_row[3], order_row[4])
+        rental_days_calc = _calc if _calc > 0 else int(order_row[5] or 0)
+
         return {
             "order_id": order_row[0],
             "order_number": order_row[1],
             "status": order_row[2],
             "rental_start_date": order_row[3].isoformat() if order_row[3] else None,
             "rental_end_date": order_row[4].isoformat() if order_row[4] else None,
-            "rental_days": int(order_row[5] or 0),
+            "rental_days": rental_days_calc,
             "event_date": order_row[6].isoformat() if order_row[6] else None,
             "event_location": order_row[7],
             "total_price": total_rental,
@@ -2126,7 +2133,7 @@ async def get_order_estimate_html(
         FROM order_items WHERE order_id = :oid
     """), {"oid": order_id}).fetchall()
 
-    rental_days = int(o[5] or 1)
+    rental_days = _calc_days(o[3], o[4]) or int(o[5] or 1)
     total_price = float(o[7] or 0)
     deposit = float(o[8] or 0)
     total_pay = total_price + deposit
