@@ -64,35 +64,51 @@ ALTER TABLE event_boards MODIFY cover_image MEDIUMTEXT;
 
 User explicit request: "ми хіба при генерації не зберігаємо кошториси у себе в системі? чому клієнт не може їх бачити. також клієнт має сам редагувати свої дані якщо телефон/рахунок ФОП змінюється".
 
-### 1. Документи (RH → кабінет клієнта)
-- Існуючі endpoints у RH: `/api/documents/estimate/{order_id}/preview`, `/api/documents/invoice-offer/{order_id}/preview`
-- **NEW** `GET /api/event/cabinet/documents` — список документів клієнта (JOIN на customer_id + email)
+### 1. Документи (RH → кабінет клієнта, read-only)
+- Існуючі endpoints у RH: `/api/documents/estimate/{order_id}/preview`, `/api/documents/invoice-offer/{order_id}/preview`, `/api/documents/fop-invoice/{order_id}/preview`
+- **NEW** `GET /api/event/cabinet/documents` — список всіх документів клієнта (JOIN на customer_id + email)
 - **NEW** вкладка "📄 Документи" у `UserProfile.js`:
   - Перелік замовлень з кнопками "Кошторис" / "Рахунок-оферта" / "Рахунок ФОП"
-  - Бейдж "Новий" при першому перегляді
+  - Бейдж "Новий" при першому перегляді (зберігаємо `last_viewed_at` per (customer_id, document_id))
   - Лічильник нових на іконці кабінету (red dot)
-- При генерації документа в RH — клієнт **автоматично бачить** (без явного push), бо ми просто читаємо з тієї ж таблиці
+- При генерації документа в RH — клієнт **автоматично бачить** (без явного push), бо ми просто читаємо з тієї ж таблиці. Спільна база = нічого не дублюємо.
 
-### 2. Платники клієнта — CRUD
+### 2. ✍️ Річний договір (master agreement) з електронним підписом
+- Існуюча таблиця: `master_agreements` (один на клієнта, термін дії 12 міс, status=active|expired|cancelled)
+- Клієнт підписує **один раз** → договір автоматично прив'язується до **всіх замовлень** у наступні 12 місяців
+- **NEW** endpoints:
+  - `GET /api/event/cabinet/master-agreement` — поточний активний договір клієнта (або 404 якщо немає)
+  - `POST /api/event/cabinet/master-agreement/sign` — клієнт підписує (зберігаємо `signed_at`, `signature_ip`, `signature_user_agent`, опційно canvas-підпис як base64 у `signature_data`)
+- **NEW** вкладка "📜 Договір" у `UserProfile.js`:
+  - Якщо немає активного → банер "У вас 0 активних договорів. Підпишіть, щоб оформляти замовлення"
+  - Якщо активний → показує номер договору, дату підпису, дату закінчення, кнопка "Завантажити PDF/HTML"
+  - Підпис: чекбокс "Я ознайомлений з умовами публічної оферти" + canvas для підпису пальцем/мишкою + кнопка "Підписати"
+- При оформленні замовлення (CheckoutModal) — попередньо перевірка `GET /master-agreement`. Якщо немає → редирект на сторінку підпису. Якщо є → у замовленні зберігається `agreement_id`.
+- У RH менеджер бачить галочку "Договір підписано 23.06.2026 ✓" біля замовлення
+
+### 3. Платники клієнта — CRUD
 - Існуюча таблиця: `customer_payers` / `payers` (типи: ФОП, ТОВ, фіз.особа з ЕДРПОУ/ІПН, реквізити)
 - **NEW** endpoints:
   - `GET /api/event/cabinet/payers`
-  - `POST /api/event/cabinet/payers` (create ФОП/ТОВ/фіз.)
-  - `PUT /api/event/cabinet/payers/{id}` (edit phone/банк/рахунок/реквізити)
-  - `DELETE /api/event/cabinet/payers/{id}` (відв'язати)
+  - `POST /api/event/cabinet/payers`
+  - `PUT /api/event/cabinet/payers/{id}` (edit телефон/банк/рахунок/реквізити)
+  - `DELETE /api/event/cabinet/payers/{id}`
   - `PUT /api/event/cabinet/payers/{id}/make-default`
-- **NEW** вкладка "💼 Мої платники" у `UserProfile.js`:
-  - Картки як у RH (на скрині: ФОП Філімоніхіна / ТОВ загальна / ТОВ спрощена / Фіз.особа)
+- **NEW** вкладка "💼 Мої платники":
+  - Картки як у RH (ФОП Філімоніхіна / ТОВ загальна / ТОВ спрощена / Фіз.особа)
   - Кнопки "Редагувати" / "Зробити основним" / "Відв'язати"
 
-### 3. Профіль клієнта — edit
+### 4. Профіль клієнта — edit
 - Існуюча таблиця: `customers` (firstname, lastname, telephone, email, address)
 - **NEW** `PUT /api/event/cabinet/profile`
-- Вкладка "👤 Профіль" з формою (lock на email, edit на phone/ПІБ/адресу)
+- Вкладка "👤 Профіль" з формою (lock на email, edit phone/ПІБ/адресу)
 
-### 4. Push при отриманні нового документа (після #1)
-- При `INSERT INTO documents` в RH → trigger/код → push на customer
-- Залежить від HTTPS (`certbot --nginx`)
+### 5. Push-сповіщення (потребує HTTPS)
+- Тригери:
+  - INSERT у `documents` для клієнта → "Новий кошторис/рахунок-оферта готовий"
+  - INSERT у chat → "Нове повідомлення від менеджера"
+  - UPDATE status у `orders` → "Статус замовлення змінено"
+- Залежить від `certbot --nginx -d farforrent.com.ua`
 
 ---
 
