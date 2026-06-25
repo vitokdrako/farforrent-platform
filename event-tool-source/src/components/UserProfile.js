@@ -49,6 +49,35 @@ const formatDate = (iso) => {
   } catch { return iso; }
 };
 
+// Helpers для форми Профілю
+const inputStyle = {
+  width: '100%',
+  padding: '10px 12px',
+  border: '1px solid #d4cab8',
+  borderRadius: 8,
+  fontSize: 14,
+  background: '#fffdf7',
+  color: '#0a3d2e',
+  outline: 'none',
+  boxSizing: 'border-box',
+};
+const inputStyleLocked = {
+  ...inputStyle,
+  background: '#f1f5f9',
+  color: '#64748b',
+  cursor: 'not-allowed',
+};
+const Field = ({ label, children }) => (
+  <div>
+    <label style={{
+      display: 'block', fontSize: 11, color: '#94a3b8',
+      textTransform: 'uppercase', letterSpacing: '0.6px',
+      marginBottom: 4, fontWeight: 600,
+    }}>{label}</label>
+    {children}
+  </div>
+);
+
 const UserProfile = () => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
@@ -73,6 +102,11 @@ const UserProfile = () => {
   // Документи (Cabinet 2.0)
   const [docsList, setDocsList] = useState([]);
   const [docsLoading, setDocsLoading] = useState(false);
+  // Профіль (Cabinet 2.0)
+  const [profileData, setProfileData] = useState(null);
+  const [profileLoading, setProfileLoading] = useState(false);
+  const [profileSaving, setProfileSaving] = useState(false);
+  const [profileMsg, setProfileMsg] = useState('');
 
   useEffect(() => {
     loadData();
@@ -109,6 +143,41 @@ const UserProfile = () => {
       .catch(() => setDocsList([]))
       .finally(() => setDocsLoading(false));
   }, [activeTab]);
+
+  // Завантажуємо профіль
+  useEffect(() => {
+    if (activeTab !== 'profile') return;
+    setProfileLoading(true);
+    api.get('/event/cabinet/profile')
+      .then((r) => setProfileData(r.data))
+      .catch((e) => setProfileMsg(`Помилка: ${e?.response?.data?.detail || e.message}`))
+      .finally(() => setProfileLoading(false));
+  }, [activeTab]);
+
+  const saveProfile = async () => {
+    if (!profileData) return;
+    setProfileSaving(true);
+    setProfileMsg('');
+    try {
+      const payload = {
+        full_name: profileData.full_name,
+        phone: profileData.phone,
+        payer_type: profileData.payer_type,
+        tax_id: profileData.tax_id,
+        bank_details: profileData.bank_details,
+        company: profileData.company,
+        instagram: profileData.instagram,
+        preferred_contact: profileData.preferred_contact,
+      };
+      await api.put('/event/cabinet/profile', payload);
+      setProfileMsg('Профіль збережено');
+      setTimeout(() => setProfileMsg(''), 3000);
+    } catch (e) {
+      setProfileMsg(`Помилка: ${e?.response?.data?.detail || e.message}`);
+    } finally {
+      setProfileSaving(false);
+    }
+  };
 
   const loadData = async () => {
     try {
@@ -289,6 +358,7 @@ const UserProfile = () => {
             {key: 'boards', label: `Мої мудборди (${boards.length})`},
             {key: 'favorites', label: `Обране (${favoriteIds.length})`},
             {key: 'documents', label: 'Документи'},
+            {key: 'profile', label: 'Профіль'},
           ].map(t => (
             <button
               key={t.key}
@@ -1136,6 +1206,168 @@ const UserProfile = () => {
                     </div>
                   ));
                 })()}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Профіль */}
+        {activeTab === 'profile' && (
+          <div data-testid="profile-edit-section">
+            <div className="mb-6">
+              <h3 style={{fontSize: '20px', fontWeight: '600', color: '#333'}}>Профіль</h3>
+              <p style={{fontSize: '13px', color: '#666', marginTop: 4}}>
+                Особисті дані та реквізити. Email змінити не можна (звертайтесь до менеджера).
+              </p>
+            </div>
+
+            {profileLoading || !profileData ? (
+              <div className="text-center py-12" style={{color: '#999'}}>Завантаження...</div>
+            ) : (
+              <div style={{
+                background: '#fff', border: '1px solid #e5e7eb', borderRadius: 10,
+                padding: 20, maxWidth: 720,
+              }}>
+                {profileMsg && (
+                  <div data-testid="profile-msg" style={{
+                    padding: '10px 14px', marginBottom: 14, borderRadius: 8,
+                    background: profileMsg.startsWith('Помилка') ? '#fee2e2' : '#dcfce7',
+                    color: profileMsg.startsWith('Помилка') ? '#991b1b' : '#166534',
+                    fontSize: 13,
+                  }}>{profileMsg}</div>
+                )}
+
+                <div style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: 14}}>
+                  {/* Email — read-only */}
+                  <Field label="Email">
+                    <input
+                      type="email" value={profileData.email || ''} disabled
+                      data-testid="profile-email-input"
+                      style={inputStyleLocked}
+                    />
+                  </Field>
+                  <Field label="ПІБ">
+                    <input
+                      type="text"
+                      value={profileData.full_name || ''}
+                      onChange={(e) => setProfileData({...profileData, full_name: e.target.value})}
+                      data-testid="profile-fullname-input"
+                      style={inputStyle}
+                    />
+                  </Field>
+                  <Field label="Телефон">
+                    <input
+                      type="tel"
+                      value={profileData.phone || ''}
+                      onChange={(e) => setProfileData({...profileData, phone: e.target.value})}
+                      data-testid="profile-phone-input"
+                      style={inputStyle}
+                    />
+                  </Field>
+                  <Field label="Тип платника">
+                    <select
+                      value={profileData.payer_type || 'individual'}
+                      onChange={(e) => setProfileData({...profileData, payer_type: e.target.value})}
+                      data-testid="profile-payer-type"
+                      style={inputStyle}
+                    >
+                      <option value="individual">Фізична особа</option>
+                      <option value="fop">ФОП</option>
+                      <option value="fop_simple">ФОП спрощена</option>
+                      <option value="tov">ТОВ</option>
+                    </select>
+                  </Field>
+                  {profileData.payer_type !== 'individual' && (
+                    <>
+                      <Field label="ЕДРПОУ / ІПН">
+                        <input
+                          type="text"
+                          value={profileData.tax_id || ''}
+                          onChange={(e) => setProfileData({...profileData, tax_id: e.target.value})}
+                          data-testid="profile-taxid-input"
+                          style={inputStyle}
+                        />
+                      </Field>
+                      <Field label="Компанія">
+                        <input
+                          type="text"
+                          value={profileData.company || ''}
+                          onChange={(e) => setProfileData({...profileData, company: e.target.value})}
+                          data-testid="profile-company-input"
+                          style={inputStyle}
+                        />
+                      </Field>
+                    </>
+                  )}
+                  <Field label="Instagram">
+                    <input
+                      type="text" placeholder="@username"
+                      value={profileData.instagram || ''}
+                      onChange={(e) => setProfileData({...profileData, instagram: e.target.value})}
+                      data-testid="profile-instagram-input"
+                      style={inputStyle}
+                    />
+                  </Field>
+                  <Field label="Бажаний контакт">
+                    <select
+                      value={profileData.preferred_contact || ''}
+                      onChange={(e) => setProfileData({...profileData, preferred_contact: e.target.value})}
+                      data-testid="profile-preferred-contact"
+                      style={inputStyle}
+                    >
+                      <option value="">Не вказано</option>
+                      <option value="phone">Телефон</option>
+                      <option value="viber">Viber</option>
+                      <option value="telegram">Telegram</option>
+                      <option value="instagram">Instagram</option>
+                      <option value="email">Email</option>
+                    </select>
+                  </Field>
+                </div>
+
+                {profileData.payer_type !== 'individual' && (
+                  <div style={{marginTop: 16, padding: 14, background: '#f8fafc', borderRadius: 8}}>
+                    <div style={{fontSize: 13, fontWeight: 600, color: '#0a3d2e', marginBottom: 10}}>Банківські реквізити</div>
+                    <div style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 10}}>
+                      <Field label="IBAN">
+                        <input type="text" placeholder="UA12 ..."
+                          value={(profileData.bank_details && profileData.bank_details.iban) || ''}
+                          onChange={(e) => setProfileData({...profileData, bank_details: {...(profileData.bank_details || {}), iban: e.target.value}})}
+                          data-testid="profile-bank-iban"
+                          style={inputStyle}
+                        />
+                      </Field>
+                      <Field label="Банк">
+                        <input type="text"
+                          value={(profileData.bank_details && profileData.bank_details.bank) || ''}
+                          onChange={(e) => setProfileData({...profileData, bank_details: {...(profileData.bank_details || {}), bank: e.target.value}})}
+                          data-testid="profile-bank-name"
+                          style={inputStyle}
+                        />
+                      </Field>
+                      <Field label="МФО">
+                        <input type="text"
+                          value={(profileData.bank_details && profileData.bank_details.mfo) || ''}
+                          onChange={(e) => setProfileData({...profileData, bank_details: {...(profileData.bank_details || {}), mfo: e.target.value}})}
+                          data-testid="profile-bank-mfo"
+                          style={inputStyle}
+                        />
+                      </Field>
+                    </div>
+                  </div>
+                )}
+
+                <div style={{marginTop: 20, display: 'flex', gap: 10, justifyContent: 'flex-end'}}>
+                  <button
+                    onClick={saveProfile}
+                    disabled={profileSaving}
+                    data-testid="profile-save-btn"
+                    className="fd-btn fd-btn-black"
+                    style={{padding: '12px 28px', opacity: profileSaving ? 0.6 : 1}}
+                  >
+                    {profileSaving ? 'Збереження...' : 'Зберегти'}
+                  </button>
+                </div>
               </div>
             )}
           </div>

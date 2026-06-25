@@ -2363,6 +2363,66 @@ async def view_cabinet_document(
     return HTMLResponse(content=wrapped)
 
 
+@router.get("/cabinet/profile")
+async def get_cabinet_profile(
+    db: Session = Depends(get_rh_db),
+    token: str = Depends(get_token_from_header),
+):
+    """Профіль клієнта для редагування у кабінеті."""
+    customer = get_current_customer(token, db)
+    cuid = customer.get("client_user_id") or customer.get("id") or customer.get("customer_id")
+    row = db.execute(text("""
+        SELECT id, email, phone, full_name, payer_type, tax_id, bank_details,
+               company, instagram, preferred_contact, created_at
+        FROM client_users WHERE id = :cid LIMIT 1
+    """), {"cid": cuid}).fetchone()
+    if not row:
+        raise HTTPException(404, "Профіль не знайдено")
+    return {
+        "id": row[0],
+        "email": row[1],
+        "phone": row[2] or "",
+        "full_name": row[3] or "",
+        "payer_type": row[4] or "individual",
+        "tax_id": row[5] or "",
+        "bank_details": row[6] or {},
+        "company": row[7] or "",
+        "instagram": row[8] or "",
+        "preferred_contact": row[9] or "",
+        "created_at": row[10].isoformat() if row[10] else None,
+    }
+
+
+@router.put("/cabinet/profile")
+async def update_cabinet_profile(
+    payload: dict = Body(...),
+    db: Session = Depends(get_rh_db),
+    token: str = Depends(get_token_from_header),
+):
+    """Редагування профілю клієнтом. Email — заблоковано (для зміни — підтримка)."""
+    customer = get_current_customer(token, db)
+    cuid = customer.get("client_user_id") or customer.get("id") or customer.get("customer_id")
+
+    ALLOWED = {"phone", "full_name", "payer_type", "tax_id", "bank_details",
+               "company", "instagram", "preferred_contact"}
+    updates = {k: v for k, v in payload.items() if k in ALLOWED}
+    if not updates:
+        raise HTTPException(400, "Немає полів для оновлення")
+
+    if "payer_type" in updates and updates["payer_type"] not in ("individual", "fop", "fop_simple", "tov"):
+        raise HTTPException(400, "Некоректний тип платника")
+
+    if "bank_details" in updates and isinstance(updates["bank_details"], dict):
+        import json as _json
+        updates["bank_details"] = _json.dumps(updates["bank_details"], ensure_ascii=False)
+
+    set_clause = ", ".join([f"{k} = :{k}" for k in updates.keys()])
+    updates["cid"] = cuid
+    db.execute(text(f"UPDATE client_users SET {set_clause}, updated_at = NOW() WHERE id = :cid"), updates)
+    db.commit()
+    return {"success": True, "message": "Профіль оновлено"}
+
+
 @router.get("/orders/{order_id}/documents")
 async def get_my_order_documents(
     order_id: int,
