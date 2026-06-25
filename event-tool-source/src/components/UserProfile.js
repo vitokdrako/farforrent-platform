@@ -10,6 +10,7 @@ import { favoritesAPI } from '../api/favorites';
 import api from '../api/axios';
 import { ordersApi } from '../api/orders';
 import SignDocumentModal from './SignDocumentModal';
+import SignMasterAgreementModal from './SignMasterAgreementModal';
 import NotificationToggle from './NotificationToggle';
 import OrderChat from './OrderChat';
 import AddToBoardModal from './AddToBoardModal';
@@ -113,6 +114,11 @@ const UserProfile = () => {
   const [payersMsg, setPayersMsg] = useState('');
   const [payerEdit, setPayerEdit] = useState(null); // {id?, payer_type, company_name, ...} — null=closed, {}=new
   const [payerSaving, setPayerSaving] = useState(false);
+  // Master Agreement (Cabinet 2.0)
+  const [agreement, setAgreement] = useState(null);
+  const [agreementLoading, setAgreementLoading] = useState(false);
+  const [agreementMsg, setAgreementMsg] = useState('');
+  const [signingAgreement, setSigningAgreement] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -278,6 +284,26 @@ const UserProfile = () => {
       setPayersMsg(`Помилка: ${e?.response?.data?.detail || e.message}`);
     }
   };
+
+  // ===== Master Agreement (Cabinet 2.0) =====
+  const loadAgreement = async () => {
+    setAgreementLoading(true);
+    setAgreementMsg('');
+    try {
+      const r = await api.get('/event/cabinet/master-agreement');
+      setAgreement(r.data);
+    } catch (e) {
+      setAgreementMsg(`Помилка: ${e?.response?.data?.detail || e.message}`);
+      setAgreement(null);
+    } finally {
+      setAgreementLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab !== 'agreement') return;
+    loadAgreement();
+  }, [activeTab]);
 
   const loadData = async () => {
     try {
@@ -458,6 +484,7 @@ const UserProfile = () => {
             {key: 'boards', label: `Мої мудборди (${boards.length})`},
             {key: 'favorites', label: `Обране (${favoriteIds.length})`},
             {key: 'documents', label: 'Документи'},
+            {key: 'agreement', label: 'Договір'},
             {key: 'payers', label: 'Платники'},
             {key: 'profile', label: 'Профіль'},
           ].map(t => (
@@ -1312,6 +1339,118 @@ const UserProfile = () => {
           </div>
         )}
 
+        {/* Договір (Master Agreement) */}
+        {activeTab === 'agreement' && (
+          <div data-testid="profile-agreement-section">
+            <div className="mb-6">
+              <h3 style={{fontSize: '20px', fontWeight: '600', color: '#333'}}>Річний договір</h3>
+              <p style={{fontSize: '13px', color: '#666', marginTop: 4}}>
+                Рамковий договір оренди підписується один раз на рік. Усі окремі замовлення оформлюються як додатки до цього договору.
+              </p>
+            </div>
+
+            {agreementMsg && (
+              <div data-testid="agreement-msg" style={{
+                padding: '10px 14px', marginBottom: 14, borderRadius: 8,
+                background: agreementMsg.startsWith('Помилка') ? '#fee2e2' : '#dcfce7',
+                color: agreementMsg.startsWith('Помилка') ? '#991b1b' : '#166534',
+                fontSize: 13,
+              }}>{agreementMsg}</div>
+            )}
+
+            {agreementLoading || !agreement ? (
+              <div className="text-center py-12" style={{color: '#999'}}>Завантаження...</div>
+            ) : (() => {
+              const isSigned = agreement.status === 'signed' && !agreement.needs_signature;
+              const validUntil = agreement.valid_until ? new Date(agreement.valid_until) : null;
+              const validUntilStr = validUntil ? validUntil.toLocaleDateString('uk-UA') : '—';
+              const signedAtStr = agreement.signed_at ? new Date(agreement.signed_at).toLocaleDateString('uk-UA') : null;
+              const previewUrl = `${process.env.REACT_APP_BACKEND_URL || ''}/api/event/cabinet/master-agreement/view?token=${encodeURIComponent(localStorage.getItem('access_token') || '')}`;
+              return (
+                <div data-testid="agreement-card" style={{
+                  background: '#fff', border: isSigned ? '2px solid #0a3d2e' : '1px solid #fbbf24',
+                  borderRadius: 10, padding: 20, maxWidth: 720,
+                }}>
+                  <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap', marginBottom: 14}}>
+                    <div>
+                      <div style={{fontSize: 11, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: 4}}>
+                        Договір №
+                      </div>
+                      <div style={{fontSize: 18, fontWeight: 600, color: '#0a3d2e'}} data-testid="agreement-number">
+                        {agreement.contract_number || '—'}
+                      </div>
+                    </div>
+                    <div data-testid="agreement-status-badge" style={{
+                      padding: '6px 14px', borderRadius: 14, fontSize: 12, fontWeight: 600,
+                      background: isSigned ? '#dcfce7' : '#fef3c7',
+                      color: isSigned ? '#166534' : '#92400e',
+                    }}>
+                      {isSigned ? '✓ Підписано' : 'Очікує підпису'}
+                    </div>
+                  </div>
+
+                  <div style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 14, marginBottom: 18}}>
+                    <div>
+                      <div style={{fontSize: 11, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: 4}}>
+                        Дійсний до
+                      </div>
+                      <div style={{fontSize: 14, color: '#0f172a', fontWeight: 500}} data-testid="agreement-valid-until">
+                        {validUntilStr}
+                      </div>
+                    </div>
+                    {signedAtStr && (
+                      <div>
+                        <div style={{fontSize: 11, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: 4}}>
+                          Підписано
+                        </div>
+                        <div style={{fontSize: 14, color: '#0f172a', fontWeight: 500}} data-testid="agreement-signed-at">
+                          {signedAtStr}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {!isSigned && (
+                    <div style={{
+                      padding: 12, background: '#fef3c7', border: '1px solid #fbbf24',
+                      borderRadius: 8, fontSize: 13, color: '#92400e', marginBottom: 14, lineHeight: 1.5,
+                    }}>
+                      <strong>Увага:</strong> без підписаного річного договору ви не зможете оформити замовлення. Будь ласка, перегляньте умови та підпишіть.
+                    </div>
+                  )}
+
+                  <div style={{display: 'flex', gap: 10, flexWrap: 'wrap'}}>
+                    <a
+                      href={previewUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      data-testid="agreement-preview-btn"
+                      style={{
+                        padding: '10px 20px', background: 'transparent',
+                        border: '1px solid #d4cab8', borderRadius: 8, color: '#0a3d2e',
+                        cursor: 'pointer', fontSize: 13, textDecoration: 'none',
+                        display: 'inline-flex', alignItems: 'center',
+                      }}
+                    >
+                      Переглянути договір
+                    </a>
+                    {!isSigned && (
+                      <button
+                        onClick={() => setSigningAgreement(true)}
+                        data-testid="agreement-sign-btn"
+                        className="fd-btn fd-btn-black"
+                        style={{padding: '10px 24px', fontSize: 13}}
+                      >
+                        Підписати договір
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
+        )}
+
         {/* Платники */}
         {activeTab === 'payers' && (
           <div data-testid="profile-payers-section">
@@ -1735,6 +1874,21 @@ const UserProfile = () => {
             api.get('/event/boards').then((r) => {
               setBoards(Array.isArray(r.data) ? r.data : (r.data?.boards || []));
             }).catch(() => {});
+          }}
+        />
+      )}
+
+      {/* Модалка підписання річного договору */}
+      {signingAgreement && agreement && (
+        <SignMasterAgreementModal
+          agreement={agreement}
+          user={user}
+          onClose={() => setSigningAgreement(false)}
+          onSigned={() => {
+            setSigningAgreement(false);
+            setAgreementMsg('Договір успішно підписано');
+            setTimeout(() => setAgreementMsg(''), 3000);
+            loadAgreement();
           }}
         />
       )}

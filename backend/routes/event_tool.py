@@ -8,7 +8,7 @@ from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 from typing import List, Optional
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 from pydantic import BaseModel
 import uuid
 import logging
@@ -1433,6 +1433,17 @@ async def convert_to_order(
         
         logger.info(f"[convert-to-order] Auto-filled: name={customer_name}, phone={phone}, event={event_name}")
         
+        # ====== Перевірка наявності підписаного річного договору ======
+        if client_user_id and not _has_valid_signed_agreement(db, client_user_id):
+            logger.warning(f"[convert-to-order] No signed agreement for client_user {client_user_id}")
+            raise HTTPException(
+                status_code=412,
+                detail={
+                    "code": "AGREEMENT_REQUIRED",
+                    "message": "Перед оформленням замовлення підпишіть річний договір у кабінеті (вкладка «Договір»).",
+                },
+            )
+
         if board["converted_to_order_id"]:
             raise HTTPException(status_code=400, detail="Board already converted to order")
         
@@ -2867,6 +2878,321 @@ async def approve_document_as_client(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+
+
+# ============================================================================
+# MASTER AGREEMENT (Cabinet 2.0 — Річний договір)
+# ============================================================================
+# Використовуємо існуючі таблиці master_agreements + document_signatures.
+# Логіка:
+#  • Один активний (status='signed' + valid_until >= today) договір на client_user_id.
+#  • Якщо немає → auto-create draft (executor_type='tov', 12 міс).
+#  • Підпис: canvas → INSERT document_signatures (document_id='master_agreement:<id>', signer_role='tenant')
+#            + UPDATE master_agreements SET status='signed', signed_at=NOW()
+#            + UPDATE client_users.active_master_agreement_id = <id>
+#  • CheckoutModal / convert-to-order: блокує без підписаного активного договору.
+
+_EXECUTORS = {
+    "tov": {
+        "name": "ТОВ «ФАРФОР РЕНТ»",
+        "short_name": "ТОВ «ФАРФОР РЕНТ»",
+        "edrpou": "44651557",
+        "address": "02000, м. Київ, вул. Магнітогорська, буд. 1, корп. 34",
+        "bank": "АТ КБ «ПРИВАТБАНК»",
+        "iban": "UA913052990000026002015020709",
+        "director": "Драко В.А.",
+    },
+}
+
+
+def _generate_ma_contract_number(db: Session, contract_date: date) -> str:
+    """DDMMYYYY-N unique per day."""
+    date_str = contract_date.strftime("%d%m%Y")
+    seq = db.execute(text("""
+        SELECT COUNT(*) FROM master_agreements WHERE DATE(valid_from) = :d
+    """), {"d": contract_date}).fetchone()[0] + 1
+    return f"{date_str}-{seq}"
+
+
+def _get_or_create_draft_agreement(db: Session, client_user_id: int) -> dict:
+    """
+    Знаходить активний (signed+valid) або draft договір клієнта.
+    Якщо немає — створює draft.
+    Повертає dict зі станом.
+    """
+    # Спочатку шукаємо підписаний і ще валідний
+    row = db.execute(text("""
+        SELECT id, contract_number, status, valid_from, valid_until, signed_at
+        FROM master_agreements
+        WHERE client_user_id = :cid
+          AND status = 'signed'
+          AND valid_until >= CURDATE()
+        ORDER BY signed_at DESC LIMIT 1
+    """), {"cid": client_user_id}).fetchone()
+    if row:
+        return {
+            "id": row[0], "contract_number": row[1], "status": row[2],
+            "valid_from": row[3].isoformat() if row[3] else None,
+            "valid_until": row[4].isoformat() if row[4] else None,
+            "signed_at": row[5].isoformat() if row[5] else None,
+            "needs_signature": False,
+        }
+
+    # Далі — draft/sent (можна підписати)
+    row = db.execute(text("""
+        SELECT id, contract_number, status, valid_from, valid_until, signed_at
+        FROM master_agreements
+        WHERE client_user_id = :cid AND status IN ('draft', 'sent')
+        ORDER BY created_at DESC LIMIT 1
+    """), {"cid": client_user_id}).fetchone()
+    if row:
+        return {
+            "id": row[0], "contract_number": row[1], "status": row[2],
+            "valid_from": row[3].isoformat() if row[3] else None,
+            "valid_until": row[4].isoformat() if row[4] else None,
+            "signed_at": row[5].isoformat() if row[5] else None,
+            "needs_signature": True,
+        }
+
+    # Нічого немає → створюємо draft
+    client = db.execute(text("""
+        SELECT id, full_name, email, phone, payer_type, tax_id, bank_details
+        FROM client_users WHERE id = :id LIMIT 1
+    """), {"id": client_user_id}).fetchone()
+    if not client:
+        raise HTTPException(404, "Клієнтський профіль не знайдено")
+
+    contract_date = date.today()
+    valid_until = contract_date + timedelta(days=365)
+    contract_number = _generate_ma_contract_number(db, contract_date)
+    executor = _EXECUTORS["tov"]
+    bank_details = None
+    try:
+        bank_details = json.loads(client[6]) if client[6] else None
+    except Exception:
+        bank_details = None
+    snapshot = {
+        "contract_number": contract_number,
+        "contract_date": contract_date.isoformat(),
+        "valid_from": contract_date.isoformat(),
+        "valid_until": valid_until.isoformat(),
+        "executor_type": "tov",
+        "executor": executor,
+        "generated_at": datetime.now().isoformat(),
+        "client": {
+            "id": client[0], "full_name": client[1], "email": client[2],
+            "phone": client[3], "payer_type": client[4],
+            "tax_id": client[5], "bank_details": bank_details,
+        },
+    }
+    db.execute(text("""
+        INSERT INTO master_agreements
+            (client_user_id, payer_profile_id, contract_number, template_version,
+             valid_from, valid_until, status, snapshot_json)
+        VALUES (:cid, NULL, :num, 'tov', :vf, :vu, 'draft', :snap)
+    """), {
+        "cid": client_user_id, "num": contract_number,
+        "vf": contract_date, "vu": valid_until,
+        "snap": json.dumps(snapshot, ensure_ascii=False),
+    })
+    # LAST_INSERT_ID() is connection-scoped — fetch before commit on the same session
+    new_id = db.execute(text("SELECT LAST_INSERT_ID()")).fetchone()[0]
+    db.commit()
+    return {
+        "id": new_id, "contract_number": contract_number, "status": "draft",
+        "valid_from": contract_date.isoformat(),
+        "valid_until": valid_until.isoformat(),
+        "signed_at": None,
+        "needs_signature": True,
+    }
+
+
+def _has_valid_signed_agreement(db: Session, client_user_id: int) -> bool:
+    """True якщо у клієнта є підписаний і валідний договір."""
+    row = db.execute(text("""
+        SELECT 1 FROM master_agreements
+        WHERE client_user_id = :cid AND status = 'signed' AND valid_until >= CURDATE()
+        LIMIT 1
+    """), {"cid": client_user_id}).fetchone()
+    return bool(row)
+
+
+def _resolve_client_user_id(db: Session, customer: dict) -> int:
+    """Знаходить client_users.id для поточного customer (з event_customers)."""
+    cuid = customer.get("client_user_id") or customer.get("id") or customer.get("customer_id")
+    return int(cuid) if cuid else 0
+
+
+@router.get("/cabinet/master-agreement")
+async def get_cabinet_master_agreement(
+    db: Session = Depends(get_rh_db),
+    token: str = Depends(get_token_from_header),
+):
+    """Поточний стан річного договору клієнта. Створює draft якщо немає."""
+    customer = get_current_customer(token, db)
+    cuid = _resolve_client_user_id(db, customer)
+    if not cuid:
+        raise HTTPException(401, "Не вдалось ідентифікувати клієнта")
+    return _get_or_create_draft_agreement(db, cuid)
+
+
+@router.get("/cabinet/master-agreement/view")
+async def view_cabinet_master_agreement(
+    token: str,
+    db: Session = Depends(get_rh_db),
+):
+    """HTML-прев'ю договору. Токен у query (щоб працювало в iframe)."""
+    customer = get_current_customer(token, db)
+    cuid = _resolve_client_user_id(db, customer)
+    if not cuid:
+        raise HTTPException(401, "Не вдалось ідентифікувати клієнта")
+    state = _get_or_create_draft_agreement(db, cuid)
+    agreement_id = state["id"]
+
+    # Render via existing service
+    try:
+        from services.pdf_generator import generate_master_agreement_html
+    except Exception:
+        generate_master_agreement_html = None
+
+    ag = db.execute(text("""
+        SELECT ma.id, ma.contract_number, ma.status, ma.valid_from, ma.valid_until,
+               ma.signed_at, ma.snapshot_json, ma.note,
+               cu.full_name, cu.email, cu.phone, cu.payer_type, cu.tax_id, cu.bank_details
+        FROM master_agreements ma
+        LEFT JOIN client_users cu ON cu.id = ma.client_user_id
+        WHERE ma.id = :id AND ma.client_user_id = :cid
+    """), {"id": agreement_id, "cid": cuid}).fetchone()
+    if not ag:
+        raise HTTPException(404, "Договір не знайдено")
+
+    snap = None
+    if ag[6]:
+        try:
+            snap = json.loads(ag[6]) if isinstance(ag[6], str) else ag[6]
+        except Exception:
+            snap = None
+    agreement_data = {
+        "contract_number": ag[1],
+        "status": ag[2],
+        "valid_from": ag[3].isoformat() if ag[3] else None,
+        "valid_until": ag[4].isoformat() if ag[4] else None,
+        "signed_at": ag[5].isoformat() if ag[5] else None,
+        "signed_by": None,
+        "snapshot": snap,
+    }
+    client_data = {
+        "full_name": ag[8], "email": ag[9], "phone": ag[10],
+        "payer_type": ag[11], "tax_id": ag[12], "bank_details": ag[13],
+    }
+
+    if generate_master_agreement_html:
+        html = generate_master_agreement_html(agreement_data, client_data)
+    else:
+        # Простий fallback — на випадок недоступності сервісу
+        html = f"""
+        <!DOCTYPE html><html><head><meta charset="utf-8">
+        <title>Договір {ag[1]}</title>
+        <style>body{{font-family:Georgia,serif;max-width:800px;margin:40px auto;padding:20px;color:#0f172a;line-height:1.6}}
+        h1{{font-size:20px;text-align:center}} .row{{display:flex;justify-content:space-between;margin:10px 0}}
+        .label{{color:#64748b}}</style></head><body>
+        <h1>РАМКОВИЙ ДОГОВІР ОРЕНДИ № {ag[1]}</h1>
+        <div class="row"><span class="label">Дата:</span><span>{agreement_data['valid_from']}</span></div>
+        <div class="row"><span class="label">Діє до:</span><span>{agreement_data['valid_until']}</span></div>
+        <h3>Орендодавець</h3><p>{_EXECUTORS['tov']['name']}, ЄДРПОУ {_EXECUTORS['tov']['edrpou']}</p>
+        <h3>Орендар (клієнт)</h3><p>{client_data['full_name'] or ''}, тел. {client_data['phone'] or ''}, email {client_data['email'] or ''}</p>
+        <p>Умови оренди стандартні, повний текст договору надається офіс-менеджером.</p>
+        </body></html>"""
+    return HTMLResponse(content=html, media_type="text/html")
+
+
+@router.post("/cabinet/master-agreement/sign")
+async def sign_cabinet_master_agreement(
+    payload: dict = Body(...),
+    request: Request = None,
+    db: Session = Depends(get_rh_db),
+    token: str = Depends(get_token_from_header),
+):
+    """
+    Клієнт підписує річний договір.
+    Body: {signature_png_base64, signer_name, agreement_id?}
+    """
+    customer = get_current_customer(token, db)
+    cuid = _resolve_client_user_id(db, customer)
+    if not cuid:
+        raise HTTPException(401, "Не вдалось ідентифікувати клієнта")
+
+    sig_b64 = (payload.get("signature_png_base64") or "").strip()
+    if not sig_b64:
+        raise HTTPException(400, "signature_png_base64 required")
+    if not sig_b64.startswith("data:image"):
+        sig_b64 = f"data:image/png;base64,{sig_b64}"
+
+    # Знаходимо договір (за id або поточний draft)
+    state = _get_or_create_draft_agreement(db, cuid)
+    agreement_id = int(payload.get("agreement_id") or state["id"])
+    ag = db.execute(text("""
+        SELECT id, status, client_user_id, contract_number
+        FROM master_agreements WHERE id = :id LIMIT 1
+    """), {"id": agreement_id}).fetchone()
+    if not ag or int(ag[2] or 0) != cuid:
+        raise HTTPException(404, "Договір не знайдено")
+    if ag[1] == "signed":
+        raise HTTPException(400, "Договір вже підписаний")
+    if ag[1] not in ("draft", "sent"):
+        raise HTTPException(400, f"Не можна підписати договір зі статусом '{ag[1]}'")
+
+    signer_name = (payload.get("signer_name") or "").strip() or (
+        f"{customer.get('firstname','')} {customer.get('lastname','')}".strip()
+        or customer.get("email") or ""
+    )
+    ip_addr = ""
+    user_agent = ""
+    if request is not None:
+        ip_addr = (request.client.host if request.client else "") or request.headers.get("x-forwarded-for", "")
+        user_agent = request.headers.get("user-agent", "")[:500]
+
+    doc_id = f"master_agreement:{agreement_id}"
+    # Перевірка повторного підпису
+    existing = db.execute(text("""
+        SELECT id FROM document_signatures
+        WHERE document_id = :did AND signer_role = 'tenant'
+    """), {"did": doc_id}).fetchone()
+    if existing:
+        raise HTTPException(400, "Договір вже підписаний клієнтом")
+
+    db.execute(text("""
+        INSERT INTO document_signatures
+            (document_id, signer_role, signature_image, signer_name, signed_at, ip_address, user_agent)
+        VALUES (:did, 'tenant', :sig, :name, NOW(), :ip, :ua)
+    """), {"did": doc_id, "sig": sig_b64, "name": signer_name,
+           "ip": ip_addr or None, "ua": user_agent or None})
+
+    db.execute(text("""
+        UPDATE master_agreements
+        SET status = 'signed', signed_at = NOW(),
+            note = CONCAT(IFNULL(note, ''), CASE WHEN note IS NULL OR note = '' THEN '' ELSE '\n' END,
+                          'Підписано клієнтом: ', :name, ' [', :ip, ']')
+        WHERE id = :id
+    """), {"id": agreement_id, "name": signer_name, "ip": ip_addr or "—"})
+
+    # active_master_agreement_id (колонка може бути відсутня в старих схемах)
+    try:
+        db.execute(text("""
+            UPDATE client_users SET active_master_agreement_id = :aid WHERE id = :cid
+        """), {"aid": agreement_id, "cid": cuid})
+    except Exception:
+        db.rollback()
+        # знову встановимо нову транзакцію в цій сесії
+        db.execute(text("SELECT 1"))
+
+    db.commit()
+    return {
+        "success": True,
+        "agreement_id": agreement_id,
+        "contract_number": ag[3],
+        "message": "Договір підписано.",
+    }
 
 
 # ============================================================================

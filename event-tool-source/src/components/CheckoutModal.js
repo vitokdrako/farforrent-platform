@@ -18,6 +18,20 @@ const CheckoutModal = ({ board, user, onClose, onSuccess }) => {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(null);
+  // Master Agreement gate
+  const [agreement, setAgreement] = useState(null); // {status, needs_signature, contract_number, valid_until}
+  const [agreementChecking, setAgreementChecking] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    api.get('/event/cabinet/master-agreement')
+      .then((r) => { if (!cancelled) setAgreement(r.data); })
+      .catch(() => { if (!cancelled) setAgreement(null); })
+      .finally(() => { if (!cancelled) setAgreementChecking(false); });
+    return () => { cancelled = true; };
+  }, []);
+
+  const needsAgreement = !!agreement && agreement.needs_signature === true;
 
   const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
 
@@ -74,7 +88,15 @@ const CheckoutModal = ({ board, user, onClose, onSuccess }) => {
     } catch (err) {
       const d = err?.response?.data?.detail;
       let msg = 'Помилка оформлення';
-      if (typeof d === 'string') msg = d;
+      // 412 + AGREEMENT_REQUIRED → перезавантажимо стан договору і покажемо банер
+      if (err?.response?.status === 412 && (d?.code === 'AGREEMENT_REQUIRED' || (typeof d === 'string' && d.includes('договір')))) {
+        msg = (typeof d === 'string' ? d : d?.message) || 'Підпишіть річний договір у кабінеті.';
+        // Оновити стан, щоб засвітити банер і заблокувати кнопку
+        try {
+          const r = await api.get('/event/cabinet/master-agreement');
+          setAgreement(r.data);
+        } catch (_e) { /* ignore */ }
+      } else if (typeof d === 'string') msg = d;
       else if (Array.isArray(d)) msg = d.map(x => x.msg || JSON.stringify(x)).join('; ');
       else if (d?.message) msg = d.message + (d.details ? ` (${d.details})` : '');
       else if (d?.msg) msg = d.msg;
@@ -268,19 +290,40 @@ const CheckoutModal = ({ board, user, onClose, onSuccess }) => {
           </div>
         )}
 
+        {needsAgreement && (
+          <div
+            data-testid="checkout-agreement-banner"
+            style={{
+              padding: '14px 16px', background: '#fef3c7', border: '1px solid #fbbf24',
+              borderRadius: 8, fontSize: 13, color: '#92400e', marginBottom: 16, lineHeight: 1.5,
+            }}
+          >
+            <div style={{fontWeight: 600, marginBottom: 4}}>Потрібен підписаний річний договір</div>
+            Перш ніж оформити замовлення, підпишіть рамковий договір оренди (один раз на рік).
+            Перейдіть у <strong>«Особистий кабінет» → «Договір»</strong>, або просто закрийте це вікно й натисніть посилання у профілі.
+          </div>
+        )}
+
         <button
           type="submit"
-          disabled={submitting}
+          disabled={submitting || agreementChecking || needsAgreement}
           data-testid="checkout-submit"
           className="fd-btn fd-btn-black"
           style={{
             width: '100%',
             padding: '14px',
             fontSize: '13px',
-            opacity: submitting ? 0.6 : 1,
+            opacity: (submitting || agreementChecking || needsAgreement) ? 0.6 : 1,
+            cursor: (submitting || needsAgreement) ? 'not-allowed' : 'pointer',
           }}
         >
-          {submitting ? 'Створюємо...' : 'Підтвердити замовлення'}
+          {submitting
+            ? 'Створюємо...'
+            : needsAgreement
+              ? 'Спершу підпишіть договір'
+              : agreementChecking
+                ? 'Перевіряємо договір...'
+                : 'Підтвердити замовлення'}
         </button>
 
         <div style={{marginTop: '12px', fontSize: '11px', color: '#94a3b8', textAlign: 'center'}}>

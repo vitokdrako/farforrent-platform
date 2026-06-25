@@ -18,6 +18,16 @@ See `/app/memory/test_credentials.md`
 
 ## What's Been Implemented (latest first)
 
+### 2026-02-25 — Cabinet 2.0: Master Agreement (P0 закрито)
+- **Backend (`event_tool.py`)**: 3 нові ендпоінти на існуючих таблицях `master_agreements` + `document_signatures` (БЕЗ нових таблиць):
+  - `GET /api/event/cabinet/master-agreement` — стан договору, auto-create draft (executor=ТОВ ФАРФОР РЕНТ, 365 днів)
+  - `POST /api/event/cabinet/master-agreement/sign` — приймає canvas-base64, INSERT у `document_signatures` з `document_id='master_agreement:<id>'` + signer_role='tenant' + IP + UA → UPDATE `master_agreements.status='signed'`, `client_users.active_master_agreement_id`
+  - `GET /api/event/cabinet/master-agreement/view?token=...` — HTML-прев'ю через існуючий `services.pdf_generator.generate_master_agreement_html`
+- **Гейт checkout**: `POST /event/boards/{id}/convert-to-order` повертає **412 + `code:"AGREEMENT_REQUIRED"`** якщо немає signed+valid договору
+- **Frontend**: новий `SignMasterAgreementModal.js` (canvas + iframe прев'ю + чекбокс згоди + ПІБ), нова вкладка "Договір" у `UserProfile.js` з картою (№, статус, дійсний до, кнопки "Переглянути" / "Підписати"), `CheckoutModal` показує банер та блокує submit якщо `needs_signature=true`
+- **E2E через curl**: convert→412 → sign → 200 → convert→200 path. Всі ендпоінти 401/405 на неправильний auth/method.
+- **Фікс**: `LAST_INSERT_ID()` тепер викликається ДО `db.commit()` (інакше SQLAlchemy віддавав 0 через нову connection з пулу)
+
 ### 2026-02-25 — Cabinet 2.0: Платники CRUD (UI + бекенд фікс)
 - **UI**: нова вкладка "Платники" в `UserProfile.js` — список карток платників, форма create/edit (тип/назва/ЄДРПОУ/директор/адреса/тел/email/IBAN/банк), кнопки "Зробити основним", "Редагувати", "Відв'язати"
 - **Бекенд фікс**: в усіх 5 endpoints `/cabinet/payers*` cuid резолвиться через `customer_id` (раніше падав з NULL у `client_payer_links.client_user_id`)
