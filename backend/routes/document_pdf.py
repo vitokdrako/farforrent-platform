@@ -256,6 +256,15 @@ async def save_document_to_db(
         
         db.commit()
         
+        # Push-сповіщення клієнту про новий документ (best-effort).
+        try:
+            if order_id:
+                from services.push_notifications import notify_document_ready
+                notify_document_ready(db, int(order_id), doc_type, None)
+        except Exception as _e:
+            import logging
+            logging.getLogger("document_pdf").warning(f"push notify failed: {_e}")
+        
         return {
             "success": True,
             "document_id": doc_id

@@ -518,6 +518,21 @@ def save_document(
     
     db.commit()
     
+    # Push-сповіщення клієнту про новий документ.
+    # Безпечно: будь-яка помилка push не має ламати створення документа.
+    try:
+        if entity_type == "order":
+            from services.push_notifications import notify_document_ready
+            try:
+                order_id_int = int(entity_id)
+            except (TypeError, ValueError):
+                order_id_int = None
+            if order_id_int:
+                notify_document_ready(db, order_id_int, doc_type, doc_number)
+    except Exception as _e:
+        import logging
+        logging.getLogger("documents").warning(f"push notify failed: {_e}")
+    
     return doc_id
 
 

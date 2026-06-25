@@ -18,6 +18,15 @@ See `/app/memory/test_credentials.md`
 
 ## What's Been Implemented (latest first)
 
+### 2026-02-25 — Cabinet 2.0: Push-тригери на нові документи (P1)
+- **Бекенд** — викликаємо `notify_document_ready(db, order_id, doc_type, doc_number)` з обох INSERT-точок: `documents.py:save_document` та `document_pdf.py:save_document_to_db`. Помилки push не ламають створення документа (try/except + log).
+- **Покращення `notify_document_ready`**: fallback на `orders.customer_email` → `event_customers.email` коли `orders.event_tool_customer_id` NULL (актуально для замовлень з OpenCart).
+- **«Новий документ» бейдж**: ідемпотентний ALTER `documents ADD COLUMN first_viewed_at TIMESTAMP NULL`, `/cabinet/documents` повертає `is_new` + `first_viewed_at`, `/cabinet/documents/{id}/view` помічає документ переглянутим (одноразово).
+- **Новий endpoint** `GET /cabinet/notifications/unread` → `{new_documents: N}` для бейджа.
+- **Frontend** — на вкладці "Документи (N нових)" автооновлюваний бейдж (1 хв), червоний пілл «НОВИЙ» біля кожного непереглянутого документа, перерахунок після кліку.
+- **E2E через curl**: generate doc → unread=1 → view → unread=0 → generate знову → unread=1.
+- ⚠️ **Push на пристрої** запрацює лише після HTTPS (`certbot --nginx -d farforrent.com.ua`) і коли клієнти підпишуться через `NotificationToggle` — бейджа в кабінеті це не стосується, він працює одразу.
+
 ### 2026-02-25 — Cabinet 2.0: Master Agreement (P0 закрито)
 - **Backend (`event_tool.py`)**: 3 нові ендпоінти на існуючих таблицях `master_agreements` + `document_signatures` (БЕЗ нових таблиць):
   - `GET /api/event/cabinet/master-agreement` — стан договору, auto-create draft (executor=ТОВ ФАРФОР РЕНТ, 365 днів)

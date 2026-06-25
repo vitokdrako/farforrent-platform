@@ -2272,6 +2272,9 @@ async def get_cabinet_documents(
     cuid = customer.get("customer_id") or customer.get("id")
     client_user_id = customer.get("client_user_id") or customer.get("id")
 
+    # Lazy column add: first_viewed_at (для бейджа "Новий")
+    _ensure_documents_first_viewed_column(db)
+
     allowed_types = list(_DOC_LABELS_FOR_CLIENT.keys())
     placeholders = ",".join([f":t{i}" for i in range(len(allowed_types))])
     params = {f"t{i}": t for i, t in enumerate(allowed_types)}
@@ -2281,7 +2284,8 @@ async def get_cabinet_documents(
         SELECT d.id, d.doc_type, d.doc_number, d.entity_id AS order_id,
                d.status, d.version, d.created_at, d.updated_at,
                d.signed_at, o.order_number, o.event_date,
-               LENGTH(d.html_content) AS has_html
+               LENGTH(d.html_content) AS has_html,
+               d.first_viewed_at
         FROM documents d
         INNER JOIN orders o ON o.order_id = d.entity_id
         WHERE d.entity_type = 'order'
@@ -2307,10 +2311,59 @@ async def get_cabinet_documents(
                 "updated_at": r[7].isoformat() if r[7] else None,
                 "signed_at": r[8].isoformat() if r[8] else None,
                 "has_html": bool(r[11]),
+                "first_viewed_at": r[12].isoformat() if r[12] else None,
+                "is_new": r[12] is None,
             }
             for r in rows
         ]
     }
+
+
+def _ensure_documents_first_viewed_column(db: Session) -> None:
+    """Ідемпотентно додає колонку first_viewed_at до documents (для бейджа 'Новий')."""
+    try:
+        check = db.execute(text("""
+            SELECT COUNT(*) FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+              AND TABLE_NAME = 'documents'
+              AND COLUMN_NAME = 'first_viewed_at'
+        """)).fetchone()[0]
+        if not check:
+            db.execute(text("ALTER TABLE documents ADD COLUMN first_viewed_at TIMESTAMP NULL"))
+            db.commit()
+    except Exception:
+        db.rollback()
+
+
+@router.get("/cabinet/notifications/unread")
+async def get_cabinet_unread(
+    db: Session = Depends(get_rh_db),
+    token: str = Depends(get_token_from_header),
+):
+    """Лічильник нових (непереглянутих) документів. Використовується для бейджа на вкладці 'Документи'."""
+    customer = get_current_customer(token, db)
+    email = (customer.get("email") or "").lower().strip()
+    cuid = customer.get("customer_id") or customer.get("id")
+    client_user_id = customer.get("client_user_id") or customer.get("id")
+
+    _ensure_documents_first_viewed_column(db)
+
+    allowed_types = list(_DOC_LABELS_FOR_CLIENT.keys())
+    placeholders = ",".join([f":t{i}" for i in range(len(allowed_types))])
+    params = {f"t{i}": t for i, t in enumerate(allowed_types)}
+    params.update({"email": email, "cuid": cuid, "cuser": client_user_id})
+
+    sql = f"""
+        SELECT COUNT(*)
+        FROM documents d
+        INNER JOIN orders o ON o.order_id = d.entity_id
+        WHERE d.entity_type = 'order'
+          AND d.doc_type IN ({placeholders})
+          AND d.first_viewed_at IS NULL
+          AND (o.customer_email = :email OR o.client_user_id = :cuser OR o.customer_id = :cuid)
+    """
+    cnt = db.execute(text(sql), params).fetchone()[0] or 0
+    return {"new_documents": int(cnt)}
 
 
 @router.get("/cabinet/documents/{doc_id}/view", response_class=HTMLResponse)
@@ -2349,6 +2402,17 @@ async def view_cabinet_document(
 
     if not row:
         raise HTTPException(404, "Документ не знайдено")
+
+    # Позначаємо документ як переглянутий (один раз) — для бейджа "Новий"
+    try:
+        db.execute(text("""
+            UPDATE documents
+            SET first_viewed_at = NOW()
+            WHERE id = :did AND first_viewed_at IS NULL
+        """), {"did": doc_id})
+        db.commit()
+    except Exception:
+        db.rollback()
 
     label = _DOC_LABELS_FOR_CLIENT.get(row[1], row[1])
     title = f"{label} {row[2] or ''} (v{row[5]})"

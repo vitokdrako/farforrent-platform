@@ -123,23 +123,66 @@ def notify_order_status_change(db: Session, order_id: int, new_status: str,
 
 def notify_document_ready(db: Session, order_id: int, doc_type: str,
                           doc_number: Optional[str] = None) -> dict:
-    """Send push when a new document is ready to sign/view."""
+    """Send push when a new document is ready to sign/view.
+
+    Resolves the event_tool customer either via orders.event_tool_customer_id
+    (preferred) or by matching orders.customer_email → event_customers.email
+    (fallback for orders created outside Event Tool).
+    """
     if not is_configured():
         return {"skipped": True}
-    row = db.execute(text("""
-        SELECT o.order_number, o.event_tool_customer_id
-        FROM orders o WHERE o.order_id = :oid
-    """), {"oid": order_id}).fetchone()
-    if not row or not row[1]:
-        return {"skipped": True}
+    # Discover whether the column event_tool_customer_id exists in orders
+    has_etc = False
+    try:
+        db.execute(text("SELECT event_tool_customer_id FROM orders LIMIT 0"))
+        has_etc = True
+    except Exception:
+        has_etc = False
+
+    if has_etc:
+        row = db.execute(text("""
+            SELECT o.order_number, o.event_tool_customer_id, o.customer_email
+            FROM orders o WHERE o.order_id = :oid
+        """), {"oid": order_id}).fetchone()
+    else:
+        row = db.execute(text("""
+            SELECT o.order_number, NULL, o.customer_email
+            FROM orders o WHERE o.order_id = :oid
+        """), {"oid": order_id}).fetchone()
+
+    if not row:
+        return {"skipped": True, "reason": "order not found"}
+
+    order_number = row[0]
+    customer_id = row[1]
+    customer_email = (row[2] or "").lower().strip()
+
+    if not customer_id and customer_email:
+        m = db.execute(text("""
+            SELECT customer_id FROM event_customers
+            WHERE LOWER(email) = :em LIMIT 1
+        """), {"em": customer_email}).fetchone()
+        customer_id = m[0] if m else None
+
+    if not customer_id:
+        return {"skipped": True, "reason": "no event customer linked"}
 
     doc_labels = {
-        "rental_agreement": "Договір оренди", "invoice_legal": "Рахунок",
-        "estimate": "Кошторис", "return_act": "Акт повернення",
-        "issue_act": "Акт видачі", "service_act": "Акт виконаних робіт",
+        "rental_agreement": "Договір оренди",
+        "contract": "Договір оренди",
+        "invoice_legal": "Рахунок",
+        "invoice": "Рахунок",
+        "invoice_offer": "Рахунок-оферта",
+        "estimate": "Кошторис",
+        "act_issue": "Акт видачі",
+        "issue_act": "Акт видачі",
+        "act_return": "Акт повернення",
+        "return_act": "Акт повернення",
+        "service_act": "Акт виконаних робіт",
+        "annex": "Додаток до договору",
     }
     label = doc_labels.get(doc_type, "Документ")
-    title = f"📄 Новий документ {label}"
-    body = f"Замовлення {row[0]} — натисніть, щоб переглянути та підписати"
-    return send_to_customer(db, row[1], title, body, url="/profile",
+    title = f"Новий документ: {label}"
+    body = f"Замовлення {order_number} — відкрийте, щоб переглянути та підписати"
+    return send_to_customer(db, int(customer_id), title, body, url="/profile",
                             tag=f"order-{order_id}-doc-{doc_type}")

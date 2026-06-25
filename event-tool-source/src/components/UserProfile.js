@@ -103,6 +103,7 @@ const UserProfile = () => {
   // Документи (Cabinet 2.0)
   const [docsList, setDocsList] = useState([]);
   const [docsLoading, setDocsLoading] = useState(false);
+  const [unreadDocs, setUnreadDocs] = useState(0);
   // Профіль (Cabinet 2.0)
   const [profileData, setProfileData] = useState(null);
   const [profileLoading, setProfileLoading] = useState(false);
@@ -155,6 +156,31 @@ const UserProfile = () => {
       .catch(() => setDocsList([]))
       .finally(() => setDocsLoading(false));
   }, [activeTab]);
+
+  // Лічильник непереглянутих документів (бейдж)
+  useEffect(() => {
+    let cancelled = false;
+    const fetchUnread = () => {
+      api.get('/event/cabinet/notifications/unread')
+        .then((r) => { if (!cancelled) setUnreadDocs(r.data?.new_documents || 0); })
+        .catch(() => {});
+    };
+    fetchUnread();
+    const interval = setInterval(fetchUnread, 60000); // 1 хв
+    return () => { cancelled = true; clearInterval(interval); };
+  }, []);
+
+  // Коли користувач відкриває вкладку Документи — оновлюємо лічильник
+  // (зменшується після того як він клікне на конкретний документ і відкриється /view)
+  useEffect(() => {
+    if (activeTab !== 'documents') return;
+    const id = setTimeout(() => {
+      api.get('/event/cabinet/notifications/unread')
+        .then((r) => setUnreadDocs(r.data?.new_documents || 0))
+        .catch(() => {});
+    }, 1500);
+    return () => clearTimeout(id);
+  }, [activeTab, docsList.length]);
 
   // Завантажуємо профіль
   useEffect(() => {
@@ -483,7 +509,7 @@ const UserProfile = () => {
             {key: 'orders', label: `Мої замовлення (${orders.length})`},
             {key: 'boards', label: `Мої мудборди (${boards.length})`},
             {key: 'favorites', label: `Обране (${favoriteIds.length})`},
-            {key: 'documents', label: 'Документи'},
+            {key: 'documents', label: unreadDocs > 0 ? `Документи (${unreadDocs} нових)` : 'Документи'},
             {key: 'agreement', label: 'Договір'},
             {key: 'payers', label: 'Платники'},
             {key: 'profile', label: 'Профіль'},
@@ -1312,6 +1338,20 @@ const UserProfile = () => {
                               }}
                             >
                               <span style={{fontWeight: 500, fontSize: 14, flex: '1 1 60%', minWidth: 200}}>
+                                {d.is_new && (
+                                  <span
+                                    data-testid={`doc-new-badge-${d.id}`}
+                                    style={{
+                                      display: 'inline-block',
+                                      fontSize: 10, fontWeight: 700, letterSpacing: '0.5px',
+                                      padding: '2px 7px', borderRadius: 10,
+                                      background: '#dc2626', color: '#fff',
+                                      marginRight: 8, verticalAlign: 'middle',
+                                    }}
+                                  >
+                                    НОВИЙ
+                                  </span>
+                                )}
                                 {d.doc_type_label}
                                 {d.doc_number ? <span style={{color: '#94a3b8', fontWeight: 400, marginLeft: 6}}>№ {d.doc_number}</span> : null}
                                 {d.version > 1 ? <span style={{color: '#b08d2e', fontSize: 11, marginLeft: 6}}>v{d.version}</span> : null}
