@@ -70,6 +70,9 @@ const UserProfile = () => {
   const [favProducts, setFavProducts] = useState([]);
   const [favLoading, setFavLoading] = useState(false);
   const [addToBoardProduct, setAddToBoardProduct] = useState(null);
+  // Документи (Cabinet 2.0)
+  const [docsList, setDocsList] = useState([]);
+  const [docsLoading, setDocsLoading] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -95,6 +98,16 @@ const UserProfile = () => {
         .catch(() => {});
     }, 30000);
     return () => clearInterval(interval);
+  }, [activeTab]);
+
+  // Завантажуємо документи коли заходимо на вкладку
+  useEffect(() => {
+    if (activeTab !== 'documents') return;
+    setDocsLoading(true);
+    api.get('/event/cabinet/documents')
+      .then((r) => setDocsList(r.data?.documents || []))
+      .catch(() => setDocsList([]))
+      .finally(() => setDocsLoading(false));
   }, [activeTab]);
 
   const loadData = async () => {
@@ -264,18 +277,25 @@ const UserProfile = () => {
         </div>
 
         {/* Tabs */}
-        <div style={{display: 'flex', gap: '4px', borderBottom: '1px solid #e0e0e0', marginBottom: '24px'}}>
+        <div
+          style={{
+            display: 'flex', gap: '4px', borderBottom: '1px solid #e0e0e0',
+            marginBottom: '24px', overflowX: 'auto', whiteSpace: 'nowrap',
+            WebkitOverflowScrolling: 'touch',
+          }}
+        >
           {[
             {key: 'orders', label: `Мої замовлення (${orders.length})`},
             {key: 'boards', label: `Мої мудборди (${boards.length})`},
             {key: 'favorites', label: `Обране (${favoriteIds.length})`},
+            {key: 'documents', label: 'Документи'},
           ].map(t => (
             <button
               key={t.key}
               data-testid={`profile-tab-${t.key}`}
               onClick={() => setActiveTab(t.key)}
               style={{
-                padding: '12px 24px',
+                padding: '12px 18px',
                 background: 'transparent',
                 border: 'none',
                 borderBottom: activeTab === t.key ? '2px solid #0a3d2e' : '2px solid transparent',
@@ -284,6 +304,7 @@ const UserProfile = () => {
                 cursor: 'pointer',
                 fontSize: '14px',
                 marginBottom: '-1px',
+                flexShrink: 0,
               }}
             >
               {t.label}
@@ -1030,6 +1051,94 @@ const UserProfile = () => {
             </div>
           )}
         </div>
+        )}
+
+        {/* Документи */}
+        {activeTab === 'documents' && (
+          <div data-testid="profile-documents-section">
+            <div className="mb-6">
+              <h3 style={{fontSize: '20px', fontWeight: '600', color: '#333'}}>
+                Документи
+              </h3>
+              <p style={{fontSize: '13px', color: '#666', marginTop: 4}}>
+                Усі документи з ваших замовлень: кошториси, рахунки, акти, договори.
+              </p>
+            </div>
+
+            {docsLoading ? (
+              <div className="text-center py-12" style={{color: '#999'}}>Завантаження...</div>
+            ) : docsList.length === 0 ? (
+              <div style={{background: '#fff', borderRadius: '8px', padding: '48px', textAlign: 'center', border: '1px solid #f0f0f0'}}>
+                <p style={{fontSize: '15px', color: '#333', marginBottom: 4}}>Поки що немає документів</p>
+                <p style={{fontSize: '13px', color: '#999'}}>Документи з'являться тут після оформлення замовлення</p>
+              </div>
+            ) : (
+              <div data-testid="profile-documents-list" style={{display: 'grid', gridTemplateColumns: '1fr', gap: 10}}>
+                {(() => {
+                  // Групуємо за замовленням
+                  const byOrder = {};
+                  docsList.forEach(d => {
+                    const k = d.order_id;
+                    if (!byOrder[k]) byOrder[k] = { order_number: d.order_number, event_date: d.event_date, docs: [] };
+                    byOrder[k].docs.push(d);
+                  });
+                  return Object.entries(byOrder).map(([oid, grp]) => (
+                    <div key={oid} style={{
+                      background: '#fff', border: '1px solid #e5e7eb', borderRadius: 10, padding: 14,
+                    }}>
+                      <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 10, flexWrap: 'wrap', gap: 8}}>
+                        <div style={{fontWeight: 600, color: '#0a3d2e', fontSize: 14}}>
+                          Замовлення № {grp.order_number}
+                        </div>
+                        {grp.event_date && (
+                          <div style={{color: '#94a3b8', fontSize: 12}}>
+                            Подія: {new Date(grp.event_date).toLocaleDateString('uk-UA')}
+                          </div>
+                        )}
+                      </div>
+                      <div style={{display: 'flex', flexDirection: 'column', gap: 6}}>
+                        {grp.docs.map(d => {
+                          const url = `${process.env.REACT_APP_BACKEND_URL || ''}/api/event/cabinet/documents/${d.id}/view?token=${encodeURIComponent(localStorage.getItem('access_token') || '')}`;
+                          return (
+                            <a
+                              key={d.id}
+                              href={url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              data-testid={`doc-link-${d.id}`}
+                              style={{
+                                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                                padding: '10px 12px', background: '#f8fafc', borderRadius: 8,
+                                textDecoration: 'none', color: '#0f172a', border: '1px solid #f0f0f0',
+                                gap: 12, flexWrap: 'wrap',
+                              }}
+                            >
+                              <span style={{fontWeight: 500, fontSize: 14, flex: '1 1 60%', minWidth: 200}}>
+                                {d.doc_type_label}
+                                {d.doc_number ? <span style={{color: '#94a3b8', fontWeight: 400, marginLeft: 6}}>№ {d.doc_number}</span> : null}
+                                {d.version > 1 ? <span style={{color: '#b08d2e', fontSize: 11, marginLeft: 6}}>v{d.version}</span> : null}
+                              </span>
+                              <span style={{fontSize: 12, color: '#64748b'}}>
+                                {d.created_at ? new Date(d.created_at).toLocaleDateString('uk-UA') : ''}
+                              </span>
+                              <span style={{
+                                fontSize: 12, padding: '4px 10px',
+                                background: d.status === 'signed' ? '#dcfce7' : '#fef3c7',
+                                color: d.status === 'signed' ? '#166534' : '#92400e',
+                                borderRadius: 12, fontWeight: 600,
+                              }}>
+                                {d.status === 'signed' ? 'Підписано' : d.status === 'draft' ? 'Чернетка' : d.status}
+                              </span>
+                            </a>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ));
+                })()}
+              </div>
+            )}
+          </div>
         )}
       </div>
 

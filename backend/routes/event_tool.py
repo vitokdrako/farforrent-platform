@@ -2231,6 +2231,138 @@ async def get_order_estimate_html(
     return HTMLResponse(content=html)
 
 
+_DOC_LABELS_FOR_CLIENT = {
+    "estimate": "Кошторис",
+    "invoice_offer": "Рахунок-оферта",
+    "invoice_legal": "Рахунок (ФОП/ТОВ)",
+    "invoice_additional": "Додатковий рахунок",
+    "contract_rent": "Договір оренди",
+    "issue_act": "Акт видачі",
+    "return_act": "Акт повернення",
+    "deposit_settlement_act": "Акт врегулювання застави",
+    "deposit_refund_act": "Акт повернення застави",
+    "service_act": "Акт послуг",
+    "goods_invoice": "Товарна накладна",
+}
+
+
+@router.get("/cabinet/documents")
+async def get_cabinet_documents(
+    db: Session = Depends(get_rh_db),
+    token: str = Depends(get_token_from_header),
+):
+    """
+    Перелік документів клієнта, прив'язаних до його замовлень.
+    Тягне з існуючої таблиці `documents` (entity_type='order').
+    Технічні документи (defect_act, picking_list тощо) виключаються.
+    """
+    customer = get_current_customer(token, db)
+    email = (customer.get("email") or "").lower().strip()
+    cuid = customer.get("customer_id") or customer.get("id")
+    client_user_id = customer.get("client_user_id") or customer.get("id")
+
+    allowed_types = list(_DOC_LABELS_FOR_CLIENT.keys())
+    placeholders = ",".join([f":t{i}" for i in range(len(allowed_types))])
+    params = {f"t{i}": t for i, t in enumerate(allowed_types)}
+    params.update({"email": email, "cuid": cuid, "cuser": client_user_id})
+
+    sql = f"""
+        SELECT d.id, d.doc_type, d.doc_number, d.entity_id AS order_id,
+               d.status, d.version, d.created_at, d.updated_at,
+               d.signed_at, o.order_number, o.event_date,
+               LENGTH(d.html_content) AS has_html
+        FROM documents d
+        INNER JOIN orders o ON o.order_id = d.entity_id
+        WHERE d.entity_type = 'order'
+          AND d.doc_type IN ({placeholders})
+          AND (o.customer_email = :email OR o.client_user_id = :cuser OR o.customer_id = :cuid)
+        ORDER BY d.created_at DESC
+        LIMIT 200
+    """
+    rows = db.execute(text(sql), params).fetchall()
+    return {
+        "documents": [
+            {
+                "id": r[0],
+                "doc_type": r[1],
+                "doc_type_label": _DOC_LABELS_FOR_CLIENT.get(r[1], r[1]),
+                "doc_number": r[2],
+                "order_id": r[3],
+                "order_number": r[9] or str(r[3]),
+                "event_date": r[10].isoformat() if r[10] else None,
+                "status": r[4],
+                "version": r[5],
+                "created_at": r[6].isoformat() if r[6] else None,
+                "updated_at": r[7].isoformat() if r[7] else None,
+                "signed_at": r[8].isoformat() if r[8] else None,
+                "has_html": bool(r[11]),
+            }
+            for r in rows
+        ]
+    }
+
+
+@router.get("/cabinet/documents/{doc_id}/view", response_class=HTMLResponse)
+async def view_cabinet_document(
+    doc_id: str,
+    request: Request,
+    db: Session = Depends(get_rh_db),
+):
+    """
+    Перегляд документа клієнтом (HTML). Auth через Bearer header АБО ?token=
+    Безпека: перевіряємо що документ належить ордеру цього клієнта.
+    """
+    token = None
+    auth = request.headers.get("Authorization")
+    if auth and auth.startswith("Bearer "):
+        token = auth.replace("Bearer ", "", 1).strip()
+    if not token:
+        token = request.query_params.get("token")
+    if not token:
+        raise HTTPException(401, "Token required")
+
+    customer = get_current_customer(token, db)
+    email = (customer.get("email") or "").lower().strip()
+    cuid = customer.get("customer_id") or customer.get("id")
+    client_user_id = customer.get("client_user_id") or customer.get("id")
+
+    row = db.execute(text("""
+        SELECT d.id, d.doc_type, d.doc_number, d.html_content, d.status, d.version, o.order_number
+        FROM documents d
+        INNER JOIN orders o ON o.order_id = d.entity_id
+        WHERE d.id = :did
+          AND d.entity_type = 'order'
+          AND (o.customer_email = :email OR o.client_user_id = :cuser OR o.customer_id = :cuid)
+        LIMIT 1
+    """), {"did": doc_id, "email": email, "cuid": cuid, "cuser": client_user_id}).fetchone()
+
+    if not row:
+        raise HTTPException(404, "Документ не знайдено")
+
+    label = _DOC_LABELS_FOR_CLIENT.get(row[1], row[1])
+    title = f"{label} {row[2] or ''} (v{row[5]})"
+    html_body = row[3] or "<p style='padding:40px;text-align:center;color:#94a3b8'>Документ ще не сформовано. Зачекайте, доки менеджер його підготує.</p>"
+
+    # Якщо вже повний HTML doc — повертаємо як є (зазвичай так)
+    if html_body and "<html" in html_body.lower():
+        return HTMLResponse(content=html_body)
+
+    # Інакше обгортаємо у мінімальний layout
+    wrapped = f"""<!DOCTYPE html><html lang="uk"><head><meta charset="UTF-8">
+<title>{title}</title>
+<style>body{{font-family:-apple-system,'Segoe UI',Roboto,sans-serif;max-width:900px;margin:24px auto;padding:0 24px;color:#0f172a;line-height:1.55}}
+@media print{{body{{margin:0}}}}
+.actions{{margin:24px 0;text-align:center}}
+.btn{{padding:12px 28px;background:#0a3d2e;color:#fff;border-radius:8px;border:none;cursor:pointer;font-weight:600}}
+@media print{{.actions{{display:none}}}}
+</style></head><body>
+<h1 style="color:#0a3d2e;border-bottom:2px solid #0a3d2e;padding-bottom:8px">{title}</h1>
+{html_body}
+<div class="actions"><button class="btn" onclick="window.print()">Зберегти / друкувати</button></div>
+</body></html>"""
+    return HTMLResponse(content=wrapped)
+
+
 @router.get("/orders/{order_id}/documents")
 async def get_my_order_documents(
     order_id: int,
