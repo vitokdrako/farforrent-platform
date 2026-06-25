@@ -64,50 +64,71 @@ ALTER TABLE event_boards MODIFY cover_image MEDIUMTEXT;
 
 User explicit request: "ми хіба при генерації не зберігаємо кошториси у себе в системі? чому клієнт не може їх бачити. також клієнт має сам редагувати свої дані якщо телефон/рахунок ФОП змінюється".
 
+### ⚠️ КРИТИЧНИЙ ПРИНЦИП: ВИКОРИСТОВУВАТИ ІСНУЮЧІ ТАБЛИЦІ
+**Категорично заборонено** створювати дублюючі таблиці. Перед будь-якою імплементацією — обов'язково:
+
+1. **Зробити SHOW TABLES + DESCRIBE** для пошуку існуючої структури:
+   ```sql
+   SHOW TABLES FROM farforre_vps LIKE '%payer%';
+   SHOW TABLES FROM farforre_vps LIKE '%agreement%';
+   SHOW TABLES FROM farforre_vps LIKE '%document%';
+   SHOW TABLES FROM farforre_vps LIKE '%signature%';
+   SHOW TABLES FROM farforre_vps LIKE '%client%';
+   SHOW TABLES FROM farforre_vps LIKE '%customer%';
+   ```
+
+2. **Відомі існуючі таблиці** (підтверджені у скрінах):
+   - `customers` — основні дані клієнта (firstname, lastname, telephone, email, address)
+   - `client_users` — клієнтські юзери (для логіну в кабінет)
+   - `client_payer_links` — зв'язок клієнт ↔ платник
+   - `master_agreements` — РІЧНІ ДОГОВОРИ (саме сюди підпис, ані не нові таблиці!)
+   - `documents` — кошториси, рахунки-оферти, ФОП (RH вже зберігає, треба тільки READ для клієнта)
+   - `document_signatures` — підписи документів (вже існує)
+   - `document_email_log`, `document_emails`, `document_templates`, `document_number_sequences` — суміжне
+   - `orders` (має `customer_id`, можливо `customer_email`, `client_user_id`) — для JOIN
+
+3. **Правило виявлення колонок** для будь-якого SQL: використовувати динамічну перевірку (як у `/event/products` через `SHOW COLUMNS FROM <table>` + fallback). Це усуває падіння при різниці схем `farforre_vps` ↔ продакшен.
+
+4. **Якщо колонки немає** — додавати тільки ALTER ADD COLUMN (не нова таблиця). Наприклад для бейджа "новий документ" → `documents.first_viewed_at TIMESTAMP NULL` замість окремої таблиці `document_views`.
+
 ### 1. Документи (RH → кабінет клієнта, read-only)
-- Існуючі endpoints у RH: `/api/documents/estimate/{order_id}/preview`, `/api/documents/invoice-offer/{order_id}/preview`, `/api/documents/fop-invoice/{order_id}/preview`
-- **NEW** `GET /api/event/cabinet/documents` — список всіх документів клієнта (JOIN на customer_id + email)
-- **NEW** вкладка "📄 Документи" у `UserProfile.js`:
-  - Перелік замовлень з кнопками "Кошторис" / "Рахунок-оферта" / "Рахунок ФОП"
-  - Бейдж "Новий" при першому перегляді (зберігаємо `last_viewed_at` per (customer_id, document_id))
-  - Лічильник нових на іконці кабінету (red dot)
-- При генерації документа в RH — клієнт **автоматично бачить** (без явного push), бо ми просто читаємо з тієї ж таблиці. Спільна база = нічого не дублюємо.
+- Тягнемо з існуючої таблиці `documents` (НЕ створювати нову `client_documents`!)
+- **NEW** `GET /api/event/cabinet/documents` — `SELECT FROM documents WHERE customer_id = :cid OR customer_email = :email`
+- Endpoints для preview вже існують: `/api/documents/estimate/{order_id}/preview`, `/api/documents/invoice-offer/{order_id}/preview`
+- **NEW** вкладка "📄 Документи" у `UserProfile.js`: групування по `order_id`, кнопки на існуючі preview-endpoints
+- Бейдж "Новий" — через ALTER `documents` ADD COLUMN `first_viewed_at TIMESTAMP NULL` (один альтер, без нової таблиці)
+- Лічильник на іконці кабінету
 
-### 2. ✍️ Річний договір (master agreement) з електронним підписом
-- Існуюча таблиця: `master_agreements` (один на клієнта, термін дії 12 міс, status=active|expired|cancelled)
-- Клієнт підписує **один раз** → договір автоматично прив'язується до **всіх замовлень** у наступні 12 місяців
+### 2. ✍️ Річний договір (master_agreements + document_signatures)
+- Використовуємо існуючі таблиці `master_agreements` та `document_signatures`. **Не створювати нових.**
+- Структура буде з'ясована через `DESCRIBE master_agreements` + `DESCRIBE document_signatures` у початку сесії.
 - **NEW** endpoints:
-  - `GET /api/event/cabinet/master-agreement` — поточний активний договір клієнта (або 404 якщо немає)
-  - `POST /api/event/cabinet/master-agreement/sign` — клієнт підписує (зберігаємо `signed_at`, `signature_ip`, `signature_user_agent`, опційно canvas-підпис як base64 у `signature_data`)
-- **NEW** вкладка "📜 Договір" у `UserProfile.js`:
-  - Якщо немає активного → банер "У вас 0 активних договорів. Підпишіть, щоб оформляти замовлення"
-  - Якщо активний → показує номер договору, дату підпису, дату закінчення, кнопка "Завантажити PDF/HTML"
-  - Підпис: чекбокс "Я ознайомлений з умовами публічної оферти" + canvas для підпису пальцем/мишкою + кнопка "Підписати"
-- При оформленні замовлення (CheckoutModal) — попередньо перевірка `GET /master-agreement`. Якщо немає → редирект на сторінку підпису. Якщо є → у замовленні зберігається `agreement_id`.
-- У RH менеджер бачить галочку "Договір підписано 23.06.2026 ✓" біля замовлення
+  - `GET /api/event/cabinet/master-agreement` — `SELECT FROM master_agreements WHERE customer_id = :cid AND status = 'active' AND valid_until > NOW()`
+  - `POST /api/event/cabinet/master-agreement/sign` — INSERT у `document_signatures` (signer_role='client', signed_at=NOW(), signature_data=base64, signature_ip, signature_user_agent) + UPDATE `master_agreements` status='active'
+- **NEW** вкладка "📜 Договір": canvas для підпису + чекбокс згоди + кнопка
+- Перед оформленням замовлення (CheckoutModal): перевірка наявності активного. Якщо немає → редирект на підпис.
+- У `orders` додати поле `agreement_id` (тільки якщо ще немає — через DESCRIBE orders + ALTER if missing). У RH менеджер бачить "Договір підписано ✓".
 
-### 3. Платники клієнта — CRUD
-- Існуюча таблиця: `customer_payers` / `payers` (типи: ФОП, ТОВ, фіз.особа з ЕДРПОУ/ІПН, реквізити)
+### 3. Платники — CRUD на існуючу `client_payer_links` (+ зв'язана таблиця платників)
+- Знайти точну назву таблиці платників через SHOW TABLES + перевірити її структуру через DESCRIBE
 - **NEW** endpoints:
-  - `GET /api/event/cabinet/payers`
+  - `GET /api/event/cabinet/payers` — JOIN client_payer_links + payers по поточному customer
   - `POST /api/event/cabinet/payers`
   - `PUT /api/event/cabinet/payers/{id}` (edit телефон/банк/рахунок/реквізити)
   - `DELETE /api/event/cabinet/payers/{id}`
   - `PUT /api/event/cabinet/payers/{id}/make-default`
-- **NEW** вкладка "💼 Мої платники":
-  - Картки як у RH (ФОП Філімоніхіна / ТОВ загальна / ТОВ спрощена / Фіз.особа)
-  - Кнопки "Редагувати" / "Зробити основним" / "Відв'язати"
+- **NEW** вкладка "💼 Мої платники" — UI як у RH (картки)
 
-### 4. Профіль клієнта — edit
-- Існуюча таблиця: `customers` (firstname, lastname, telephone, email, address)
-- **NEW** `PUT /api/event/cabinet/profile`
+### 4. Профіль клієнта — edit existing `customers`
+- **NEW** `PUT /api/event/cabinet/profile` — UPDATE `customers` SET (телефон/ПІБ/адреса) WHERE customer_id = :cid
 - Вкладка "👤 Профіль" з формою (lock на email, edit phone/ПІБ/адресу)
 
 ### 5. Push-сповіщення (потребує HTTPS)
+- Використовуємо існуючу таблицю `push_subscriptions` (вже створена в попередніх сесіях)
 - Тригери:
-  - INSERT у `documents` для клієнта → "Новий кошторис/рахунок-оферта готовий"
-  - INSERT у chat → "Нове повідомлення від менеджера"
-  - UPDATE status у `orders` → "Статус замовлення змінено"
+  - INSERT у `documents` для клієнта → "Новий документ"
+  - INSERT у `order_chat_messages` → "Нове повідомлення від менеджера"
+  - UPDATE `orders.status` → "Статус замовлення змінено"
 - Залежить від `certbot --nginx -d farforrent.com.ua`
 
 ---
