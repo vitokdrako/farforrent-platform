@@ -18,6 +18,12 @@ See `/app/memory/test_credentials.md`
 
 ## What's Been Implemented (latest first)
 
+### 2026-02-25 — Cabinet 2.0: Платники CRUD (UI + бекенд фікс)
+- **UI**: нова вкладка "Платники" в `UserProfile.js` — список карток платників, форма create/edit (тип/назва/ЄДРПОУ/директор/адреса/тел/email/IBAN/банк), кнопки "Зробити основним", "Редагувати", "Відв'язати"
+- **Бекенд фікс**: в усіх 5 endpoints `/cabinet/payers*` cuid резолвиться через `customer_id` (раніше падав з NULL у `client_payer_links.client_user_id`)
+- **Перевірено E2E через curl**: LIST→CREATE(126)→UPDATE→MAKE-DEFAULT→DELETE — усе OK
+- Платник прив'язується через `client_payer_links`, сам запис лишається в `payer_profiles` (відв'язка не видаляє платника)
+
 ### 2026-02-23 — Major UX Session
 **Smart days (Farfor rules) — єдине джерело правди:**
 - `backend/utils/rental_days.py` + `event-tool-source/src/utils/rentalDays.js` — спільна логіка

@@ -107,6 +107,12 @@ const UserProfile = () => {
   const [profileLoading, setProfileLoading] = useState(false);
   const [profileSaving, setProfileSaving] = useState(false);
   const [profileMsg, setProfileMsg] = useState('');
+  // Платники (Cabinet 2.0)
+  const [payersList, setPayersList] = useState([]);
+  const [payersLoading, setPayersLoading] = useState(false);
+  const [payersMsg, setPayersMsg] = useState('');
+  const [payerEdit, setPayerEdit] = useState(null); // {id?, payer_type, company_name, ...} — null=closed, {}=new
+  const [payerSaving, setPayerSaving] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -176,6 +182,100 @@ const UserProfile = () => {
       setProfileMsg(`Помилка: ${e?.response?.data?.detail || e.message}`);
     } finally {
       setProfileSaving(false);
+    }
+  };
+
+  // ===== Платники (Cabinet 2.0) =====
+  const loadPayers = async () => {
+    setPayersLoading(true);
+    try {
+      const r = await api.get('/event/cabinet/payers');
+      setPayersList(r.data?.payers || []);
+    } catch (e) {
+      setPayersMsg(`Помилка: ${e?.response?.data?.detail || e.message}`);
+      setPayersList([]);
+    } finally {
+      setPayersLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab !== 'payers') return;
+    loadPayers();
+  }, [activeTab]);
+
+  const startNewPayer = () => {
+    setPayerEdit({
+      payer_type: 'fop',
+      company_name: '',
+      edrpou: '',
+      iban: '',
+      bank_name: '',
+      director_name: '',
+      address: '',
+      phone: '',
+      email: '',
+    });
+    setPayersMsg('');
+  };
+
+  const savePayer = async () => {
+    if (!payerEdit) return;
+    if (!payerEdit.company_name || !payerEdit.company_name.trim()) {
+      setPayersMsg('Помилка: вкажіть назву платника');
+      return;
+    }
+    setPayerSaving(true);
+    setPayersMsg('');
+    try {
+      const payload = {
+        payer_type: payerEdit.payer_type || 'fop',
+        company_name: payerEdit.company_name,
+        edrpou: payerEdit.edrpou || null,
+        iban: payerEdit.iban || null,
+        bank_name: payerEdit.bank_name || null,
+        director_name: payerEdit.director_name || null,
+        address: payerEdit.address || null,
+        phone: payerEdit.phone || null,
+        email: payerEdit.email || null,
+      };
+      if (payerEdit.id) {
+        await api.put(`/event/cabinet/payers/${payerEdit.id}`, payload);
+        setPayersMsg('Платника оновлено');
+      } else {
+        await api.post('/event/cabinet/payers', payload);
+        setPayersMsg('Платника додано');
+      }
+      setPayerEdit(null);
+      await loadPayers();
+      setTimeout(() => setPayersMsg(''), 3000);
+    } catch (e) {
+      setPayersMsg(`Помилка: ${e?.response?.data?.detail || e.message}`);
+    } finally {
+      setPayerSaving(false);
+    }
+  };
+
+  const setDefaultPayer = async (id) => {
+    try {
+      await api.put(`/event/cabinet/payers/${id}/default`);
+      await loadPayers();
+      setPayersMsg('Призначено основним');
+      setTimeout(() => setPayersMsg(''), 2500);
+    } catch (e) {
+      setPayersMsg(`Помилка: ${e?.response?.data?.detail || e.message}`);
+    }
+  };
+
+  const deletePayer = async (id) => {
+    if (!window.confirm('Відв\'язати цього платника від профілю?')) return;
+    try {
+      await api.delete(`/event/cabinet/payers/${id}`);
+      await loadPayers();
+      setPayersMsg('Платника відв\'язано');
+      setTimeout(() => setPayersMsg(''), 2500);
+    } catch (e) {
+      setPayersMsg(`Помилка: ${e?.response?.data?.detail || e.message}`);
     }
   };
 
@@ -358,6 +458,7 @@ const UserProfile = () => {
             {key: 'boards', label: `Мої мудборди (${boards.length})`},
             {key: 'favorites', label: `Обране (${favoriteIds.length})`},
             {key: 'documents', label: 'Документи'},
+            {key: 'payers', label: 'Платники'},
             {key: 'profile', label: 'Профіль'},
           ].map(t => (
             <button
@@ -1206,6 +1307,256 @@ const UserProfile = () => {
                     </div>
                   ));
                 })()}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Платники */}
+        {activeTab === 'payers' && (
+          <div data-testid="profile-payers-section">
+            <div className="mb-6" style={{display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: 12}}>
+              <div>
+                <h3 style={{fontSize: '20px', fontWeight: '600', color: '#333'}}>Мої платники</h3>
+                <p style={{fontSize: '13px', color: '#666', marginTop: 4}}>
+                  Юридичні особи, ФОП або фізособи, від імені яких ви оформлюєте оренду. Один платник може бути основним — він буде підставлятися автоматично під час оформлення.
+                </p>
+              </div>
+              {!payerEdit && (
+                <button
+                  onClick={startNewPayer}
+                  data-testid="payer-new-btn"
+                  className="fd-btn fd-btn-black"
+                  style={{padding: '10px 18px', fontSize: 13}}
+                >
+                  + Додати платника
+                </button>
+              )}
+            </div>
+
+            {payersMsg && (
+              <div data-testid="payers-msg" style={{
+                padding: '10px 14px', marginBottom: 14, borderRadius: 8,
+                background: payersMsg.startsWith('Помилка') ? '#fee2e2' : '#dcfce7',
+                color: payersMsg.startsWith('Помилка') ? '#991b1b' : '#166534',
+                fontSize: 13,
+              }}>{payersMsg}</div>
+            )}
+
+            {/* Форма редагування / додавання */}
+            {payerEdit && (
+              <div data-testid="payer-edit-form" style={{
+                background: '#fff', border: '1px solid #e5e7eb', borderRadius: 10,
+                padding: 20, marginBottom: 18,
+              }}>
+                <div style={{fontWeight: 600, color: '#0a3d2e', marginBottom: 14, fontSize: 15}}>
+                  {payerEdit.id ? 'Редагування платника' : 'Новий платник'}
+                </div>
+                <div style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12}}>
+                  <Field label="Тип платника">
+                    <select
+                      value={payerEdit.payer_type || 'fop'}
+                      onChange={(e) => setPayerEdit({...payerEdit, payer_type: e.target.value})}
+                      data-testid="payer-type-input"
+                      style={inputStyle}
+                    >
+                      <option value="individual">Фізична особа</option>
+                      <option value="fop">ФОП</option>
+                      <option value="fop_simple">ФОП спрощена</option>
+                      <option value="tov">ТОВ</option>
+                    </select>
+                  </Field>
+                  <Field label="Назва / ПІБ">
+                    <input
+                      type="text"
+                      value={payerEdit.company_name || ''}
+                      onChange={(e) => setPayerEdit({...payerEdit, company_name: e.target.value})}
+                      data-testid="payer-name-input"
+                      placeholder='Напр. "ФОП Іванов І.І."'
+                      style={inputStyle}
+                    />
+                  </Field>
+                  <Field label="ЄДРПОУ / ІПН">
+                    <input
+                      type="text"
+                      value={payerEdit.edrpou || ''}
+                      onChange={(e) => setPayerEdit({...payerEdit, edrpou: e.target.value})}
+                      data-testid="payer-edrpou-input"
+                      style={inputStyle}
+                    />
+                  </Field>
+                  <Field label="Директор / підписант">
+                    <input
+                      type="text"
+                      value={payerEdit.director_name || ''}
+                      onChange={(e) => setPayerEdit({...payerEdit, director_name: e.target.value})}
+                      data-testid="payer-director-input"
+                      style={inputStyle}
+                    />
+                  </Field>
+                  <Field label="Юридична адреса">
+                    <input
+                      type="text"
+                      value={payerEdit.address || ''}
+                      onChange={(e) => setPayerEdit({...payerEdit, address: e.target.value})}
+                      data-testid="payer-address-input"
+                      style={inputStyle}
+                    />
+                  </Field>
+                  <Field label="Телефон">
+                    <input
+                      type="tel"
+                      value={payerEdit.phone || ''}
+                      onChange={(e) => setPayerEdit({...payerEdit, phone: e.target.value})}
+                      data-testid="payer-phone-input"
+                      style={inputStyle}
+                    />
+                  </Field>
+                  <Field label="Email">
+                    <input
+                      type="email"
+                      value={payerEdit.email || ''}
+                      onChange={(e) => setPayerEdit({...payerEdit, email: e.target.value})}
+                      data-testid="payer-email-input"
+                      style={inputStyle}
+                    />
+                  </Field>
+                  <Field label="IBAN">
+                    <input
+                      type="text"
+                      value={payerEdit.iban || ''}
+                      onChange={(e) => setPayerEdit({...payerEdit, iban: e.target.value})}
+                      data-testid="payer-iban-input"
+                      placeholder="UA12 ..."
+                      style={inputStyle}
+                    />
+                  </Field>
+                  <Field label="Назва банку">
+                    <input
+                      type="text"
+                      value={payerEdit.bank_name || ''}
+                      onChange={(e) => setPayerEdit({...payerEdit, bank_name: e.target.value})}
+                      data-testid="payer-bank-input"
+                      style={inputStyle}
+                    />
+                  </Field>
+                </div>
+
+                <div style={{marginTop: 18, display: 'flex', gap: 10, justifyContent: 'flex-end'}}>
+                  <button
+                    onClick={() => { setPayerEdit(null); setPayersMsg(''); }}
+                    data-testid="payer-cancel-btn"
+                    style={{
+                      padding: '10px 22px', background: 'transparent',
+                      border: '1px solid #d4cab8', borderRadius: 8, color: '#0a3d2e',
+                      cursor: 'pointer', fontSize: 13,
+                    }}
+                  >
+                    Скасувати
+                  </button>
+                  <button
+                    onClick={savePayer}
+                    disabled={payerSaving}
+                    data-testid="payer-save-btn"
+                    className="fd-btn fd-btn-black"
+                    style={{padding: '10px 28px', opacity: payerSaving ? 0.6 : 1, fontSize: 13}}
+                  >
+                    {payerSaving ? 'Збереження...' : 'Зберегти'}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Список платників */}
+            {payersLoading ? (
+              <div className="text-center py-12" style={{color: '#999'}}>Завантаження...</div>
+            ) : payersList.length === 0 && !payerEdit ? (
+              <div style={{background: '#fff', borderRadius: 8, padding: 48, textAlign: 'center', border: '1px solid #f0f0f0'}}>
+                <p style={{fontSize: '15px', color: '#333', marginBottom: 4}}>У вас ще немає платників</p>
+                <p style={{fontSize: '13px', color: '#999'}}>Додайте ФОП або юр. особу, щоб менеджер міг готувати документи на правильні реквізити.</p>
+              </div>
+            ) : (
+              <div data-testid="payers-list" style={{display: 'grid', gridTemplateColumns: '1fr', gap: 10}}>
+                {payersList.map((p) => {
+                  const typeLabel = {
+                    individual: 'Фізична особа',
+                    fop: 'ФОП',
+                    fop_simple: 'ФОП спрощена',
+                    tov: 'ТОВ',
+                  }[p.payer_type] || p.payer_type;
+                  return (
+                    <div
+                      key={p.id}
+                      data-testid={`payer-card-${p.id}`}
+                      style={{
+                        background: '#fff', border: p.is_default ? '2px solid #0a3d2e' : '1px solid #e5e7eb',
+                        borderRadius: 10, padding: 16,
+                      }}
+                    >
+                      <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap'}}>
+                        <div style={{flex: '1 1 280px', minWidth: 0}}>
+                          <div style={{display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, flexWrap: 'wrap'}}>
+                            <span style={{fontWeight: 600, color: '#0a3d2e', fontSize: 15}}>{p.company_name}</span>
+                            <span style={{
+                              fontSize: 11, padding: '3px 8px', background: '#f1f5f9',
+                              color: '#475569', borderRadius: 12, fontWeight: 500,
+                            }}>{typeLabel}</span>
+                            {p.is_default ? (
+                              <span data-testid={`payer-default-badge-${p.id}`} style={{
+                                fontSize: 11, padding: '3px 8px', background: '#dcfce7',
+                                color: '#166534', borderRadius: 12, fontWeight: 600,
+                              }}>★ Основний</span>
+                            ) : null}
+                          </div>
+                          <div style={{fontSize: 13, color: '#64748b', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '4px 16px'}}>
+                            {p.edrpou && <div>ЄДРПОУ: <span style={{color: '#0f172a'}}>{p.edrpou}</span></div>}
+                            {p.director_name && <div>Підписант: <span style={{color: '#0f172a'}}>{p.director_name}</span></div>}
+                            {p.iban && <div>IBAN: <span style={{color: '#0f172a'}}>{p.iban}</span></div>}
+                            {p.bank_name && <div>Банк: <span style={{color: '#0f172a'}}>{p.bank_name}</span></div>}
+                            {p.phone && <div>Тел.: <span style={{color: '#0f172a'}}>{p.phone}</span></div>}
+                            {p.email && <div>Email: <span style={{color: '#0f172a'}}>{p.email}</span></div>}
+                          </div>
+                        </div>
+                        <div style={{display: 'flex', flexDirection: 'column', gap: 6, flex: '0 0 auto'}}>
+                          {!p.is_default && (
+                            <button
+                              onClick={() => setDefaultPayer(p.id)}
+                              data-testid={`payer-make-default-${p.id}`}
+                              style={{
+                                padding: '6px 12px', background: '#0a3d2e', color: '#fff',
+                                border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 12,
+                              }}
+                            >
+                              Зробити основним
+                            </button>
+                          )}
+                          <button
+                            onClick={() => { setPayerEdit({...p}); setPayersMsg(''); }}
+                            data-testid={`payer-edit-${p.id}`}
+                            style={{
+                              padding: '6px 12px', background: 'transparent',
+                              border: '1px solid #d4cab8', color: '#0a3d2e',
+                              borderRadius: 6, cursor: 'pointer', fontSize: 12,
+                            }}
+                          >
+                            Редагувати
+                          </button>
+                          <button
+                            onClick={() => deletePayer(p.id)}
+                            data-testid={`payer-delete-${p.id}`}
+                            style={{
+                              padding: '6px 12px', background: 'transparent',
+                              border: '1px solid #fecaca', color: '#b91c1c',
+                              borderRadius: 6, cursor: 'pointer', fontSize: 12,
+                            }}
+                          >
+                            Відв'язати
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>

@@ -2423,6 +2423,127 @@ async def update_cabinet_profile(
     return {"success": True, "message": "Профіль оновлено"}
 
 
+_PAYER_EDITABLE = {
+    "payer_type", "company_name", "edrpou", "iban", "bank_name",
+    "director_name", "address", "phone", "email",
+    "legal_name", "signatory_name", "signatory_basis",
+    "email_for_docs", "phone_for_docs", "is_vat_payer", "tax_mode",
+}
+
+
+@router.get("/cabinet/payers")
+async def list_cabinet_payers(
+    db: Session = Depends(get_rh_db),
+    token: str = Depends(get_token_from_header),
+):
+    """Список платників клієнта."""
+    customer = get_current_customer(token, db)
+    cuid = customer.get("client_user_id") or customer.get("id") or customer.get("customer_id")
+    rows = db.execute(text("""
+        SELECT pp.id, pp.payer_type, pp.company_name, pp.edrpou, pp.iban,
+               pp.bank_name, pp.director_name, pp.address, pp.phone, pp.email,
+               pp.legal_name, pp.signatory_name, pp.signatory_basis,
+               pp.email_for_docs, pp.phone_for_docs, pp.is_vat_payer, pp.tax_mode,
+               pp.is_active, cpl.id AS link_id, cpl.is_default, cpl.label
+        FROM client_payer_links cpl
+        INNER JOIN payer_profiles pp ON pp.id = cpl.payer_profile_id
+        WHERE cpl.client_user_id = :cid AND pp.is_active = 1
+        ORDER BY cpl.is_default DESC, cpl.created_at DESC
+    """), {"cid": cuid}).fetchall()
+    keys = ["id", "payer_type", "company_name", "edrpou", "iban", "bank_name",
+            "director_name", "address", "phone", "email", "legal_name",
+            "signatory_name", "signatory_basis", "email_for_docs", "phone_for_docs",
+            "is_vat_payer", "tax_mode", "is_active", "link_id", "is_default", "label"]
+    return {"payers": [dict(zip(keys, r)) for r in rows]}
+
+
+@router.post("/cabinet/payers")
+async def create_cabinet_payer(
+    payload: dict = Body(...),
+    db: Session = Depends(get_rh_db),
+    token: str = Depends(get_token_from_header),
+):
+    """Створити нового платника + прив'язати до клієнта."""
+    customer = get_current_customer(token, db)
+    cuid = customer.get("client_user_id") or customer.get("id") or customer.get("customer_id")
+    fields = {k: v for k, v in payload.items() if k in _PAYER_EDITABLE}
+    if not fields.get("company_name"):
+        raise HTTPException(400, "Назва платника обов'язкова")
+    fields.setdefault("payer_type", "individual")
+    fields["created_by_user_id"] = cuid
+    fields["is_active"] = 1
+    cols = ", ".join(fields.keys())
+    placeholders = ", ".join([f":{k}" for k in fields.keys()])
+    result = db.execute(text(f"INSERT INTO payer_profiles ({cols}) VALUES ({placeholders})"), fields)
+    db.commit()
+    new_id = result.lastrowid
+    db.execute(text("""
+        INSERT INTO client_payer_links (client_user_id, payer_profile_id, is_default, label, created_at)
+        VALUES (:cid, :pid, 0, :label, NOW())
+    """), {"cid": cuid, "pid": new_id, "label": payload.get("label") or fields.get("company_name")})
+    db.commit()
+    return {"success": True, "payer_id": new_id}
+
+
+@router.put("/cabinet/payers/{payer_id}")
+async def update_cabinet_payer(
+    payer_id: int,
+    payload: dict = Body(...),
+    db: Session = Depends(get_rh_db),
+    token: str = Depends(get_token_from_header),
+):
+    """Редагувати платника (тільки якщо прив'язаний до цього клієнта)."""
+    customer = get_current_customer(token, db)
+    cuid = customer.get("client_user_id") or customer.get("id") or customer.get("customer_id")
+    own = db.execute(text("SELECT id FROM client_payer_links WHERE client_user_id = :cid AND payer_profile_id = :pid"),
+                     {"cid": cuid, "pid": payer_id}).fetchone()
+    if not own:
+        raise HTTPException(403, "Немає доступу")
+    updates = {k: v for k, v in payload.items() if k in _PAYER_EDITABLE}
+    if not updates:
+        raise HTTPException(400, "Немає полів для оновлення")
+    set_clause = ", ".join([f"{k} = :{k}" for k in updates.keys()])
+    updates["pid"] = payer_id
+    db.execute(text(f"UPDATE payer_profiles SET {set_clause}, updated_at = NOW() WHERE id = :pid"), updates)
+    db.commit()
+    return {"success": True}
+
+
+@router.put("/cabinet/payers/{payer_id}/default")
+async def set_default_payer(
+    payer_id: int,
+    db: Session = Depends(get_rh_db),
+    token: str = Depends(get_token_from_header),
+):
+    """Зробити цього платника основним."""
+    customer = get_current_customer(token, db)
+    cuid = customer.get("client_user_id") or customer.get("id") or customer.get("customer_id")
+    db.execute(text("UPDATE client_payer_links SET is_default = 0 WHERE client_user_id = :cid"), {"cid": cuid})
+    res = db.execute(text("UPDATE client_payer_links SET is_default = 1 WHERE client_user_id = :cid AND payer_profile_id = :pid"),
+                     {"cid": cuid, "pid": payer_id})
+    db.commit()
+    if res.rowcount == 0:
+        raise HTTPException(404, "Платника не знайдено")
+    return {"success": True}
+
+
+@router.delete("/cabinet/payers/{payer_id}")
+async def unlink_cabinet_payer(
+    payer_id: int,
+    db: Session = Depends(get_rh_db),
+    token: str = Depends(get_token_from_header),
+):
+    """Відв'язати платника від клієнта (платник у БД лишається, лише link видаляється)."""
+    customer = get_current_customer(token, db)
+    cuid = customer.get("client_user_id") or customer.get("id") or customer.get("customer_id")
+    res = db.execute(text("DELETE FROM client_payer_links WHERE client_user_id = :cid AND payer_profile_id = :pid"),
+                     {"cid": cuid, "pid": payer_id})
+    db.commit()
+    if res.rowcount == 0:
+        raise HTTPException(404, "Платника не знайдено")
+    return {"success": True}
+
+
 @router.get("/orders/{order_id}/documents")
 async def get_my_order_documents(
     order_id: int,
