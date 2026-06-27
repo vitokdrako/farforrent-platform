@@ -18,6 +18,13 @@ See `/app/memory/test_credentials.md`
 
 ## What's Been Implemented (latest first)
 
+### 2026-02-25 — Підготовка backend до нового домену farforevent.com.ua
+- **Діагноз з пода**: домен `farforevent.com.ua` має NXDOMAIN на Google DNS 8.8.8.8 — у реєстратора домену ще не створено A-запис. Це не баг коду, це настройка інфраструктури на VPS/реєстраторі. `ERR_TUNNEL_CONNECTION_FAILED` у браузері — наслідок: проксі/VPN/Cloudflare не може встановити upstream tunnel.
+- **Code fix (бекенд готовий)**: у `/app/backend/server.py` додав 4 origins (`https://farforevent.com.ua`, `https://www.farforevent.com.ua`, http-варіанти) у `default_origins` ТА відрефакторив логіку CORS — env-origins тепер ОБ'ЄДНУЮТЬСЯ з default_origins (ordered de-dup), а не замінюють їх. Це усуває «footgun» з iteration_2 коли `CORS_ORIGINS` у .env приховував зміни в default_origins.
+- **`.env` оновлено**: до `CORS_ORIGINS` дописані 4 нові варіанти (belt-and-suspenders).
+- **Testing agent (iteration_3.json)**: 9/9 PASS. Усі 4 нові origins → 200 з правильним `Access-Control-Allow-Origin`, існуючі origins не зламані, evil-origin → 400.
+- **VPS-частина** (на користувачі): `/app/deploy/SETUP_NEW_DOMAIN_farforevent.md` має покрокову інструкцію — DNS A-запис у реєстратора, Nginx vhost з `server_name farforevent.com.ua`, `certbot --nginx -d farforevent.com.ua -d www.farforevent.com.ua`.
+
 ### 2026-02-25 — CRITICAL FIX: Cross-client data leak in /cabinet/* (P0)
 - **Симптом** (зі скріншоту): Vita (vitokdrako@gmail.com) у вкладці Профіль бачила дані Марини Ткачової (marinasummer80@gmail.com, +38(066)912-35-37).
 - **Корінь**: ВСІ ендпоінти Cabinet 2.0 резолвили `client_users.id` через `event_customers.customer_id`. Це різні AUTO_INCREMENT простори → випадкова рівність → запит дістає чужий рядок.
