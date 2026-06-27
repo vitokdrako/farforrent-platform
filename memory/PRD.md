@@ -18,6 +18,19 @@ See `/app/memory/test_credentials.md`
 
 ## What's Been Implemented (latest first)
 
+### 2026-02-25 — Chat: окрема сторінка ТАКОЖ для клієнта (Event Tool)
+- **Новий шлях `/chat`** у Event Tool (`/app/event-tool-source/src/pages/ClientChatPage.js`): ліва панель — усі ВЛАСНІ замовлення клієнта з лічильником непрочитаних повідомлень, права — існуючий компонент `<OrderChat>` з WebSocket (key={orderId} для force-remount при перемиканні).
+- **Маршрут** додано в `App.js` під `ProtectedRoute`. Inline `<OrderChat>` на деталях замовлення в `UserProfile.js` залишено — клієнт має ОБИДВА варіанти: швидкий (модальний у профілі) і повний (окрема сторінка).
+- **Кнопка `💬 Чат`** у header профілю поряд із «Каталог».
+- **На VPS треба перебудувати ОБИДВА фронти** (event-tool + admin), щоб маршрути з'явилися.
+- **testing_agent (iteration_9.json)**: ✅ **34/34 PASS** (13 нових для клієнта + 21 регресія). 0 critical, 0 minor. Перевірено: auth, scope (тільки власні замовлення, без leak), persistence sender_type='client', read-marker advances, 404 для чужого замовлення, 400 для empty message.
+
+**Code-review tech debt (накопичується, окремою задачкою):**
+- 🟡 Admin chat endpoints все ще БЕЗ auth (тепер ре-підтверджено)
+- 🟡 `SHOW COLUMNS FROM orders` на кожен запит у client_router — memoize
+- 🟡 `read_marker UPDATE` на кожен GET /messages — batch або через WS ACK
+- 🟡 ClientChatPage робить N паралельних HTTP-запитів `unread_count` на render → завести `GET /api/event/orders/unread_counts` що повертає `{order_id: count}` одним хопом
+
 ### 2026-02-25 — Chat з клієнтом — окрема сторінка для менеджерів (P1) + 2 backend bug-fix
 **Нова сторінка `/manager/chat`:**
 - `/app/frontend/src/pages/ChatPage.jsx` — повноекранна Telegram-style розкладка: ліва панель — активні замовлення з пошуком + бейджем «нових», права — стрічка з повідомленнями і input.
