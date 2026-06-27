@@ -18,6 +18,13 @@ See `/app/memory/test_credentials.md`
 
 ## What's Been Implemented (latest first)
 
+### 2026-02-25 — Refactor: централізований image-URL mapper layer
+- **Чому**: попередній баг з подвійним `/uploads/uploads/` стався через локальну `def normalize_image_url` яка shadow-перекривала імпорт. Code-reviewer рекомендував витягнути логіку в окремі серіалізатори.
+- **`/app/backend/utils/image_helper.py`**: додано `serialize_product_image(path) -> str` і `serialize_order_item_image(item_image, product_fallback) -> str`. Завжди повертають `""` замість `None` (JSON-friendly). Перший — простий wrapper, другий — централізує fallback логіку для order items.
+- **`/app/backend/routes/event_tool.py`**: усі 6 inline-викликів `normalize_image_url(row[X])` замінено на названі серіалізатори (лінії 542, 601, 610, 927, 1059, 1981). Прямий імпорт `normalize_image_url` видалено — щоб неможливо було випадково shadow-перекрити.
+- **testing_agent (iteration_6.json)**: 37/37 PASS (23 unit + 14 integration). Live дані Vita's orders все ще `uploads/products/LA277_LA277.jpg`. Жодних регресій. Контракт image_url змінився з `None` → `""` — frontend обидва трактує як falsy, тож user-facing змін немає.
+- **Code-review note**: рекомендовано додати ruff `F811` / pylint `W0621` у CI, щоб ловити shadowing imports автоматично.
+
 ### 2026-02-25 — Fix: подвійний префікс `/uploads/uploads/` у URL картинок (P0)
 - **Симптом** (скрін DevTools): на сторінці профілю → деталі замовлення всі картинки 404 з URL `https://farforevent.com.ua/uploads/uploads/products/TR9819_*.png`.
 - **Корінь**: у `event_tool.py:get_my_order_by_id()` була оголошена **локальна функція** `normalize_image_url(url)` яка тінню перекривала глобальний імпорт `from utils.image_helper import normalize_image_url`. Локальна безумовно додавала `/uploads/` навіть до значень з префіксом `uploads/`.
