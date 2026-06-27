@@ -425,6 +425,15 @@ const UserProfile = () => {
           </div>
           <div className="profile-header-actions">
             <button
+              onClick={() => navigate('/chat')}
+              data-testid="header-client-chat-btn"
+              className="fd-btn fd-btn-secondary"
+              style={{ position: 'relative' }}
+            >
+              💬 Чат
+              {unreadDocs === 0 ? null : null}
+            </button>
+            <button
               onClick={() => navigate('/')}
               className="fd-btn fd-btn-secondary"
             >

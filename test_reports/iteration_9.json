@@ -1,0 +1,35 @@
+{
+  "summary": "Backend-only validation of the new CLIENT-side standalone chat page (/chat in Event Tool). Created /app/backend/tests/test_client_chat_page.py with 13 tests covering POST /api/event/auth/login, GET /api/event/orders (own orders only, 401 without auth, no email-leak across orders), GET/POST /api/event/orders/{id}/chat/messages (200, persistence, sender_type='client', 404 for foreign order, 400 for empty), GET /api/event/orders/{id}/chat/unread_count (shape + read-marker advances to 0 after GET messages), cabinet-profile data-leak regression, and cross-side smoke (client JWT vs unauthenticated /api/admin/orders/{id}/chat/* — does not crash). All 13/13 PASS. Re-ran iteration_8 regression (test_manager_chat_page.py + test_cabinet_data_leak_fix.py) — 21/21 PASS. Static JSX parse of ClientChatPage.js (295 lines), App.js (1100 lines), UserProfile.js (1971 lines), OrderChat.js (322 lines) — all 4 parsed cleanly with @babel/parser. Wiring confirmed: import at App.js:22, route /chat under ProtectedRoute at App.js:1081, '💬 Чат' button at UserProfile.js:428 navigating to /chat, ClientChatPage uses chatAPI.unreadCount() for badges and renders <OrderChat orderId orderNumber/> in the right pane. Total: 34/34 backend tests PASS + 4/4 JSX files parsed.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_client_chat_page.py",
+    "/app/backend/tests/test_manager_chat_page.py",
+    "/app/test_reports/pytest/iteration_9_client_chat.xml",
+    "/app/test_reports/pytest/iteration_9_regression.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Admin chat endpoints in routes/order_chat.py admin_router (lines 170-216) remain UNAUTHENTICATED — re-confirmed in this iteration: a valid client JWT (or no JWT at all) can hit /api/admin/orders/{id}/chat/messages and read/write as 'Менеджер'. Still tracked as tech debt from iteration_8.",
+    "Client endpoints use SHOW COLUMNS FROM orders on EVERY request inside _verify_order_belongs_to_client (order_chat.py:58). 3 endpoints x N requests = N SHOW COLUMNS round-trips. Consider memoising existing_cols at module-level after first call.",
+    "Per-message read-marker UPDATE inside GET /messages handler (order_chat.py:109-113) runs on every page-load and commits. Fine for low volume; under load consider batching or marking-on-WS-ack only.",
+    "ClientChatPage.js polls chatAPI.unreadCount() per order in the sidebar (line 60). With N orders this is N parallel HTTP requests on every render — consider a single GET /api/event/orders/unread_counts endpoint that returns {order_id: count} in one round-trip."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_client_chat_page.py (NEW)"
+  ],
+  "success_rate": {"backend": "100% (34/34: 13 new client-chat tests + 21 iteration_8 regression)", "frontend": "static parse only (4/4 files OK); no dev server in this pod"},
+  "test_credentials": "vitokdrako@gmail.com / test123 (Event Tool client login via POST /api/event/auth/login)",
+  "seed_data_creation": "One client-side test message inserted into order_chat_messages for order_id=7795 by test_send_message_persists_with_sender_type_client, with marker prefix TEST_client_chat_<unix_ts>; sender_type='client'. Small, marked, auditable — safe to leave.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "test_client_chat_page.py is the canonical regression suite for the new client-side /chat page backend. Combine with test_manager_chat_page.py for full coverage of both sides of order_chat.py. Order 7795 is Vita's known test order (KNOWN_ORDER_ID at top of file); my_order_id fixture auto-falls back to the first order in /api/event/orders if 7795 is archived. Run order: test_client_chat_page.py + test_manager_chat_page.py + test_cabinet_data_leak_fix.py. Frontend at /app/event-tool-source has no dev server in this pod — only static parse was possible.",
+  "rca of the issue": "N/A — this iteration is a feature-addition test (new client-side /chat standalone page), not a bug RCA. All endpoints behave per the review request: auth-required, scoped to caller's orders, read-marker advances, foreign-order returns 404, empty message returns 400, sender_type correctly set to 'client'."
+}

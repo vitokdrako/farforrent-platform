@@ -19,6 +19,7 @@ import CreateBoardModal from './components/CreateBoardModal';
 import UserProfile from './components/UserProfile';
 import RentalRules from './pages/RentalRules';
 import FavoritesPage from './pages/FavoritesPage';
+import ClientChatPage from './pages/ClientChatPage';
 import './App.css';
 import api from './api/axios';
 
@@ -1073,6 +1074,14 @@ function App() {
                   element={
                     <ProtectedRoute>
                       <FavoritesPage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/chat"
+                  element={
+                    <ProtectedRoute>
+                      <ClientChatPage />
                     </ProtectedRoute>
                   }
                 />
