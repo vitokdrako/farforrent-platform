@@ -60,7 +60,12 @@ if cors_origins == '*':
     cors_origins_list = ["*"]
     allow_cred = False  # Cannot use credentials with wildcard origin
 elif cors_origins:
-    cors_origins_list = [o.strip() for o in cors_origins.split(',')]
+    # IMPORTANT: env-provided origins are MERGED with default_origins (union),
+    # not replacing them. Це запобігає тихим регресіям коли хтось додає новий
+    # production-домен у default_origins, але .env залишається з застарілим списком.
+    env_origins = [o.strip() for o in cors_origins.split(',') if o.strip()]
+    merged = list(dict.fromkeys([*env_origins, *default_origins]))  # ordered de-dup
+    cors_origins_list = merged
     allow_cred = True
 else:
     # Use default origins if not specified
