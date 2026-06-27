@@ -18,6 +18,13 @@ See `/app/memory/test_credentials.md`
 
 ## What's Been Implemented (latest first)
 
+### 2026-02-25 — Fix: подвійний префікс `/uploads/uploads/` у URL картинок (P0)
+- **Симптом** (скрін DevTools): на сторінці профілю → деталі замовлення всі картинки 404 з URL `https://farforevent.com.ua/uploads/uploads/products/TR9819_*.png`.
+- **Корінь**: у `event_tool.py:get_my_order_by_id()` була оголошена **локальна функція** `normalize_image_url(url)` яка тінню перекривала глобальний імпорт `from utils.image_helper import normalize_image_url`. Локальна безумовно додавала `/uploads/` навіть до значень з префіксом `uploads/`.
+- **Фікс**: видалено локальну функцію (рядки 1895-1904 у `event_tool.py`). Тепер усі 6 call-sites використовують єдиний глобальний хелпер, що коректно повертає `uploads/products/...` як є.
+- **testing_agent (iteration_5.json)**: 19/19 PASS, 0 critical, 0 minor. Live перевірка Vita's orders 7795 і 7451 — image_url повертається у правильному вигляді (`uploads/products/LA277_LA277.jpg`).
+- **Рекомендація CR**: увімкнути ruff `F811` / pylint `W0621` щоб ловити shadowing import-ів у майбутньому.
+
 ### 2026-02-25 — Підготовка backend до нового домену farforevent.com.ua
 - **Діагноз з пода**: домен `farforevent.com.ua` має NXDOMAIN на Google DNS 8.8.8.8 — у реєстратора домену ще не створено A-запис. Це не баг коду, це настройка інфраструктури на VPS/реєстраторі. `ERR_TUNNEL_CONNECTION_FAILED` у браузері — наслідок: проксі/VPN/Cloudflare не може встановити upstream tunnel.
 - **Code fix (бекенд готовий)**: у `/app/backend/server.py` додав 4 origins (`https://farforevent.com.ua`, `https://www.farforevent.com.ua`, http-варіанти) у `default_origins` ТА відрефакторив логіку CORS — env-origins тепер ОБ'ЄДНУЮТЬСЯ з default_origins (ordered de-dup), а не замінюють їх. Це усуває «footgun» з iteration_2 коли `CORS_ORIGINS` у .env приховував зміни в default_origins.
