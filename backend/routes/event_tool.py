@@ -1891,18 +1891,6 @@ async def get_my_order_details(
         """
         items_rows = db.execute(text(items_sql), {"oid": order_id}).fetchall()
 
-        # Нормалізуємо URL картинок — додаємо префікс /uploads/ якщо потрібно
-        def normalize_image_url(url: str) -> str:
-            if not url:
-                return ""
-            url = str(url).strip()
-            if url.startswith("http://") or url.startswith("https://"):
-                return url
-            if url.startswith("/"):
-                return url
-            # Відносний шлях — додаємо /uploads/
-            return f"/uploads/{url}"
-
         # ✅ Прогрес комплектації з issue_cards
         packing_progress = 0
         try:

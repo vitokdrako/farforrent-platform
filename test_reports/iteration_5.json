@@ -1,0 +1,31 @@
+{
+  "summary": "Verified the `uploads/uploads/` double-prefix bug fix in /app/backend/routes/event_tool.py (removed local normalize_image_url shadow inside get_my_order_by_id). Wrote /app/backend/tests/test_image_url_double_prefix_fix.py with 19 cases — 9 unit tests on the global utils.image_helper.normalize_image_url contract + 10 integration tests (smoke health, CORS preflight for farforevent.com.ua, PRIMARY order-detail image inspection, products list regression, product detail regression, cabinet profile/payers/MA/documents/notifications regression). All 19/19 PASSED in 17s. Live inspection of Vita's two orders (7795, 7451) confirms item.image_url is now `uploads/products/LA277_LA277.jpg` and `uploads/products/GM002_1000232262.png` — exactly the expected single-prefix shape. No `uploads/uploads/` anywhere. Confirmed git shows only `from utils.image_helper import normalize_image_url` at line 21 of event_tool.py and no local def of normalize_image_url remains (grep verified all 6 call sites resolve to the global helper).",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_image_url_double_prefix_fix.py",
+    "/app/test_reports/pytest/iteration_5_image_url_fix.xml"
+  ],
+  "action_items": [
+    "No code action needed. Double-prefix bug is fixed and verified end-to-end against live data."
+  ],
+  "critical_code_review_comments": [
+    "Recommendation: add a module-level lint/CI rule (e.g. ruff F811 / pylint redefined-outer-name) to catch any future local shadowing of `normalize_image_url` (or any utils.* import). The bug was a textbook function-shadowing-import case that would have been caught statically.",
+    "All 6 call sites in event_tool.py (lines 538, 597, 606, 923, 1055, 1977) now uniformly use the single global helper — good. Consider extracting the legacy DB image-path handling into a single mapper layer instead of repeating `normalize_image_url(row[6])` etc., to reduce per-row defensive boilerplate."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100% (19/19)", "frontend": "N/A (skipped per request)"},
+  "test_credentials": "vitokdrako@gmail.com / test123 (from /app/memory/test_credentials.md)",
+  "seed_data_creation": "None — used Vita's existing orders 7795 and 7451.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "For any future change touching /app/backend/utils/image_helper.py or any image_url-emitting endpoint, re-run /app/backend/tests/test_image_url_double_prefix_fix.py (covers helper contract + 5 endpoints). Combine with iteration_4's two suites (test_cors_new_domain.py + test_cabinet_data_leak_fix.py) for a 36-case regression baseline. Vita has 2 orders (7795, 7451) with 1 item each, both with `uploads/products/...` shaped image_urls — useful for future visual checks.",
+  "rca of the issue": "ROOT CAUSE: A local function `normalize_image_url(url)` was defined inside `get_my_order_by_id()` at /app/backend/routes/event_tool.py line ~1895, which shadowed the module-level `from utils.image_helper import normalize_image_url` (line 21). The local impl unconditionally prepended `/uploads/` regardless of input, so DB values like `uploads/products/STL9826_xxx.png` (which already include the prefix) became `/uploads/uploads/products/STL9826_xxx.png`. Frontend then concatenated `${REACT_APP_BACKEND_URL}/${url.replace(/^\\/+/, '')}` → `https://farforevent.com.ua/uploads/uploads/products/...` → 404. REPRODUCTION (pre-fix): GET /api/event/orders/{order_id} on any owned order with `uploads/`-prefixed image_url in DB returned items[].image_url containing the double prefix. MITIGATION: Main agent already deleted the local function (lines 1895-1904 in pre-fix file). Verified: grep finds only the import + 6 call sites, no local def. Live data inspection confirms single-prefix output. PREVENTION: enable ruff F811 (redefined-outer-name) or pylint W0621 in CI to catch any future local shadowing of imported helpers."
+}
