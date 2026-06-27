@@ -258,15 +258,8 @@ async def chat_admin_ws(websocket: WebSocket, order_id: int,
                 # Push клієнту (якщо він не у WS)
                 if not any(r == "client" for _, r in chat_room._rooms.get(order_id, [])):
                     try:
-                        from services.push_notifications import send_to_customer
-                        c = db.execute(text("""
-                            SELECT event_tool_customer_id, order_number FROM orders WHERE order_id = :oid
-                        """), {"oid": order_id}).fetchone()
-                        if c and c[0]:
-                            send_to_customer(db, c[0],
-                                title=f"💬 Менеджер написав ({c[1]})",
-                                body=msg_text[:120], url="/profile",
-                                tag=f"chat-{order_id}")
+                        from services.push_notifications import notify_chat_message
+                        notify_chat_message(db, order_id, msg_text)
                     except Exception as e:
                         logger.warning(f"push from admin WS failed: {e}")
             elif mtype == "typing":

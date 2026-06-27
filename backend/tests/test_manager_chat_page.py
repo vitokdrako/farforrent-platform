@@ -69,15 +69,42 @@ class TestSmoke:
         assert r.status_code == 200
         assert r.json().get("status") == "ok"
 
-    def test_cabinet_profile_returns_own_email(self, api, auth_headers):
-        # Previous data-leak regression: profile must return the caller's email
+    def test_cabinet_profile_with_admin_token_returns_401(self, api, auth_headers):
+        """
+        iteration_8 fix: decode_token now wraps int(payload['sub']) in try/except.
+        Admin/manager JWT has sub=email_string — get_current_customer must
+        return 401 'Customer not found' (NOT 500).
+        """
         r = api.get(f"{BASE_URL}/api/event/cabinet/profile", headers=auth_headers, timeout=10)
-        # If endpoint doesn't exist for admin role, accept 404/403; only fail on 500 or wrong email
-        assert r.status_code != 500, f"cabinet/profile 500: {r.text[:200]}"
-        if r.status_code == 200:
-            body = r.json()
-            email = body.get("email") or (body.get("user") or {}).get("email")
-            assert email == MANAGER_EMAIL, f"expected {MANAGER_EMAIL}, got {email}"
+        assert r.status_code == 401, f"expected 401, got {r.status_code}: {r.text[:200]}"
+        body = r.json()
+        detail = body.get("detail") or ""
+        assert "Customer not found" in detail, f"unexpected detail: {detail}"
+
+    def test_cabinet_profile_with_event_client_token_returns_200(self, api):
+        """
+        Regression of iteration_1 data-leak fix: a valid Event Tool client JWT
+        (issued via /api/event/auth/login) must still get the right customer
+        profile back.
+        """
+        login = api.post(
+            f"{BASE_URL}/api/event/auth/login",
+            json={"email": MANAGER_EMAIL, "password": MANAGER_PASSWORD},
+            timeout=15,
+        )
+        if login.status_code != 200:
+            pytest.skip(f"event client login not available: {login.status_code} {login.text[:200]}")
+        token = login.json().get("access_token")
+        assert token, f"no access_token in event login response: {login.json()}"
+        r = api.get(
+            f"{BASE_URL}/api/event/cabinet/profile",
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=10,
+        )
+        assert r.status_code == 200, f"expected 200 for valid client token, got {r.status_code}: {r.text[:200]}"
+        body = r.json()
+        email = body.get("email") or (body.get("user") or {}).get("email")
+        assert email and email.lower() == MANAGER_EMAIL.lower(), f"expected {MANAGER_EMAIL}, got {email}"
 
 
 # ---------- decor-orders sidebar ---------------------------------------------

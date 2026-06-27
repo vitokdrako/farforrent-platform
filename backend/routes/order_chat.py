@@ -199,17 +199,8 @@ async def admin_send_message(
 
     # Push клієнту про нове повідомлення
     try:
-        from services.push_notifications import send_to_customer
-        cust = db.execute(text("""
-            SELECT event_tool_customer_id, order_number FROM orders WHERE order_id = :oid
-        """), {"oid": order_id}).fetchone()
-        if cust and cust[0]:
-            send_to_customer(
-                db, cust[0],
-                title=f"💬 Менеджер написав ({cust[1]})",
-                body=body.message.strip()[:120],
-                url="/profile", tag=f"chat-{order_id}",
-            )
+        from services.push_notifications import notify_chat_message
+        notify_chat_message(db, order_id, body.message, sender_name)
     except Exception as e:
         logger.warning(f"chat push notify failed: {e}")
 

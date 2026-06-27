@@ -152,9 +152,14 @@ def create_refresh_token(data: dict) -> str:
 def decode_token(token: str) -> dict:
     try:
         payload = jwt.decode(token, get_secret_key(), algorithms=[ALGORITHM])
-        # Конвертуємо sub назад в int
+        # Конвертуємо sub назад в int (тільки для customer-токенів Event Tool;
+        # admin/manager JWT мають sub=email-string — для них залишаємо як є,
+        # щоб get_current_customer повернув коректний 401 замість 500)
         if "sub" in payload:
-            payload["sub"] = int(payload["sub"])
+            try:
+                payload["sub"] = int(payload["sub"])
+            except (TypeError, ValueError):
+                pass
         return payload
     except jwt.ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Token expired")

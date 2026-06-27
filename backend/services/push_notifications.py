@@ -121,17 +121,13 @@ def notify_order_status_change(db: Session, order_id: int, new_status: str,
                             tag=f"order-{order_id}-status")
 
 
-def notify_document_ready(db: Session, order_id: int, doc_type: str,
-                          doc_number: Optional[str] = None) -> dict:
-    """Send push when a new document is ready to sign/view.
-
-    Resolves the event_tool customer either via orders.event_tool_customer_id
-    (preferred) or by matching orders.customer_email → event_customers.email
-    (fallback for orders created outside Event Tool).
+def _resolve_event_customer_for_order(db: Session, order_id: int) -> tuple:
     """
-    if not is_configured():
-        return {"skipped": True}
-    # Discover whether the column event_tool_customer_id exists in orders
+    Знайти (customer_id, order_number) для замовлення.
+    Спочатку через `orders.event_tool_customer_id` (якщо колонка існує),
+    потім fallback через `orders.customer_email` → `event_customers.email`.
+    Повертає (None, order_number_or_None) якщо клієнта не вдалось ідентифікувати.
+    """
     has_etc = False
     try:
         db.execute(text("SELECT event_tool_customer_id FROM orders LIMIT 0"))
@@ -151,7 +147,7 @@ def notify_document_ready(db: Session, order_id: int, doc_type: str,
         """), {"oid": order_id}).fetchone()
 
     if not row:
-        return {"skipped": True, "reason": "order not found"}
+        return (None, None)
 
     order_number = row[0]
     customer_id = row[1]
@@ -164,6 +160,22 @@ def notify_document_ready(db: Session, order_id: int, doc_type: str,
         """), {"em": customer_email}).fetchone()
         customer_id = m[0] if m else None
 
+    return (int(customer_id) if customer_id else None, order_number)
+
+
+def notify_document_ready(db: Session, order_id: int, doc_type: str,
+                          doc_number: Optional[str] = None) -> dict:
+    """Send push when a new document is ready to sign/view.
+
+    Resolves the event_tool customer either via orders.event_tool_customer_id
+    (preferred) or by matching orders.customer_email → event_customers.email
+    (fallback for orders created outside Event Tool).
+    """
+    if not is_configured():
+        return {"skipped": True}
+    customer_id, order_number = _resolve_event_customer_for_order(db, order_id)
+    if not order_number:
+        return {"skipped": True, "reason": "order not found"}
     if not customer_id:
         return {"skipped": True, "reason": "no event customer linked"}
 
@@ -186,3 +198,19 @@ def notify_document_ready(db: Session, order_id: int, doc_type: str,
     body = f"Замовлення {order_number} — відкрийте, щоб переглянути та підписати"
     return send_to_customer(db, int(customer_id), title, body, url="/profile",
                             tag=f"order-{order_id}-doc-{doc_type}")
+
+
+def notify_chat_message(db: Session, order_id: int, message_preview: str,
+                        sender_name: Optional[str] = None) -> dict:
+    """Send push to a client when the manager writes in the order chat."""
+    if not is_configured():
+        return {"skipped": True}
+    customer_id, order_number = _resolve_event_customer_for_order(db, order_id)
+    if not order_number:
+        return {"skipped": True, "reason": "order not found"}
+    if not customer_id:
+        return {"skipped": True, "reason": "no event customer linked"}
+    title = f"Менеджер написав ({order_number})"
+    body = (message_preview or "").strip()[:140] or "Нове повідомлення"
+    return send_to_customer(db, int(customer_id), title, body, url="/profile",
+                            tag=f"chat-{order_id}")
