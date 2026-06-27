@@ -33,3 +33,27 @@ def normalize_image_url(image_path: str | None) -> str | None:
     # Relative path from old OpenCart structure - convert to new static path
     # Example: "catalog/product/image.jpg" -> "static/images/catalog/product/image.jpg"
     return f"static/images/{image_path}"
+
+
+# ─── Serializers (single mapper layer) ────────────────────────────────
+# Use these instead of calling normalize_image_url() inline at every row.
+# Reasoning: prevents accidental shadowing (the "double /uploads/" bug
+# was caused by a local def normalize_image_url that shadowed this import),
+# guarantees frontend-friendly "" instead of None, and centralises future
+# image rules (lazy thumbnails, CDN switches, fallbacks).
+
+def serialize_product_image(image_path: str | None) -> str:
+    """
+    Canonical serializer for any single product/board/cart image field.
+    Returns "" (never None) so JSON consumers can use a falsy check uniformly.
+    """
+    return normalize_image_url(image_path) or ""
+
+
+def serialize_order_item_image(item_image: str | None,
+                               product_fallback_image: str | None) -> str:
+    """
+    Order items have a per-row override (order_items.image_url) and a
+    fallback to the product's current image. Prefer the per-row value.
+    """
+    return normalize_image_url(item_image or product_fallback_image) or ""

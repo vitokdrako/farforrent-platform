@@ -18,7 +18,10 @@ from functools import lru_cache
 import time
 
 from database_rentalhub import get_rh_db
-from utils.image_helper import normalize_image_url
+from utils.image_helper import (
+    serialize_product_image,
+    serialize_order_item_image,
+)
 from utils.smart_search import filter_and_rank, parse_query
 from utils.rental_days import calculate_rental_days as _calc_days
 
@@ -535,7 +538,7 @@ async def get_products(
             "category_name": row[3],
             "subcategory_name": row[4],
             "rental_price": float(row[5]) if row[5] else 0,
-            "image_url": normalize_image_url(row[6]),
+            "image_url": serialize_product_image(row[6]),
             "color": row[7],
             "material": row[8],
             "size": row[9],
@@ -594,7 +597,7 @@ async def get_product(product_id: int, db: Session = Depends(get_rh_db)):
 
     # Усі фото з product_images (якщо є)
     images = []
-    primary_image = normalize_image_url(row[6])
+    primary_image = serialize_product_image(row[6]) or None
     try:
         img_rows = db.execute(text("""
             SELECT image_url, is_primary, sort_order
@@ -603,7 +606,7 @@ async def get_product(product_id: int, db: Session = Depends(get_rh_db)):
             ORDER BY is_primary DESC, sort_order ASC, id ASC
         """), {"id": product_id}).fetchall()
         for ir in img_rows:
-            url = normalize_image_url(ir[0])
+            url = serialize_product_image(ir[0])
             if url:
                 images.append(url)
     except Exception:
@@ -920,7 +923,7 @@ async def get_boards(
                 "sku": item[8],
                 "name": item[9],
                 "rental_price": float(item[10]) if item[10] else 0,
-                "image_url": normalize_image_url(item[11]),
+                "image_url": serialize_product_image(item[11]),
                 "color": item[12],
                 "material": item[13]
             }
@@ -1052,7 +1055,7 @@ async def get_board(
             "sku": item[8],
             "name": item[9],
             "rental_price": float(item[10]) if item[10] else 0,
-            "image_url": normalize_image_url(item[11]),
+            "image_url": serialize_product_image(item[11]),
             "color": item[12],
             "material": item[13]
         }
@@ -1974,7 +1977,7 @@ async def get_my_order_details(
                     "price_per_day": float(ir[3] or 0),
                     "total_rental": float(ir[4] or 0),
                     "total_deposit": float(ir[5] or 0),
-                    "image_url": normalize_image_url(ir[9] or ir[6] or ''),
+                    "image_url": serialize_order_item_image(ir[9], ir[6]),
                     "sku": ir[7] or '',
                     "deposit_per_unit": float(ir[11] or 0),
                     "color": ir[12] or '',

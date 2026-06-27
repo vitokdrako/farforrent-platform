@@ -26,7 +26,11 @@ TEST_PASSWORD = "test123"
 # Unit tests: global normalize_image_url helper contract
 # ────────────────────────────────────────────────────────────────────────────
 sys.path.insert(0, "/app/backend")
-from utils.image_helper import normalize_image_url  # noqa: E402
+from utils.image_helper import (  # noqa: E402
+    normalize_image_url,
+    serialize_product_image,
+    serialize_order_item_image,
+)
 
 
 class TestNormalizeImageUrlUnit:
@@ -61,6 +65,74 @@ class TestNormalizeImageUrlUnit:
 
     def test_none_returns_none(self):
         assert normalize_image_url(None) is None
+
+
+# ────────────────────────────────────────────────────────────────────────────
+# Unit tests: NEW serializer mapper layer (iteration_6 refactor)
+# Contract: never returns None — returns "" instead so the JSON consumer
+# can use a single falsy check uniformly.
+# ────────────────────────────────────────────────────────────────────────────
+class TestSerializeProductImageUnit:
+    def test_uploads_relative_unchanged(self):
+        assert serialize_product_image("uploads/products/x.png") == "uploads/products/x.png"
+
+    def test_none_returns_empty_string(self):
+        assert serialize_product_image(None) == ""
+
+    def test_empty_returns_empty_string(self):
+        assert serialize_product_image("") == ""
+
+    def test_legacy_relative_gets_static_prefix(self):
+        assert serialize_product_image("foo.png") == "static/images/foo.png"
+
+    def test_uploads_absolute_unchanged(self):
+        assert serialize_product_image("/uploads/x.png") == "/uploads/x.png"
+
+    def test_https_full_url_unchanged(self):
+        assert serialize_product_image("https://cdn/x.png") == "https://cdn/x.png"
+
+    def test_return_type_always_str(self):
+        # Critical contract: result must never be None
+        for v in [None, "", "foo.png", "uploads/x.png", "https://cdn/x.png"]:
+            r = serialize_product_image(v)
+            assert isinstance(r, str), f"serialize_product_image({v!r}) returned {type(r)}"
+
+
+class TestSerializeOrderItemImageUnit:
+    def test_fallback_used_when_item_image_none(self):
+        assert (
+            serialize_order_item_image(None, "uploads/products/p.png")
+            == "uploads/products/p.png"
+        )
+
+    def test_per_item_override_preferred(self):
+        assert (
+            serialize_order_item_image("uploads/products/o.png", "uploads/products/p.png")
+            == "uploads/products/o.png"
+        )
+
+    def test_both_none_returns_empty_string(self):
+        assert serialize_order_item_image(None, None) == ""
+
+    def test_both_empty_returns_empty_string(self):
+        assert serialize_order_item_image("", "") == ""
+
+    def test_empty_item_falls_back_to_product(self):
+        # "" is falsy, so fallback should kick in
+        assert (
+            serialize_order_item_image("", "uploads/products/p.png")
+            == "uploads/products/p.png"
+        )
+
+    def test_legacy_relative_item_gets_static_prefix(self):
+        assert serialize_order_item_image("foo.png", None) == "static/images/foo.png"
+
+    def test_return_type_always_str(self):
+        for a, b in [(None, None), ("", ""), ("x.png", None), (None, "y.png")]:
+            r = serialize_order_item_image(a, b)
+            assert isinstance(r, str), (
+                f"serialize_order_item_image({a!r},{b!r}) returned {type(r)}"
+            )
 
 
 # ────────────────────────────────────────────────────────────────────────────
@@ -286,3 +358,125 @@ class TestCabinetRegression:
         assert "new_documents" in data
         assert isinstance(data["new_documents"], int)
         assert data["new_documents"] >= 0
+
+
+# ────────────────────────────────────────────────────────────────────────────
+# NEW: contract checks for mapper-layer refactor.
+# After iteration_6, every image_url-emitting endpoint must return a STRING
+# (never None) per the serialize_product_image / serialize_order_item_image
+# contract.
+# ────────────────────────────────────────────────────────────────────────────
+class TestImageUrlIsAlwaysString:
+    def test_products_list_image_url_is_string(self, api_client):
+        r = api_client.get(f"{BASE_URL}/api/event/products?limit=10", timeout=15)
+        assert r.status_code == 200, r.text
+        data = r.json()
+        if isinstance(data, dict):
+            data = data.get("products") or data.get("items") or data.get("data") or []
+        assert isinstance(data, list) and len(data) > 0
+        for p in data:
+            url = p.get("image_url")
+            pid = p.get("product_id") or p.get("id")
+            assert isinstance(url, str), (
+                f"product {pid}: image_url must be str per new contract, "
+                f"got {type(url).__name__}={url!r}"
+            )
+            assert "uploads/uploads/" not in url, f"product {pid}: double prefix"
+
+    def test_product_detail_image_url_is_string(self, api_client):
+        r = api_client.get(f"{BASE_URL}/api/event/products?limit=5", timeout=15)
+        data = r.json()
+        if isinstance(data, dict):
+            data = data.get("products") or data.get("items") or data.get("data") or []
+        if not data:
+            pytest.skip("no products available")
+        pid = data[0].get("product_id") or data[0].get("id")
+        r = api_client.get(f"{BASE_URL}/api/event/products/{pid}", timeout=15)
+        assert r.status_code == 200
+        detail = r.json()
+        # Top-level image_url must be a str now
+        assert isinstance(detail.get("image_url"), str), (
+            f"product {pid}: detail.image_url must be str, "
+            f"got {type(detail.get('image_url')).__name__}"
+        )
+        # primary_image is allowed to be None per agent note ("possibly None")
+        pi = detail.get("primary_image")
+        assert pi is None or isinstance(pi, str), (
+            f"product {pid}: primary_image must be str or None, got {type(pi).__name__}"
+        )
+        # images[] urls must all be strings, no None-in-list
+        for i, img in enumerate(detail.get("images") or []):
+            url = img if isinstance(img, str) else (
+                img.get("url") or img.get("image_url")
+            )
+            assert isinstance(url, str), (
+                f"product {pid} images[{i}]: must be str, got {type(url).__name__}"
+            )
+
+    def test_order_detail_item_image_url_is_string(self, auth_client):
+        r = auth_client.get(f"{BASE_URL}/api/event/orders", timeout=15)
+        assert r.status_code == 200
+        orders = r.json()
+        if isinstance(orders, dict):
+            orders = (
+                orders.get("orders") or orders.get("items") or orders.get("data") or []
+            )
+        order_ids = [
+            o.get("order_id") or o.get("id") for o in orders if (o.get("order_id") or o.get("id"))
+        ]
+        if not order_ids:
+            pytest.skip("no orders to inspect")
+        checked = False
+        for oid in order_ids[:5]:
+            r = auth_client.get(f"{BASE_URL}/api/event/orders/{oid}", timeout=15)
+            if r.status_code != 200:
+                continue
+            for i, item in enumerate(r.json().get("items") or []):
+                url = item.get("image_url")
+                assert isinstance(url, str), (
+                    f"order {oid} item[{i}]: image_url must be str, "
+                    f"got {type(url).__name__}={url!r}"
+                )
+                assert "uploads/uploads/" not in url
+            checked = True
+        if not checked:
+            pytest.skip("no accessible orders")
+
+    def test_boards_list_and_detail_image_url_is_string(self, auth_client):
+        r = auth_client.get(f"{BASE_URL}/api/event/boards", timeout=15)
+        # Boards endpoint may 404 or 200 depending on user state — only assert if 200
+        if r.status_code != 200:
+            pytest.skip(f"/boards returned {r.status_code}; skipping")
+        data = r.json()
+        boards = data if isinstance(data, list) else (
+            data.get("boards") or data.get("items") or []
+        )
+        for b in boards:
+            # Boards-list level: each board may have products inside
+            items = b.get("products") or b.get("items") or []
+            for it in items:
+                p = it.get("product") or it
+                url = p.get("image_url")
+                if url is not None:
+                    assert isinstance(url, str), (
+                        f"boards-list: image_url must be str, got {type(url).__name__}"
+                    )
+                    assert "uploads/uploads/" not in url
+        # Pick first board for detail
+        if not boards:
+            return
+        bid = boards[0].get("board_id") or boards[0].get("id")
+        if bid is None:
+            return
+        r = auth_client.get(f"{BASE_URL}/api/event/boards/{bid}", timeout=15)
+        if r.status_code != 200:
+            return
+        d = r.json()
+        for it in (d.get("products") or d.get("items") or []):
+            p = it.get("product") or it
+            url = p.get("image_url")
+            if url is not None:
+                assert isinstance(url, str), (
+                    f"board {bid} detail: image_url must be str, got {type(url).__name__}"
+                )
+                assert "uploads/uploads/" not in url
