@@ -41,6 +41,8 @@ import PersonalCabinet from './pages/PersonalCabinet';
 import SyncPanel from './pages/SyncPanel';
 import DocumentTemplatesAdmin from './pages/DocumentTemplatesAdmin';
 import UnifiedCalendar from './pages/UnifiedCalendarNew';
+// @ts-ignore
+import ChatPage from './pages/ChatPage';  // ✅ Чат з клієнтами на окремій сторінці
 
 // Декодування JWT без бібліотеки
 function parseJwt(token: string) {
@@ -164,6 +166,16 @@ function App() {
                 <ManagerCabinet />
               </ProtectedRoute>
             } 
+          />
+
+          {/* Чат з клієнтами — окрема сторінка для менеджерів */}
+          <Route
+            path="/manager/chat"
+            element={
+              <ProtectedRoute>
+                <ChatPage />
+              </ProtectedRoute>
+            }
           />
           
           {/* Архів прибрано — історія замовлень тепер у Клієнтах */}

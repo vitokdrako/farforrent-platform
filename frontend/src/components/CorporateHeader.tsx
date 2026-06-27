@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { LogOut, User, ChevronDown, ArrowLeft } from 'lucide-react';
+import { LogOut, User, ChevronDown, ArrowLeft, MessageSquare } from 'lucide-react';
 
 interface CorporateHeaderProps {
   cabinetName?: string;
@@ -101,6 +101,21 @@ export default function CorporateHeader({
             >
               <ArrowLeft className="w-4 h-4" />
               <span className="hidden sm:inline">Назад</span>
+            </button>
+          )}
+
+          {/* Chat with clients — швидкий перехід на /manager/chat (для менеджерів/адмінів) */}
+          {(user?.role === 'manager' || user?.role === 'admin') &&
+            location.pathname !== '/manager/chat' && (
+            <button
+              onClick={() => navigate('/manager/chat')}
+              className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-lg sm:rounded-corp border border-corp-border bg-white text-corp-text-dark hover:bg-corp-bg-light transition-colors text-xs sm:text-sm"
+              data-testid="header-chat-btn"
+              aria-label="Чат з клієнтами"
+              title="Чат з клієнтами"
+            >
+              <MessageSquare className="w-4 h-4" />
+              <span className="hidden sm:inline">Чат</span>
             </button>
           )}
           

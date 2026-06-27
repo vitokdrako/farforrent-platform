@@ -1,0 +1,45 @@
+{
+  "summary": "Backend-only verification of the new manager-side standalone chat page (/manager/chat). Created /app/backend/tests/test_manager_chat_page.py (12 tests, 11 PASS / 1 FAIL). All 4 endpoint groups requested in the review pass: (1) GET /api/decor-orders with status filter returns 200 list (auth and no-auth — both non-500), (2) GET /api/admin/orders/7795/chat/messages returns {messages:[...]} with correct shape (id, sender_type, sender_name, message, created_at; sender_type ∈ {client,manager,system}), (3) POST same endpoint with {message:'Тест від менеджера TEST_chat_iter7_*'} returns 200 + {ok:true}, and the marker is persisted with sender_type='manager' (verified via follow-up GET), (4) GET /unread_count returns {unread:int>=0} and is correctly reset to 0 after a /messages GET (read-receipt side-effect works). No-auth smoke also passes — all three admin chat endpoints return 200 (currently unprotected) and never 500. Frontend lint of the three changed files: ChatPage.jsx, App.tsx, CorporateHeader.tsx — all parse cleanly (one unused eslint-disable warning in ChatPage.jsx, cosmetic). Smoke: /api/event/health 200. The one failing test (/api/event/cabinet/profile returning 500 for vitokdrako@gmail.com) is a PRE-EXISTING bug unrelated to this iteration — the admin/manager JWT has 'sub'=email string while decode_token in event_tool.py:157 does int(payload['sub']), raising ValueError before the 401 customer-not-found path can run.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {
+        "endpoint": "POST /api/admin/orders/{id}/chat/messages",
+        "issue": "Push-notification side-effect crashes silently. routes/order_chat.py:203-205 queries `SELECT event_tool_customer_id, order_number FROM orders` but column `event_tool_customer_id` does NOT exist in the `orders` table (verified in backend.err.log: pymysql 1054 'Unknown column'). The exception is swallowed by try/except so the endpoint still returns 200, but clients NEVER receive a push notification when a manager replies. Likely correct column is `customer_id` or a JOIN through event_customers. This was not introduced by the chat-page iteration but is on the same surface."
+      },
+      {
+        "endpoint": "GET /api/event/cabinet/profile",
+        "issue": "Returns 500 (not 401) when called with an admin/manager token. event_tool.py:157 does `int(payload['sub'])`, but admin tokens carry sub=email string, raising ValueError before the proper 401 'Customer not found' path. Pre-existing bug, unrelated to this iteration — exposed because the review request asked us to smoke-test this endpoint as a regression check. Recommend wrapping the int() in try/except and returning 401 on failure."
+      }
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_manager_chat_page.py",
+    "/app/test_reports/pytest/iteration_7_manager_chat.xml"
+  ],
+  "action_items": [
+    "Fix push-notification SQL in /app/backend/routes/order_chat.py:203 — replace `event_tool_customer_id` with the correct FK column (likely `customer_id`) or remove the column from the SELECT and look it up via a JOIN. Without this, the client-side push for manager replies is silently broken.",
+    "(Lower priority, pre-existing) Harden /app/backend/routes/event_tool.py:157 decode_token — wrap int(payload['sub']) in try/except to return 401 instead of 500 when an admin token (sub=email) is passed to a customer-cabinet endpoint."
+  ],
+  "critical_code_review_comments": [
+    "Admin chat endpoints in routes/order_chat.py (admin_router) currently have NO auth dependency — confirmed by the no-auth smoke tests returning 200. The review request acknowledged this. Anyone who knows an order_id can read the conversation and post messages as 'Менеджер'. Should be locked behind a manager/admin role check before going to production.",
+    "ChatPage.jsx contains an unused eslint-disable directive (line 1) — harmless but worth cleaning up.",
+    "The push-notification block in routes/order_chat.py:201-214 is wrapped in a broad try/except that logs only a WARNING. Combined with the broken SQL above, this means a production-relevant bug (no client push when manager replies) hides in logs forever. Either narrow the except, or surface it via a metric/alert.",
+    "decode_token's hard-coded int() cast on `sub` couples the customer-cabinet flow to one specific JWT layout. Any other token (admin, manager, service) hitting a /event/cabinet/* endpoint will 500 instead of 401. Minor but worth fixing."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_manager_chat_page.py (new — 12 pytest cases)"
+  ],
+  "success_rate": {"backend": "92% (11/12; the 1 failure is a pre-existing 500 unrelated to this iteration)", "frontend": "lint-only — all 3 files parse"},
+  "test_credentials": "vitokdrako@gmail.com / test123 (from /app/memory/test_credentials.md); login endpoint POST /api/auth/login (NOT /api/event/auth/login).",
+  "seed_data_creation": "One test message inserted into order_chat_messages for order_id=7795 with marker prefix TEST_chat_iter7_<unix_ts>; sender_type='manager'. Safe to leave (small, marked, auditable) or cleaned by future suite via marker prefix.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "test_manager_chat_page.py is the canonical regression suite for the /manager/chat page backend (decor-orders sidebar + 3 admin chat endpoints + no-auth smoke + cabinet/profile smoke). Re-run before any change to routes/order_chat.py admin_router, routes/orders.py decor_router, or the JWT/auth dependency layer. The cabinet/profile 500 will keep failing until decode_token is hardened — main agent can either fix it OR change that test to assert status_code in (401, 403) instead of !=500 once they decide on the contract. Test order 7795 (Vita's) is used; if it's archived, swap TEST_ORDER_ID at the top of the file.",
+  "rca of the issue": "1) cabinet/profile 500 RCA: decode_token() at event_tool.py:157 unconditionally does `int(payload['sub'])`. Admin/manager JWTs (issued by POST /api/auth/login) use sub=email_string (verified by decoding the returned token). Cast raises ValueError, which is NOT caught by the surrounding except branches (which only catch jwt.ExpiredSignatureError and jwt.InvalidTokenError), so it bubbles up as a 500. Reproduce: curl with manager token to /api/event/cabinet/profile. Mitigation: try/except ValueError → raise HTTPException(401). 2) Push-notification silent failure RCA: routes/order_chat.py:203 SELECT references column `event_tool_customer_id` which doesn't exist in the `orders` table (pymysql error 1054 confirmed in logs). The whole block is wrapped in try/except logger.warning, so the API still returns 200 but no push fires. Reproduce: POST /api/admin/orders/7795/chat/messages, then tail backend.err.log. Mitigation: fix the column name (probably `customer_id`) and add a unit test that asserts send_to_customer is invoked."
+}
