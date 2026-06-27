@@ -44,6 +44,11 @@ default_origins = [
     "https://www.rentalhub.farforrent.com.ua",
     "https://events.farforrent.com.ua",
     "https://backrentalhub.farforrent.com.ua",
+    # Новий event-домен (DNS треба налаштувати у реєстратора + certbot для HTTPS)
+    "https://farforevent.com.ua",
+    "https://www.farforevent.com.ua",
+    "http://farforevent.com.ua",
+    "http://www.farforevent.com.ua",
     "http://173.242.49.48",          # VPS Event Tool (клієнти)
     "http://173.242.49.48:8080",     # VPS RentalHub адмінка
     "http://localhost:3000",
