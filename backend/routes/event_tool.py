@@ -2270,7 +2270,7 @@ async def get_cabinet_documents(
     customer = get_current_customer(token, db)
     email = (customer.get("email") or "").lower().strip()
     cuid = customer.get("customer_id") or customer.get("id")
-    client_user_id = customer.get("client_user_id") or customer.get("id")
+    client_user_id = _resolve_client_user_id(db, customer)
 
     # Lazy column add: first_viewed_at (для бейджа "Новий")
     _ensure_documents_first_viewed_column(db)
@@ -2290,7 +2290,7 @@ async def get_cabinet_documents(
         INNER JOIN orders o ON o.order_id = d.entity_id
         WHERE d.entity_type = 'order'
           AND d.doc_type IN ({placeholders})
-          AND (o.customer_email = :email OR o.client_user_id = :cuser OR o.customer_id = :cuid)
+          AND (o.customer_email = :email OR o.client_user_id = :cuser)
         ORDER BY d.created_at DESC
         LIMIT 200
     """
@@ -2344,7 +2344,7 @@ async def get_cabinet_unread(
     customer = get_current_customer(token, db)
     email = (customer.get("email") or "").lower().strip()
     cuid = customer.get("customer_id") or customer.get("id")
-    client_user_id = customer.get("client_user_id") or customer.get("id")
+    client_user_id = _resolve_client_user_id(db, customer)
 
     _ensure_documents_first_viewed_column(db)
 
@@ -2360,7 +2360,7 @@ async def get_cabinet_unread(
         WHERE d.entity_type = 'order'
           AND d.doc_type IN ({placeholders})
           AND d.first_viewed_at IS NULL
-          AND (o.customer_email = :email OR o.client_user_id = :cuser OR o.customer_id = :cuid)
+          AND (o.customer_email = :email OR o.client_user_id = :cuser)
     """
     cnt = db.execute(text(sql), params).fetchone()[0] or 0
     return {"new_documents": int(cnt)}
@@ -2388,7 +2388,7 @@ async def view_cabinet_document(
     customer = get_current_customer(token, db)
     email = (customer.get("email") or "").lower().strip()
     cuid = customer.get("customer_id") or customer.get("id")
-    client_user_id = customer.get("client_user_id") or customer.get("id")
+    client_user_id = _resolve_client_user_id(db, customer)
 
     row = db.execute(text("""
         SELECT d.id, d.doc_type, d.doc_number, d.html_content, d.status, d.version, o.order_number
@@ -2396,7 +2396,7 @@ async def view_cabinet_document(
         INNER JOIN orders o ON o.order_id = d.entity_id
         WHERE d.id = :did
           AND d.entity_type = 'order'
-          AND (o.customer_email = :email OR o.client_user_id = :cuser OR o.customer_id = :cuid)
+          AND (o.customer_email = :email OR o.client_user_id = :cuser)
         LIMIT 1
     """), {"did": doc_id, "email": email, "cuid": cuid, "cuser": client_user_id}).fetchone()
 
@@ -2438,6 +2438,51 @@ async def view_cabinet_document(
     return HTMLResponse(content=wrapped)
 
 
+def _resolve_client_user_id(db: Session, customer: dict) -> int:
+    """
+    Резолвить client_users.id для поточного event_customer (за email).
+
+    КРИТИЧНО: НЕ можна використовувати event_customers.customer_id як client_users.id —
+    це різні auto-increment простори і випадкова рівність → витік даних чужого користувача
+    (баг помічений на проді: один клієнт бачив у Профілі дані іншого).
+
+    Якщо запису в client_users ще немає — створюємо його лениво (так само як це робить
+    convert-to-order), щоб новий клієнт міг одразу користуватись кабінетом.
+    """
+    email = (customer.get("email") or "").lower().strip()
+    if not email:
+        raise HTTPException(401, "У користувача немає email — не вдалось ідентифікувати")
+
+    row = db.execute(text("""
+        SELECT id FROM client_users WHERE email_normalized = :em LIMIT 1
+    """), {"em": email}).fetchone()
+    if row:
+        return int(row[0])
+
+    # Lazy create
+    full_name = f"{customer.get('firstname','')} {customer.get('lastname','')}".strip() or email
+    phone = customer.get("telephone") or ""
+    try:
+        result = db.execute(text("""
+            INSERT INTO client_users (email, email_normalized, full_name, phone, source)
+            VALUES (:email, :em, :name, :phone, 'events')
+        """), {"email": customer.get("email") or email, "em": email, "name": full_name, "phone": phone})
+        db.commit()
+        new_id = result.lastrowid
+        if new_id:
+            return int(new_id)
+    except Exception:
+        db.rollback()
+
+    # Якщо INSERT провалився (race condition) — спробуємо ще раз SELECT
+    row = db.execute(text("""
+        SELECT id FROM client_users WHERE email_normalized = :em LIMIT 1
+    """), {"em": email}).fetchone()
+    if row:
+        return int(row[0])
+    raise HTTPException(500, "Не вдалось створити профіль клієнта")
+
+
 @router.get("/cabinet/profile")
 async def get_cabinet_profile(
     db: Session = Depends(get_rh_db),
@@ -2445,7 +2490,7 @@ async def get_cabinet_profile(
 ):
     """Профіль клієнта для редагування у кабінеті."""
     customer = get_current_customer(token, db)
-    cuid = customer.get("client_user_id") or customer.get("id") or customer.get("customer_id")
+    cuid = _resolve_client_user_id(db, customer)
     row = db.execute(text("""
         SELECT id, email, phone, full_name, payer_type, tax_id, bank_details,
                company, instagram, preferred_contact, created_at
@@ -2476,7 +2521,7 @@ async def update_cabinet_profile(
 ):
     """Редагування профілю клієнтом. Email — заблоковано (для зміни — підтримка)."""
     customer = get_current_customer(token, db)
-    cuid = customer.get("client_user_id") or customer.get("id") or customer.get("customer_id")
+    cuid = _resolve_client_user_id(db, customer)
 
     ALLOWED = {"phone", "full_name", "payer_type", "tax_id", "bank_details",
                "company", "instagram", "preferred_contact"}
@@ -2513,7 +2558,7 @@ async def list_cabinet_payers(
 ):
     """Список платників клієнта."""
     customer = get_current_customer(token, db)
-    cuid = customer.get("client_user_id") or customer.get("id") or customer.get("customer_id")
+    cuid = _resolve_client_user_id(db, customer)
     rows = db.execute(text("""
         SELECT pp.id, pp.payer_type, pp.company_name, pp.edrpou, pp.iban,
                pp.bank_name, pp.director_name, pp.address, pp.phone, pp.email,
@@ -2540,7 +2585,7 @@ async def create_cabinet_payer(
 ):
     """Створити нового платника + прив'язати до клієнта."""
     customer = get_current_customer(token, db)
-    cuid = customer.get("client_user_id") or customer.get("id") or customer.get("customer_id")
+    cuid = _resolve_client_user_id(db, customer)
     fields = {k: v for k, v in payload.items() if k in _PAYER_EDITABLE}
     if not fields.get("company_name"):
         raise HTTPException(400, "Назва платника обов'язкова")
@@ -2569,7 +2614,7 @@ async def update_cabinet_payer(
 ):
     """Редагувати платника (тільки якщо прив'язаний до цього клієнта)."""
     customer = get_current_customer(token, db)
-    cuid = customer.get("client_user_id") or customer.get("id") or customer.get("customer_id")
+    cuid = _resolve_client_user_id(db, customer)
     own = db.execute(text("SELECT id FROM client_payer_links WHERE client_user_id = :cid AND payer_profile_id = :pid"),
                      {"cid": cuid, "pid": payer_id}).fetchone()
     if not own:
@@ -2592,7 +2637,7 @@ async def set_default_payer(
 ):
     """Зробити цього платника основним."""
     customer = get_current_customer(token, db)
-    cuid = customer.get("client_user_id") or customer.get("id") or customer.get("customer_id")
+    cuid = _resolve_client_user_id(db, customer)
     db.execute(text("UPDATE client_payer_links SET is_default = 0 WHERE client_user_id = :cid"), {"cid": cuid})
     res = db.execute(text("UPDATE client_payer_links SET is_default = 1 WHERE client_user_id = :cid AND payer_profile_id = :pid"),
                      {"cid": cuid, "pid": payer_id})
@@ -2610,7 +2655,7 @@ async def unlink_cabinet_payer(
 ):
     """Відв'язати платника від клієнта (платник у БД лишається, лише link видаляється)."""
     customer = get_current_customer(token, db)
-    cuid = customer.get("client_user_id") or customer.get("id") or customer.get("customer_id")
+    cuid = _resolve_client_user_id(db, customer)
     res = db.execute(text("DELETE FROM client_payer_links WHERE client_user_id = :cid AND payer_profile_id = :pid"),
                      {"cid": cuid, "pid": payer_id})
     db.commit()
@@ -3079,12 +3124,6 @@ def _has_valid_signed_agreement(db: Session, client_user_id: int) -> bool:
         LIMIT 1
     """), {"cid": client_user_id}).fetchone()
     return bool(row)
-
-
-def _resolve_client_user_id(db: Session, customer: dict) -> int:
-    """Знаходить client_users.id для поточного customer (з event_customers)."""
-    cuid = customer.get("client_user_id") or customer.get("id") or customer.get("customer_id")
-    return int(cuid) if cuid else 0
 
 
 @router.get("/cabinet/master-agreement")

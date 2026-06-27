@@ -1,0 +1,37 @@
+{
+  "summary": "Backend regression testing of Cabinet 2.0 data-leak fix. Created /app/backend/tests/test_cabinet_data_leak_fix.py with 8 test cases covering /cabinet/profile, /cabinet/payers (list + full CRUD), /cabinet/master-agreement (GET idempotency + sign), /cabinet/documents, /cabinet/notifications/unread, and the /boards/{id}/convert-to-order gate. All 8 tests PASS. The DATA LEAK is confirmed fixed: when authenticated as vitokdrako@gmail.com, /cabinet/profile returns id=54, email=vitokdrako@gmail.com, full_name='Вита Филимонихина' (NOT Марина Ткачова). /cabinet/master-agreement returns id=28 (not Марини's 18/83). No 'Марина' or 'marinasummer80' strings appear in payers or documents responses. Sign flow works (signature_png_base64 param), and the master agreement becomes status='signed' / needs_signature=false on next GET. Payers CRUD smoke (create→list→update→set-default→delete→verify-removed) is fully scoped to Vita with no cross-client leak.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/event/boards/{id}/convert-to-order", "issue": "Endpoint returns 422 (missing body) for empty POST instead of 404 when board id does not exist — minor input-validation ordering. Test was adapted to send {} body. Couldn't verify 412 AGREEMENT_REQUIRED branch because the test user's master agreement is already signed (signing was part of the same suite). Recommend an integration test on a non-signed account or use of a parameter to bypass-sign for this specific assertion."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_cabinet_data_leak_fix.py",
+    "/app/test_reports/pytest/cabinet_data_leak_results.xml"
+  ],
+  "action_items": [
+    "None blocking. Optional: add a second non-admin test account that has NO signed master-agreement to enable a deterministic 412 AGREEMENT_REQUIRED assertion on /boards/{id}/convert-to-order."
+  ],
+  "critical_code_review_comments": [
+    "Helper _resolve_client_user_id(db, customer) in /app/backend/routes/event_tool.py is the correct fix: it resolves by email_normalized and lazy-creates, eliminating the customer_id↔client_users.id ID-space collision. Verified via 11 endpoint touchpoints (profile GET/PUT, payers GET/POST/PUT/DELETE/default, master-agreement GET/sign/preview, documents GET, documents/{id}/view, notifications/unread).",
+    "Document queries now correctly drop the bogus 'OR o.customer_id = :cuid' clause that crossed two unrelated ID spaces (OpenCart orders.customer_id vs event_customers.customer_id).",
+    "Suggest converting 'signature_png_base64 required' (400) responses to use the same {detail:{code:...}} shape used elsewhere (e.g. AGREEMENT_REQUIRED) so the frontend can branch by code consistently."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_cabinet_data_leak_fix.py (new)",
+    "/app/test_reports/pytest/cabinet_data_leak_results.xml (new)"
+  ],
+  "success_rate": {"backend": "100% (8/8)", "frontend": "n/a (skipped per request)"},
+  "test_credentials": "vitokdrako@gmail.com / test123 (admin) — used via POST /api/event/auth/login, Bearer JWT in Authorization header.",
+  "seed_data_creation": "Created one temporary payer per run named 'TEST_Vendor_<timestamp>' and removed it in the same test (delete + list verification). Also performed master-agreement/sign — leaves agreement id=28 in 'signed' state for Vita (acceptable per request).",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Backend FastAPI is reachable at both https://item-photos.preview.emergentagent.com (public REACT_APP_BACKEND_URL) and http://localhost:8001. Test selects whichever responds to /api/event/auth/login first. Project uses MySQL (NOT MongoDB) via SQLAlchemy. JWT 'sub' carries user id (string), not email — do not assert JWT email against profile email. Master-agreement endpoint params: POST /api/event/cabinet/master-agreement/sign expects body {signature_png_base64, signer_name} (NOT 'signature_data'). Master agreement contract_number embeds an 8-digit DDMMYYYY of the *creation* date, not today, so use a recent-year regex rather than strict today match.",
+  "rca of the issue": "Root cause: Cabinet 2.0 endpoints used customer.get('customer_id') (an event_customers PK) as if it were a client_users.id. Because both tables had independent AUTO_INCREMENT counters, the two id spaces occasionally aliased — making queries return the row of a completely unrelated user (Марина Ткачова id=... happened to coincide with Vita's event_customers.customer_id). Mitigation: new helper _resolve_client_user_id(db, customer) resolves by email_normalized and lazy-creates if absent. All 11 affected endpoints now call this helper. Documents query additionally lost a wrong 'OR o.customer_id = :cuid' join. Verified by GETting Vita's profile/MA/payers/documents and ensuring no Марина strings or known Марина ids (18, 83) appear."
+}
