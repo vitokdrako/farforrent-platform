@@ -18,6 +18,13 @@ See `/app/memory/test_credentials.md`
 
 ## What's Been Implemented (latest first)
 
+### 2026-02-25 — CRITICAL FIX: Cross-client data leak in /cabinet/* (P0)
+- **Симптом** (зі скріншоту): Vita (vitokdrako@gmail.com) у вкладці Профіль бачила дані Марини Ткачової (marinasummer80@gmail.com, +38(066)912-35-37).
+- **Корінь**: ВСІ ендпоінти Cabinet 2.0 резолвили `client_users.id` через `event_customers.customer_id`. Це різні AUTO_INCREMENT простори → випадкова рівність → запит дістає чужий рядок.
+- **Фікс**: новий хелпер `_resolve_client_user_id(db, customer)` в `event_tool.py` — резолвить за `client_users.email_normalized = :email` (lazy-create якщо немає). Замінено в 11 endpoints: /cabinet/profile (GET, PUT), /cabinet/payers (5 шт), /cabinet/master-agreement (3 шт), /cabinet/documents, /cabinet/documents/{id}/view, /cabinet/notifications/unread.
+- **Додатково**: видалено помилковий JOIN-клоз `OR o.customer_id = :cuid` з 3 документ-запитів (порівнював OpenCart customers.customer_id з event_customers.customer_id).
+- **Testing agent (iteration_1.json)**: 8/8 PASS. Vita тепер бачить власні id=54, email=vitokdrako@gmail.com, full_name=Вита Филимонихина (не Марина). Master agreement id=28 (не Марини 18/83). Payers/документи не містять рядків 'Марина' чи 'marinasummer80'.
+
 ### 2026-02-25 — Cabinet 2.0: Push-тригери на нові документи (P1)
 - **Бекенд** — викликаємо `notify_document_ready(db, order_id, doc_type, doc_number)` з обох INSERT-точок: `documents.py:save_document` та `document_pdf.py:save_document_to_db`. Помилки push не ламають створення документа (try/except + log).
 - **Покращення `notify_document_ready`**: fallback на `orders.customer_email` → `event_customers.email` коли `orders.event_tool_customer_id` NULL (актуально для замовлень з OpenCart).
