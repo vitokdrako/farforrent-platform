@@ -18,6 +18,25 @@ See `/app/memory/test_credentials.md`
 
 ## What's Been Implemented (latest first)
 
+### 2026-02-25 — Chat з клієнтом — окрема сторінка для менеджерів (P1) + 2 backend bug-fix
+**Нова сторінка `/manager/chat`:**
+- `/app/frontend/src/pages/ChatPage.jsx` — повноекранна Telegram-style розкладка: ліва панель — активні замовлення з пошуком + бейджем «нових», права — стрічка з повідомленнями і input.
+- Polling 10с для активної розмови, 30с для списку. Realtime WebSocket — можна підключити пізніше через існуючий `order_chat_ws.py`.
+- `App.tsx`: маршрут `/manager/chat` під `ProtectedRoute`.
+- `CorporateHeader.tsx`: додано кнопку «Чат» з іконкою `MessageSquare`, видима тільки manager/admin, ховається на самій сторінці чату.
+
+**Backend bug-fix #1 (виявлений testagent):** SQL crash при push-сповіщенні з чату
+- `routes/order_chat.py` + `order_chat_ws.py` зверталися до неіснуючої колонки `orders.event_tool_customer_id` — push клієнту з чату ніколи не відправлявся (silent fail в except).
+- Винесено логіку у новий helper `services/push_notifications._resolve_event_customer_for_order(db, order_id)` (feature-detect колонки + fallback на email). Нова функція `notify_chat_message()` — викликається з обох місць.
+
+**Backend bug-fix #2 (виявлений testagent):** `decode_token` 500→401
+- `routes/event_tool.py:157` робив `int(payload["sub"])` без try/except → admin/manager JWT (sub=email-string) кидав 500 у будь-яких `/cabinet/*` endpoints.
+- Обгорнено в `try/except (TypeError, ValueError)`. Тепер коректний 401 «Customer not found».
+
+**testing_agent_v3_fork (iteration_8.json):** ✅ **46/46 PASS** (test_manager_chat_page + test_image_url + test_cors). 0 critical, 0 minor. backend.err.log без `1054 Unknown column`.
+
+**Code-review note (tech debt):** admin chat endpoints поки що БЕЗ auth check. Будь-хто з знанням order_id може писати від імені «Менеджер». Виправлення — окремий harden pass.
+
 ### 2026-02-25 — Refactor: централізований image-URL mapper layer
 - **Чому**: попередній баг з подвійним `/uploads/uploads/` стався через локальну `def normalize_image_url` яка shadow-перекривала імпорт. Code-reviewer рекомендував витягнути логіку в окремі серіалізатори.
 - **`/app/backend/utils/image_helper.py`**: додано `serialize_product_image(path) -> str` і `serialize_order_item_image(item_image, product_fallback) -> str`. Завжди повертають `""` замість `None` (JSON-friendly). Перший — простий wrapper, другий — централізує fallback логіку для order items.
