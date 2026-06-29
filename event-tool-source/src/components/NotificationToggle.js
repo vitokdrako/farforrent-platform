@@ -121,8 +121,34 @@ const NotificationToggle = () => {
         </button>
       )}
       {permission === 'denied' && (
-        <div style={{ fontSize: 12, color: '#c62828' }}>
-          Сповіщення заблоковано в налаштуваннях браузера. Дозвольте їх вручну і перезавантажте сторінку.
+        <div data-testid="push-denied-help" style={{
+          background: '#fef2f2', border: '1px solid #fecaca',
+          padding: '10px 12px', borderRadius: 8, fontSize: 12,
+          color: '#7f1d1d', display: 'flex', flexDirection: 'column', gap: 8,
+        }}>
+          <div style={{ fontWeight: 600 }}>
+            Сповіщення заблоковано в налаштуваннях браузера
+          </div>
+          <div style={{ lineHeight: 1.5 }}>
+            Щоб увімкнути:
+            <ol style={{ paddingLeft: 18, margin: '4px 0' }}>
+              <li>Натисніть на іконку 🔒/⚙ ліворуч від адреси сайту</li>
+              <li>Знайдіть пункт <strong>«Сповіщення»</strong> (Notifications)</li>
+              <li>Виберіть <strong>«Дозволити»</strong> (Allow)</li>
+              <li>Перезавантажте сторінку</li>
+            </ol>
+          </div>
+          <button
+            onClick={() => window.location.reload()}
+            data-testid="push-reload-btn"
+            style={{
+              alignSelf: 'flex-start', padding: '6px 12px',
+              background: '#0a3d2e', color: '#fff', border: 'none',
+              borderRadius: 6, fontSize: 12, cursor: 'pointer', fontWeight: 500,
+            }}
+          >
+            Я дозволив(ла) — перезавантажити
+          </button>
         </div>
       )}
       {msg && (

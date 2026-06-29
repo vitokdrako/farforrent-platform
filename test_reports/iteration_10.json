@@ -1,0 +1,36 @@
+{
+  "summary": "Iteration 10 is a CSS/UX-only change in the Event Tool client (3 fixes: push 'denied' UX in NotificationToggle.js, mobile gray-gap removal between header and chips, quantity-min number-input restyle in mobile.css). No backend code change — verified by full regression. Performed: (1) static JSX parse with @babel/parser on NotificationToggle.js (164 lines), CategoryChips.js (102), UserProfile.js (1971), App.js (1100) — all 4 PARSE OK. (2) data-testid contract verified: notification-toggle, push-toggle-btn, push-test-btn present AND new push-denied-help + push-reload-btn added inside the permission==='denied' block (NotificationToggle.js lines 124,143). (3) CSS contract verified inside @media(max-width:768px): `.fd-header + div { background:#fff !important }` at line 85-87 and `.fd-header + div .p-8 { padding:0 !important }` at line 88-91 (kills the gray gap); `.quantity-slider-row { display:flex; justify-content:space-between; padding:10px 16px; background:#fff; border-top:1px solid #f0f0f0 }` at lines 697-706; `.quantity-slider-input` reworked at lines 720-734 (no more height:4px / gradient / flex:1 — now neutral number-input with hidden spinners). (4) Backend smoke: GET /api/event/health → 200. (5) Backend regression — ran the 5 suites listed in review_request: test_client_chat_page.py + test_manager_chat_page.py + test_image_url_double_prefix_fix.py + test_cors_new_domain.py + test_cabinet_data_leak_fix.py → 80/80 PASS in 90.5s (XML at /app/test_reports/pytest/iteration_10_regression.xml). Includes cabinet-profile data-leak fix from iteration_1 (test_profile_email_matches_vita, test_profile_returns_logged_in_user_not_leaked) — still holds.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/test_reports/pytest/iteration_10_regression.xml",
+    "/app/backend/tests/test_client_chat_page.py",
+    "/app/backend/tests/test_manager_chat_page.py",
+    "/app/backend/tests/test_image_url_double_prefix_fix.py",
+    "/app/backend/tests/test_cors_new_domain.py",
+    "/app/backend/tests/test_cabinet_data_leak_fix.py"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "NotificationToggle 'denied' panel is purely informational — there is no programmatic re-prompt possible once the browser sets permission='denied'. The numbered steps + reload button are the correct UX but the copy is browser-agnostic; on iOS Safari the lock icon UI differs (the menu lives in 'AA' in the address bar). Consider browser-detection (Chrome/Safari/Firefox/Edge) and showing per-browser instructions to reduce support load.",
+    "Admin-side push (manager subscribes) is correctly DEFERRED per review_request — but worth tracking: routes/push.py exposes /api/push/subscribe but admin_router has no equivalent and notify_chat_message() in services/notifications.py only notifies the order owner. Without it, managers will never receive client→manager chat pushes.",
+    "mobile.css selector `.fd-header + div { background:#fff !important }` is brittle — it relies on EventPlannerPage rendering exactly one sibling <div> after the header. If anyone wraps the catalog in a portal/fragment the selector breaks silently. Recommend giving the catalog wrapper a dedicated class (e.g. .event-planner-body) and targeting that instead.",
+    "Quantity-input inline styles (border/background/border-radius) are now in the JSX and mobile.css only carries 'behaviour' rules — fine, but it means the input loses its corporate look if mobile.css fails to load (FOUC). Consider moving the visual styles into .quantity-slider-input as well so the cascade is self-contained.",
+    "test_client_chat_page.py STILL re-confirms that admin_router order-chat endpoints accept any/no JWT (test_admin_messages_no_crash). Open tech-debt from iteration_8/9, not regressed in iteration_10."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100% (80/80)", "frontend": "static parse only (4/4 JSX files OK + CSS contract OK); no dev-server render possible in this pod"},
+  "test_credentials": "vitokdrako@gmail.com / test123 (POST /api/event/auth/login) — used by all chat + cabinet regression suites",
+  "seed_data_creation": "test_client_chat_page.py inserts a single TEST_client_chat_<unix_ts> message into order_chat_messages for order_id=7795 (sender_type='client') on each run — already documented in iteration_9, still safe/auditable.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Iteration 10 is CSS/UX only — backend was not touched. The 5-suite regression bundle (client_chat + manager_chat + image_url + cors + cabinet_leak = 80 tests / ~90s) is the canonical smoke for Event Tool backend going forward. NotificationToggle.js now exposes 5 data-testids: notification-toggle, push-toggle-btn, push-test-btn, push-denied-help (only when permission==='denied'), push-reload-btn (same condition). When the next iteration ships the admin-side push subscribe endpoint, add a test that confirms managers receive a push when a client posts to /api/event/orders/{id}/chat/messages — that's the missing half of 'з обох боків'.",
+  "rca of the issue": "N/A — iteration 10 is a UX/CSS polish iteration, not a bug RCA. The three reported user issues (gray gap, broken quantity-input, denied-state UX) are addressed at the CSS/JSX level only; functional behaviour (backend chat, push subscribe for clients, cabinet endpoints) is unchanged and still green."
+}
