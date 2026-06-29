@@ -1,0 +1,28 @@
+{
+  "summary": "Backend-only regression for the BrowserRouter basename={process.env.PUBLIC_URL || '/'} fix at /app/frontend/src/App.tsx line 129. Verified (1) literal string present on line 129, (2) TSX parses (no syntax errors via tsc; remaining diagnostics are type-only: missing @types/node + react module resolution under standalone tsc, none are parse errors), (3) GET /api/event/health -> 200, (4) POST /api/auth/login with vitokdrako@gmail.com/test123 -> access_token returned (admin role), (5) canonical 5-suite regression bundle 80/80 PASS in 88.55s.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_client_chat_page.py",
+    "/app/backend/tests/test_manager_chat_page.py",
+    "/app/backend/tests/test_image_url_double_prefix_fix.py",
+    "/app/backend/tests/test_cors_new_domain.py",
+    "/app/backend/tests/test_cabinet_data_leak_fix.py",
+    "/app/test_reports/pytest/iteration_13.xml"
+  ],
+  "action_items": [
+    "User must rebuild and redeploy the admin to pick up the basename change: cd /var/www/farforrent/frontend && PUBLIC_URL=/admin yarn build && sudo cp -a build/. /var/www/rentalhub-admin-build-subpath/ && sudo systemctl reload nginx"
+  ],
+  "critical_code_review_comments": [
+    "Line 129 fix is correct and minimal: <Router basename={process.env.PUBLIC_URL || '/'}> — CRA bakes PUBLIC_URL at build time, so admin build (PUBLIC_URL=/admin) gets basename='/admin' and pod build (default '') gets basename='/'. No behavioural change for the pod.",
+    "Note: lines 121 and 125 use window.location.href = '/dashboard' and '/tasks' — these are absolute (not relative to basename) and will break under the /admin subpath after the rebuild. Consider replacing with navigate() (which respects basename) or prefix manually with process.env.PUBLIC_URL. Not blocking this iteration but will manifest on admin host."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100% (80/80)", "frontend": "skipped per request"},
+  "test_credentials": "vitokdrako@gmail.com / test123 (admin) — login verified",
+  "seed_data_creation": "none",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Iteration 13 covered a one-line BrowserRouter basename fix. Backend untouched, 5-suite regression remains green. Frontend cannot be exercised in-pod (admin lives on external host). If admin still shows blank after redeploy, suspect the two window.location.href calls (App.tsx lines 121,125) which bypass the router basename and will route outside /admin/.",
+  "rca of the issue": "Original blank page on https://farforevent.com.ua/admin/ was due to React Router routes registered at root paths (e.g. /manager) while the app was served from /admin/. Router had no basename so /admin/manager could not match. Fix sets basename=process.env.PUBLIC_URL (baked to /admin at build time)."
+}

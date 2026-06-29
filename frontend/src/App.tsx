@@ -126,7 +126,7 @@ function App() {
   };
   
   return (
-    <Router>
+    <Router basename={process.env.PUBLIC_URL || '/'}>
       <div className="min-h-screen bg-gray-50 flex flex-col">
         <div className="flex-1">
         <Routes>
