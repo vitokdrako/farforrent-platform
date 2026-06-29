@@ -18,6 +18,15 @@ See `/app/memory/test_credentials.md`
 
 ## What's Been Implemented (latest first)
 
+### 2026-02-25 — Mobile polish + push UX (Event Tool)
+- **Сірий простір між шапкою і chips на мобайл** — у `mobile.css` додано `.fd-header + div { background:#fff !important }` + `.p-8 { padding:0 !important }` всередині `@media(max-width:768px)`. Прибирає inline `#f3f3f3` фон і 32-px padding контейнера EventPlannerPage.
+- **Поле «мін. кількість» (number input)** — у `mobile.css` прибрано конфліктний CSS старого range-slider (`.quantity-slider-input { height:4px; gradient; flex:1 }`). Тепер number-input з прихованими spinners + `.quantity-slider-row` flex з `justify-content:space-between` (label лівoруч, input справа — як рядок у кошику).
+- **NotificationToggle denied-UX** — коли браузер вже заблокував push, показуємо червону панель з нумерованими кроками («натисніть 🔒 → Сповіщення → Дозволити → перезавантажити») + кнопку «Я дозволив(ла) — перезавантажити». Нові data-testid `push-denied-help`, `push-reload-btn`.
+- **testing_agent (iteration_10.json)**: ✅ **80/80 PASS** (5 регресійних суітів: client_chat + manager_chat + image_url + cors + cabinet_leak). 0 critical/minor.
+
+**Deferred (наступна ітерація):**
+- 🟡 **Admin push «з обох боків»** — потребує: новий endpoint `/api/admin/push/subscribe` + розширення `push_subscriptions` (user_type='manager') + у `notify_chat_message` додати слов'янську чергу на всіх менеджерів. Без цього менеджер не отримує push коли клієнт пише.
+
 ### 2026-02-25 — Chat: окрема сторінка ТАКОЖ для клієнта (Event Tool)
 - **Новий шлях `/chat`** у Event Tool (`/app/event-tool-source/src/pages/ClientChatPage.js`): ліва панель — усі ВЛАСНІ замовлення клієнта з лічильником непрочитаних повідомлень, права — існуючий компонент `<OrderChat>` з WebSocket (key={orderId} для force-remount при перемиканні).
 - **Маршрут** додано в `App.js` під `ProtectedRoute`. Inline `<OrderChat>` на деталях замовлення в `UserProfile.js` залишено — клієнт має ОБИДВА варіанти: швидкий (модальний у профілі) і повний (окрема сторінка).
