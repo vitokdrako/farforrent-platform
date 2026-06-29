@@ -90,6 +90,19 @@ html, body {
         padding: 0 !important;
     }
 
+    /* Захист від Tailwind .p-8 для будь-якого DOM-ланцюга під шапкою.
+       Якщо у білді клас компільований через JIT з різним порядком — це правило ловить. */
+    body .p-8 { padding: 0 !important; }
+    /* І занулюємо inline сірий фон у будь-якому div між хедером і chips */
+    .fd-header ~ div[style*="background"][style*="f3f3f3"],
+    .fd-header ~ div[style*="background"][style*="F3F3F3"] {
+        background: #fff !important;
+    }
+    /* category-chips-wrapper має «прилипати» до самої шапки без зазору */
+    .category-chips-wrapper {
+        margin-top: 0 !important;
+    }
+
     /* Ряд 1 — категорії */
     .category-chips {
         display: flex;
