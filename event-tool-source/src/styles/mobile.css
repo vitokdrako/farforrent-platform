@@ -52,24 +52,26 @@ html, body {
     .category-chips-wrapper {
         display: block;
         position: sticky;
-        top: 58px;            /* висота нашого мобільного хедера */
+        top: 0;               /* НУЛЬ — прилипає до краю scroll-контейнера */
         z-index: 40;
         background: #fff;
-        margin: 0 -10px 0;
+        margin: 0;
         padding: 0;
         border-bottom: 1px solid #f0f0f0;
         box-shadow: 0 2px 4px rgba(0, 0, 0, 0.02);
     }
 
-    /* Прибираємо сірий простір між header і chips:
-       контейнери пошуку/фільтрів які приховані на мобайлі мають margin/padding — обнуляємо */
+    /* === ВСЕ ЩО МІЖ HEADER І CHIPS — ОБНУЛИТИ === */
+    /* Контейнери пошуку/фільтрів, які приховані на мобайлі — display:none + reset */
     .product-filters,
     .filters-container,
     .filters-bar,
     .corp-search-bar,
     .desktop-only-filters {
+        display: none !important;
         margin: 0 !important;
         padding: 0 !important;
+        height: 0 !important;
     }
     /* Контейнер каталогу — без верхніх відступів */
     .catalog-panel,
@@ -80,27 +82,36 @@ html, body {
     }
 
     /* Прибрати сірий простір між шапкою та chips на мобільному —
-       контейнер EventPlannerPage має inline background:#f3f3f3 і p-8 (32px).
-       На мобільному ми його робимо білим і без вертикальних відступів. */
+       контейнер EventPlannerPage має inline background:#f3f3f3 і p-8 (32px) */
     .fd-header + div {
         background: #fff !important;
+        margin-top: 0 !important;
+        padding-top: 0 !important;
     }
-    .fd-header + div > div > .p-8,
-    .fd-header + div .p-8 {
+    .fd-header + div > div,
+    .fd-header + div > div > div {
+        margin-top: 0 !important;
+        padding-top: 0 !important;
+    }
+    /* Tailwind .p-8 (32px) → 0 */
+    body .p-8,
+    .p-8 {
         padding: 0 !important;
     }
-
-    /* Захист від Tailwind .p-8 для будь-якого DOM-ланцюга під шапкою.
-       Якщо у білді клас компільований через JIT з різним порядком — це правило ловить. */
-    body .p-8 { padding: 0 !important; }
+    /* Tailwind space-y-4 (gap 1rem between siblings) теж може створювати простір */
+    body .space-y-4 > :not([hidden]) ~ :not([hidden]),
+    body .space-y-6 > :not([hidden]) ~ :not([hidden]) {
+        margin-top: 0 !important;
+    }
+    /* mb-6 на ховатих desktop-filters — обнуляємо */
+    .desktop-only-filters.mb-6,
+    .mb-6.desktop-only-filters {
+        margin-bottom: 0 !important;
+    }
     /* І занулюємо inline сірий фон у будь-якому div між хедером і chips */
     .fd-header ~ div[style*="background"][style*="f3f3f3"],
     .fd-header ~ div[style*="background"][style*="F3F3F3"] {
         background: #fff !important;
-    }
-    /* category-chips-wrapper має «прилипати» до самої шапки без зазору */
-    .category-chips-wrapper {
-        margin-top: 0 !important;
     }
 
     /* Ряд 1 — категорії */
@@ -324,7 +335,7 @@ html, body {
        (header 73px розраховано на десктоп — на мобільному це створює gap) */
     .flex.h-\[calc\(100vh-73px\)\] {
         height: auto !important;
-        min-height: calc(100vh - 60px);
+        min-height: 0 !important;
     }
     /* Прибираємо padding-top щоб чіпси примикали до шапки впритул */
     .p-8 {
@@ -334,7 +345,7 @@ html, body {
 
     /* Chips wrapper примикає до header без жодного відступу */
     .category-chips-wrapper {
-        margin: 0 -10px 8px !important;
+        margin: 0 !important;
     }
 
     .grid.grid-cols-1.md\:grid-cols-2 {
@@ -719,26 +730,41 @@ html, body {
 }
 
 .quantity-slider-label {
-    font-size: 13px;
-    color: #333;
+    font-size: 14px;
+    color: #1a1a1a;
+    font-weight: 500;
     white-space: nowrap;
     flex-shrink: 0;
     line-height: 1;
 }
-.quantity-slider-label strong {
-    color: #0a3d2e;
-    font-weight: 600;
-}
 
 .quantity-slider-input {
-    /* number input — узгоджуємо стиль з кошиком; inline-стилі задають
-       border/background/радіус, тут лише поведінка */
+    /* Сірий блок як у кошику */
     flex-shrink: 0;
+    width: 90px;
+    padding: 10px 14px;
+    font-size: 15px;
+    font-weight: 600;
+    color: #0f172a;
+    text-align: center;
+    background: #f1f3f5;
+    border: 1px solid #e5e7eb;
+    border-radius: 10px;
+    outline: none;
+    transition: border-color 0.15s, background 0.15s;
+    /* Прибираємо нативні стрілочки */
     -webkit-appearance: none;
     appearance: none;
-    outline: none;
-    /* Прибираємо стрілочки у Chrome/Edge */
     -moz-appearance: textfield;
+    font-family: inherit;
+}
+.quantity-slider-input::placeholder {
+    color: #94a3b8;
+    font-weight: 500;
+}
+.quantity-slider-input:focus {
+    border-color: #0a3d2e;
+    background: #fff;
 }
 .quantity-slider-input::-webkit-outer-spin-button,
 .quantity-slider-input::-webkit-inner-spin-button {

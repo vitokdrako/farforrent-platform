@@ -59,9 +59,7 @@ const CategoryChips = ({
       {/* Ряд 4: ввід мін. кількості */}
       {onMinQuantityChange && (
         <div className="quantity-slider-row" data-testid="quantity-slider-row">
-          <span className="quantity-slider-label">
-            На складі: <strong>{minQuantity > 0 ? `≥ ${minQuantity}` : 'будь-яка'}</strong>
-          </span>
+          <span className="quantity-slider-label">Кількість</span>
           <input
             type="number"
             inputMode="numeric"
@@ -79,18 +77,6 @@ const CategoryChips = ({
             onFocus={(e) => e.target.select()}
             data-testid="mobile-min-quantity-input"
             className="quantity-slider-input"
-            style={{
-              padding: '8px 12px',
-              fontSize: 14,
-              border: '1px solid #d4cab8',
-              borderRadius: 8,
-              background: '#fffdf7',
-              color: '#0a3d2e',
-              outline: 'none',
-              fontWeight: 600,
-              width: '90px',
-              textAlign: 'center',
-            }}
           />
         </div>
       )}

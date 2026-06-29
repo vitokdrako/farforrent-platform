@@ -622,7 +622,27 @@ const EventPlannerPage = () => {
         {/* Catalog Section */}
         <div className={`flex-1 overflow-auto transition-all duration-300 ${isSidePanelOpen ? 'mr-96' : ''}`}>
           <div className="p-8">
-            {/* Search and Filters */}
+            {/* Категорії + підкатегорії + кольори як chips — тільки на мобільному (через CSS).
+                ВАЖЛИВО: рендеримо ПЕРШИМ, щоб на мобільному chips примикали до шапки без gap. */}
+            <CategoryChips
+              categories={categories}
+              subcategories={availableSubcategories}
+              colors={allColors}
+              selectedCategory={selectedCategory}
+              selectedSubcategory={selectedSubcategory}
+              selectedColor={selectedColor}
+              onSelectCategory={setSelectedCategory}
+              onSelectSubcategory={setSelectedSubcategory}
+              onSelectColor={setSelectedColor}
+              minQuantity={minQuantity}
+              onMinQuantityChange={setMinQuantity}
+              maxQuantity={Math.max(
+                100,
+                ...products.map((p) => Number(p.quantity) || 0)
+              )}
+            />
+
+            {/* Search and Filters — приховано на мобільному */}
             <div className="mb-6 space-y-4 desktop-only-filters">
               <div style={{maxWidth: '600px'}}>
                 <input
@@ -661,25 +681,6 @@ const EventPlannerPage = () => {
                 )}
               />
             </div>
-
-            {/* Категорії + підкатегорії + кольори як chips — тільки на мобільному (через CSS) */}
-            <CategoryChips
-              categories={categories}
-              subcategories={availableSubcategories}
-              colors={allColors}
-              selectedCategory={selectedCategory}
-              selectedSubcategory={selectedSubcategory}
-              selectedColor={selectedColor}
-              onSelectCategory={setSelectedCategory}
-              onSelectSubcategory={setSelectedSubcategory}
-              onSelectColor={setSelectedColor}
-              minQuantity={minQuantity}
-              onMinQuantityChange={setMinQuantity}
-              maxQuantity={Math.max(
-                100,
-                ...products.map((p) => Number(p.quantity) || 0)
-              )}
-            />
 
             {/* Products Count */}
             <div className="mb-4 flex items-center justify-between">
