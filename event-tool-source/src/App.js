@@ -1044,6 +1044,22 @@ const BuildBadge = () => {
   );
 };
 
+// Редірект зі старого `/manager*` (раніше RentalHub admin) на новий `/admin/`.
+// /admin/ це окремий React-білд (frontend/), тому потрібен повний browser navigation.
+const ManagerRedirect = () => {
+  useEffect(() => {
+    // Збираємо хвіст шляху після /manager та переадресовуємо на /admin{tail}
+    const path = window.location.pathname || '';
+    const tail = path.replace(/^\/manager/, '') || '/';
+    window.location.replace(`/admin${tail}${window.location.search || ''}`);
+  }, []);
+  return (
+    <div className="min-h-screen flex items-center justify-center" data-testid="manager-redirect">
+      <div className="text-2xl text-gray-600">Перенаправлення на адмін-панель…</div>
+    </div>
+  );
+};
+
 // Main App
 function App() {
   return (
@@ -1087,6 +1103,10 @@ function App() {
                   }
                 />
                 <Route path="/rules" element={<RentalRules />} />
+                {/* Старий шлях /manager (RentalHub Admin) тепер живе на /admin/.
+                    Робимо повний browser-redirect, бо /admin/ це окремий React-білд. */}
+                <Route path="/manager" element={<ManagerRedirect />} />
+                <Route path="/manager/*" element={<ManagerRedirect />} />
               </Routes>
               <BuildBadge />
             </BrowserRouter>
