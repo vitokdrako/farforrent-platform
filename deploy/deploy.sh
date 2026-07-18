@@ -61,12 +61,12 @@ echo "$NEW_HASH $REACT_APP_BUILD_TIME" | sudo tee /var/www/event-tool-build/vers
 echo ""
 
 # ===== 2. Build RentalHub adminку =====
-echo "═══ [2/4] Білдимо RentalHub адмінку (на корені, без basename) ═══"
+echo "═══ [2/4] Білдимо RentalHub адмінку (з PUBLIC_URL=/admin — живе на farforevent.com.ua/admin/) ═══"
 cd "$REPO_ROOT/frontend"
 if [ ! -d node_modules ]; then
   yarn install --frozen-lockfile
 fi
-PUBLIC_URL='' REACT_APP_BACKEND_URL='' REACT_APP_BUILD_HASH="$NEW_HASH" REACT_APP_BUILD_TIME="$REACT_APP_BUILD_TIME" yarn build
+PUBLIC_URL=/admin REACT_APP_BACKEND_URL='' REACT_APP_BUILD_HASH="$NEW_HASH" REACT_APP_BUILD_TIME="$REACT_APP_BUILD_TIME" yarn build
 sudo rm -rf /var/www/rentalhub-admin-build
 sudo cp -r build /var/www/rentalhub-admin-build
 sudo chown -R www-data:www-data /var/www/rentalhub-admin-build
