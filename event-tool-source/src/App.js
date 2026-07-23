@@ -497,16 +497,17 @@ const EventPlannerPage = () => {
       if (p.color) {
         p.color.split(',').forEach(c => {
           const trimmed = c.trim();
-          if (trimmed) colors.add(trimmed);
+          if (trimmed) colors.add(trimmed.charAt(0).toUpperCase() + trimmed.slice(1).toLowerCase());
         });
       }
     });
     return Array.from(colors).sort((a, b) => a.localeCompare(b, 'uk'));
   }, [products]);
 
-  // Reset subcategory when category changes
+  // Reset subcategory and color when category changes
   useEffect(() => {
     setSelectedSubcategory(null);
+    setSelectedColor(null);
   }, [selectedCategory]);
 
   // Серверсайд фільтрація — реагуємо на пошук/категорію/підкатегорію/колір з дебаунсом

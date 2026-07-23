@@ -140,3 +140,17 @@
     background: var(--corp-text-main);
     color: #fff;
 }
+
+
+/* Mobile performance optimizations */
+@media (max-width: 768px) {
+    .product-card {
+        content-visibility: auto;
+        contain-intrinsic-size: 0 320px;
+    }
+    
+    .product-card-image img {
+        will-change: auto;
+        transform: translateZ(0);
+    }
+}
