@@ -11,15 +11,28 @@ from urllib.parse import urlparse
 import time
 
 # Додати backend в path
-sys.path.insert(0, '/app/backend')
+BACKEND_DIR = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(BACKEND_DIR))
 
-# Конфігурація
-EXTERNAL_DOMAIN = "https://farforrent.com.ua/image/"
-LOCAL_IMAGE_DIR = "/app/backend/static/images/products"
-DB_HOST = "farforre.mysql.tools"
-DB_USER = "farforre_rentalhub"
-DB_PASSWORD = "-nu+3Gp54L"
-DB_NAME = "farforre_rentalhub"
+from dotenv import load_dotenv  # noqa: E402  (після налаштування sys.path)
+
+load_dotenv(BACKEND_DIR / ".env")
+
+from core.security import get_required_env  # noqa: E402
+
+# Конфігурація — усе з environment, жодних credentials у коді.
+_ENV_HINT = "Див. backend/.env.example."
+
+EXTERNAL_DOMAIN = os.environ.get(
+    "IMAGE_SOURCE_BASE_URL", "https://farforrent.com.ua/image/"
+)
+LOCAL_IMAGE_DIR = os.environ.get(
+    "LOCAL_IMAGE_DIR", str(BACKEND_DIR / "static" / "images" / "products")
+)
+DB_HOST = get_required_env("RH_DB_HOST", hint=_ENV_HINT)
+DB_USER = get_required_env("RH_DB_USERNAME", hint=_ENV_HINT)
+DB_PASSWORD = get_required_env("RH_DB_PASSWORD", hint=_ENV_HINT)
+DB_NAME = get_required_env("RH_DB_DATABASE", hint=_ENV_HINT)
 
 def connect_db():
     """Підключення до бази даних"""

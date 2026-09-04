@@ -8,12 +8,15 @@ import hashlib
 import hmac
 import json
 import logging
+import os
 
 router = APIRouter(prefix="/api/webhooks", tags=["webhooks"])
 logger = logging.getLogger(__name__)
 
 # Webhook secret для верифікації (отримаєте від CallBell)
-WEBHOOK_SECRET = "your_webhook_secret_here"  # Треба отримати з CallBell dashboard
+# Секрет читається з environment (CALLBELL_WEBHOOK_SECRET).
+# Раніше тут стояв inline-placeholder. Порожнє значення = webhook не налаштований.
+WEBHOOK_SECRET = os.environ.get("CALLBELL_WEBHOOK_SECRET", "")
 
 
 def verify_webhook_signature(payload: bytes, signature: str) -> bool:

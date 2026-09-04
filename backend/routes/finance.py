@@ -12,8 +12,19 @@ from decimal import Decimal
 import json
 
 from database_rentalhub import get_rh_db
+from core.security import get_required_env
 
 router = APIRouter(prefix="/api/finance", tags=["finance"])
+
+# Частина endpoints використовує пряме pymysql-підключення замість SQLAlchemy.
+# Credentials для них беруться ВИКЛЮЧНО з environment — раніше в fallback-значеннях
+# лежали реальні production-креденшели.
+_RH_ENV_HINT = "Див. backend/.env.example, секція RentalHub MySQL."
+
+
+def _rh_env(name: str) -> str:
+    """Обов'язковий RentalHub credential з environment (без fallback у коді)."""
+    return get_required_env(name, hint=_RH_ENV_HINT)
 
 # Додатковий роутер для сумісності з ManagerDashboard
 manager_router = APIRouter(prefix="/api/manager/finance", tags=["finance-manager"])
@@ -444,11 +455,11 @@ async def create_payment(data: PaymentCreate):
     # IF deal_mode = "rent" AND payment_type = "rent" - try to use annex_id if available
     if data.payment_type == "rent" and data.order_id:
         conn_check = pymysql.connect(
-            host=os.environ.get('RH_DB_HOST', 'farforre.mysql.tools'),
+            host=_rh_env('RH_DB_HOST'),
             port=int(os.environ.get('RH_DB_PORT', 3306)),
-            user=os.environ.get('RH_DB_USERNAME', 'farforre_rentalhub'),
-            password=os.environ.get('RH_DB_PASSWORD', '-nu+3Gp54L'),
-            database=os.environ.get('RH_DB_DATABASE', 'farforre_rentalhub'),
+            user=_rh_env('RH_DB_USERNAME'),
+            password=_rh_env('RH_DB_PASSWORD'),
+            database=_rh_env('RH_DB_DATABASE'),
             charset='utf8mb4',
             cursorclass=pymysql.cursors.DictCursor
         )
@@ -469,11 +480,11 @@ async def create_payment(data: PaymentCreate):
     
     # Direct MySQL connection
     conn = pymysql.connect(
-        host=os.environ.get('RH_DB_HOST', 'farforre.mysql.tools'),
+        host=_rh_env('RH_DB_HOST'),
         port=int(os.environ.get('RH_DB_PORT', 3306)),
-        user=os.environ.get('RH_DB_USERNAME', 'farforre_rentalhub'),
-        password=os.environ.get('RH_DB_PASSWORD', '-nu+3Gp54L'),
-        database=os.environ.get('RH_DB_DATABASE', 'farforre_rentalhub'),
+        user=_rh_env('RH_DB_USERNAME'),
+        password=_rh_env('RH_DB_PASSWORD'),
+        database=_rh_env('RH_DB_DATABASE'),
         charset='utf8mb4',
         cursorclass=pymysql.cursors.DictCursor,
         autocommit=False
@@ -565,11 +576,11 @@ async def create_expense(data: ExpenseCreate):
     import os
     
     conn = pymysql.connect(
-        host=os.environ.get('RH_DB_HOST', 'farforre.mysql.tools'),
+        host=_rh_env('RH_DB_HOST'),
         port=int(os.environ.get('RH_DB_PORT', 3306)),
-        user=os.environ.get('RH_DB_USERNAME', 'farforre_rentalhub'),
-        password=os.environ.get('RH_DB_PASSWORD', '-nu+3Gp54L'),
-        database=os.environ.get('RH_DB_DATABASE', 'farforre_rentalhub'),
+        user=_rh_env('RH_DB_USERNAME'),
+        password=_rh_env('RH_DB_PASSWORD'),
+        database=_rh_env('RH_DB_DATABASE'),
         charset='utf8mb4',
         cursorclass=pymysql.cursors.DictCursor,
         autocommit=False
@@ -732,11 +743,11 @@ async def create_collection(data: CollectionCreate):
         raise HTTPException(status_code=400, detail="Сума має бути більше 0")
     
     conn = pymysql.connect(
-        host=os.environ.get('RH_DB_HOST', 'farforre.mysql.tools'),
+        host=_rh_env('RH_DB_HOST'),
         port=int(os.environ.get('RH_DB_PORT', 3306)),
-        user=os.environ.get('RH_DB_USERNAME', 'farforre_rentalhub'),
-        password=os.environ.get('RH_DB_PASSWORD', '-nu+3Gp54L'),
-        database=os.environ.get('RH_DB_DATABASE', 'farforre_rentalhub'),
+        user=_rh_env('RH_DB_USERNAME'),
+        password=_rh_env('RH_DB_PASSWORD'),
+        database=_rh_env('RH_DB_DATABASE'),
         charset='utf8mb4',
         cursorclass=pymysql.cursors.DictCursor,
         autocommit=False
@@ -1398,11 +1409,11 @@ async def create_deposit_with_currency(data: DepositCreate):
     import os
     
     conn = pymysql.connect(
-        host=os.environ.get('RH_DB_HOST', 'farforre.mysql.tools'),
+        host=_rh_env('RH_DB_HOST'),
         port=int(os.environ.get('RH_DB_PORT', 3306)),
-        user=os.environ.get('RH_DB_USERNAME', 'farforre_rentalhub'),
-        password=os.environ.get('RH_DB_PASSWORD', '-nu+3Gp54L'),
-        database=os.environ.get('RH_DB_DATABASE', 'farforre_rentalhub'),
+        user=_rh_env('RH_DB_USERNAME'),
+        password=_rh_env('RH_DB_PASSWORD'),
+        database=_rh_env('RH_DB_DATABASE'),
         charset='utf8mb4',
         cursorclass=pymysql.cursors.DictCursor,
         autocommit=False

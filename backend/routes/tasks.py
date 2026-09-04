@@ -18,8 +18,11 @@ from database_rentalhub import get_rh_db
 router = APIRouter(prefix="/api/tasks", tags=["tasks"])
 
 # JWT config
-SECRET_KEY = os.getenv("JWT_SECRET_KEY", "your-secret-key-change-in-production")
-ALGORITHM = "HS256"
+from core.security import JWT_ALGORITHM, get_jwt_secret
+
+# Canonical source: backend/core/security.py (без небезпечного default)
+SECRET_KEY = get_jwt_secret()
+ALGORITHM = JWT_ALGORITHM
 
 # ============================================================
 # HELPER: Get current user from token

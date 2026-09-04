@@ -58,17 +58,17 @@ pip install -r requirements.txt
 ### 2. Конфігурація .env
 ```env
 # База даних RentalHub
-DB_HOST=farforre.mysql.tools
-DB_PORT=3306
-DB_USER=farforre_rentalhub
-DB_PASSWORD=-nu+3Gp54L
-DB_DATABASE=farforre_rentalhub
+RH_DB_HOST=<host>
+RH_DB_PORT=3306
+RH_DB_USERNAME=<user>
+RH_DB_PASSWORD=<пароль з менеджера секретів>
+RH_DB_DATABASE=<database>
 
 # OpenCart (для синхронізації)
-OC_DB_HOST=farforre.mysql.tools
-OC_DB_USER=farforre_db
-OC_DB_PASSWORD=gPpAHTvv
-OC_DB_NAME=farforre_db
+OC_DB_HOST=<host>
+OC_DB_USER=<user>
+OC_DB_PASSWORD=<пароль з менеджера секретів>
+OC_DB_NAME=<database>
 
 # MongoDB (локальний)
 MONGO_URL=mongodb://localhost:27017

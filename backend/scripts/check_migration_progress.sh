@@ -34,14 +34,31 @@ echo ""
 
 # База даних
 python3 << 'PYEOF'
+import os
+import sys
+
 import pymysql
+
+# Credentials беруться з environment (див. backend/.env.example).
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
+_required = ('RH_DB_HOST', 'RH_DB_USERNAME', 'RH_DB_PASSWORD', 'RH_DB_DATABASE')
+_missing = [name for name in _required if not os.environ.get(name)]
+if _missing:
+    print("❌ Відсутні змінні оточення: %s" % ', '.join(_missing))
+    print("   Заповніть backend/.env (шаблон: backend/.env.example)")
+    sys.exit(1)
 
 try:
     conn = pymysql.connect(
-        host='farforre.mysql.tools',
-        user='farforre_rentalhub',
-        password='-nu+3Gp54L',
-        database='farforre_rentalhub',
+        host=os.environ['RH_DB_HOST'],
+        user=os.environ['RH_DB_USERNAME'],
+        password=os.environ['RH_DB_PASSWORD'],
+        database=os.environ['RH_DB_DATABASE'],
         charset='utf8mb4'
     )
     cursor = conn.cursor()

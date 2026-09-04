@@ -1380,3 +1380,11 @@ backend/.encryption_key
 # Module Manager runtime state (стан інсталяції, не код)
 backend/module_state.json
 module_state.json
+
+# Generated artifacts та user uploads (runtime-дані, не код).
+# УВАГА: раніше закомічені файли залишаються tracked — вони НЕ видаляються
+# цим правилом. Видалення з індексу вимагає окремого рішення.
+backend/generated_pdfs/
+backend/uploads/
+generated_pdfs/
+uploads/

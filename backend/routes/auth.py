@@ -17,8 +17,11 @@ from database_rentalhub import get_rh_db
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 # JWT Secret (у продакшн треба зберігати в .env)
-SECRET_KEY = os.getenv("JWT_SECRET_KEY", "your-secret-key-change-in-production")
-ALGORITHM = "HS256"
+from core.security import JWT_ALGORITHM, get_jwt_secret
+
+# Canonical source: backend/core/security.py (без небезпечного default)
+SECRET_KEY = get_jwt_secret()
+ALGORITHM = JWT_ALGORITHM
 ACCESS_TOKEN_EXPIRE_MINUTES = 1440  # 24 години
 
 # ============================================================

@@ -10,16 +10,22 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 import pymysql
 
+from core.security import get_required_env
+
 # Load environment
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
-# RentalHub MySQL connection
-RH_HOST = os.environ.get('RH_DB_HOST', 'farforre.mysql.tools')
+# RentalHub MySQL connection.
+# Credentials беруться ВИКЛЮЧНО з environment (backend/.env) — раніше тут
+# лежали реальні production-значення прямо в коді. Шаблон: backend/.env.example
+_ENV_HINT = "Див. backend/.env.example, секція RentalHub MySQL."
+
+RH_HOST = get_required_env('RH_DB_HOST', hint=_ENV_HINT)
 RH_PORT = int(os.environ.get('RH_DB_PORT', 3306))
-RH_USER = os.environ.get('RH_DB_USERNAME', 'farforre_rentalhub')
-RH_PASSWORD = os.environ.get('RH_DB_PASSWORD', '-nu+3Gp54L')
-RH_DATABASE = os.environ.get('RH_DB_DATABASE', 'farforre_rentalhub')
+RH_USER = get_required_env('RH_DB_USERNAME', hint=_ENV_HINT)
+RH_PASSWORD = get_required_env('RH_DB_PASSWORD', hint=_ENV_HINT)
+RH_DATABASE = get_required_env('RH_DB_DATABASE', hint=_ENV_HINT)
 
 # RentalHub connection string
 RH_MYSQL_URL = f"mysql+pymysql://{RH_USER}:{RH_PASSWORD}@{RH_HOST}:{RH_PORT}/{RH_DATABASE}?charset=utf8mb4"

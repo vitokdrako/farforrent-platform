@@ -84,11 +84,16 @@ def make_backup(cfg: dict) -> str:
         "--column-statistics=0",
         cfg["db"],
     ]
+    # Пароль передається через MYSQL_PWD, а НЕ через argv:
+    # аргументи процесу видні будь-якому користувачу системи в `ps`.
+    dump_env = os.environ.copy()
     if cfg["password"]:
-        cmd.insert(4, f"-p{cfg['password']}")
+        dump_env["MYSQL_PWD"] = cfg["password"]
     with open(out, "wb") as fout:
-        proc1 = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        proc2 = subprocess.Popen(["gzip"], stdin=proc1.stdout, stdout=fout)
+        proc1 = subprocess.Popen(
+            cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=dump_env, shell=False
+        )
+        proc2 = subprocess.Popen(["gzip"], stdin=proc1.stdout, stdout=fout, shell=False)
         proc1.stdout.close()
         proc2.communicate()
         err = proc1.communicate()[1]
@@ -218,7 +223,15 @@ def main():
 
     if args.include_data_migration and not args.dry_run:
         print("\n📦 Running data migration: return_cards → partial_return_versions")
-        os.system(f"cd {Path(__file__).parent} && python3 migrate_return_cards.py")
+        # Явний список аргументів замість os.system із конкатенацією шляху
+        # (shell-інтерполяція шляху = ризик injection при нестандартних іменах).
+        _script_dir = Path(__file__).resolve().parent
+        subprocess.run(
+            [sys.executable, str(_script_dir / "migrate_return_cards.py")],
+            cwd=str(_script_dir),
+            shell=False,
+            check=False,
+        )
 
     # Швидка статистика
     if not args.dry_run:

@@ -2,12 +2,23 @@
 Database migrations API endpoint
 Safe way to run database schema changes
 """
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import text
 from database_rentalhub import get_rh_db_sync
 import logging
 
-router = APIRouter(prefix="/api/migrations", tags=["migrations"])
+from core.migration_guard import require_migration_access
+
+# УВАГА: усі endpoints нижче виконують DDL (CREATE/ALTER TABLE).
+# Функціональність збережена для legacy-деплойменту, але тепер вона недоступна
+# під час звичайних API-запитів: потрібні ALLOW_RUNTIME_MIGRATIONS=true
+# та заголовок X-Migration-Token (див. core/migration_guard.py).
+# Шляхи, методи та формати відповідей НЕ змінені.
+router = APIRouter(
+    prefix="/api/migrations",
+    tags=["migrations"],
+    dependencies=[Depends(require_migration_access)],
+)
 
 # ============================================================
 # CLIENT-BASED MASTER AGREEMENTS MIGRATION

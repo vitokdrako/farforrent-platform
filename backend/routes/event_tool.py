@@ -117,13 +117,19 @@ class OrderCreate(BaseModel):
 import hashlib
 import jwt
 
-ALGORITHM = "HS256"
+from core.security import JWT_ALGORITHM, get_jwt_secret
+
+ALGORITHM = JWT_ALGORITHM
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24  # 24 hours
 REFRESH_TOKEN_EXPIRE_DAYS = 30
 
 def get_secret_key():
-    """Отримати JWT секрет"""
-    return os.getenv("JWT_SECRET_KEY", os.getenv("EVENT_JWT_SECRET", "event-tool-secret-key-change-in-production"))
+    """Отримати JWT секрет (canonical source: core.security).
+
+    Legacy-alias EVENT_JWT_SECRET підтримується всередині core.security,
+    тому формат уже виданих client-токенів не змінюється.
+    """
+    return get_jwt_secret()
 
 def hash_password(password: str) -> str:
     return hashlib.sha256(password.encode()).hexdigest()

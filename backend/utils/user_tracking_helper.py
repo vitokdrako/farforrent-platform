@@ -8,8 +8,11 @@ from typing import Optional, Dict
 from fastapi import Header
 
 # JWT Secret
-SECRET_KEY = os.getenv("JWT_SECRET_KEY", "your-secret-key-change-in-production")
-ALGORITHM = "HS256"
+from core.security import JWT_ALGORITHM, get_jwt_secret
+
+# Canonical source: backend/core/security.py (без небезпечного default)
+SECRET_KEY = get_jwt_secret()
+ALGORITHM = JWT_ALGORITHM
 
 def get_current_user_from_header(authorization: Optional[str] = None) -> Dict:
     """
