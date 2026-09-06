@@ -10,9 +10,14 @@
     * `order_chat_ws.router`      -> prefix="/api"
 Решта роутерів мають власний prefix і реєструються без аргументу.
 
-НЕ включені у жоден модуль (мертвий код за аудитом):
-    * `routes/test_orders.py`       — імпортує відсутній модуль `test_database`
-    * `routes/callbell_webhooks.py` — не імпортується у `server.py`
+НЕ включений у жоден модуль (мертвий код за аудитом):
+    * `routes/test_orders.py` — імпортує відсутній модуль `test_database`.
+      Роутер при цьому зареєстрований у `server.py`, тому сам файл
+      збережений: видалення змінило б кількість endpoints і API-контракт.
+
+`routes/callbell_webhooks.py` видалений під час dead code cleanup —
+його роутер ніколи не реєструвався у `server.py`, отже endpoints
+`/api/webhooks/*` у застосунку не існувало.
 """
 from typing import List
 
@@ -343,7 +348,8 @@ CRM = ModuleManifest(
     notes=(
         "order_chat.py та order_chat_ws.py імпортують routes.event_tool "
         "(Portal) — вимикання Portal зламає чат у рантаймі.",
-        "routes/callbell_webhooks.py навмисно не включений: не в server.py.",
+        "routes/callbell_webhooks.py видалений (dead code cleanup): "
+        "його роутер не був зареєстрований у server.py.",
     ),
 )
 

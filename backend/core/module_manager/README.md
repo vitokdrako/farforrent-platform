@@ -135,7 +135,9 @@ python -m core.module_manager.cli set core inventory rental
 
 Разом 73 роутери = 74 виклики `include_router` у `server.py` мінус зламаний `test_orders`.
 
-**Навмисно не включені** (мертвий код за аудитом): `routes/test_orders.py` (імпортує відсутній `test_database`), `routes/callbell_webhooks.py` (не імпортується у `server.py`).
+**Навмисно не включений** (мертвий код за аудитом): `routes/test_orders.py` — імпортує відсутній `test_database`, але зареєстрований у `server.py`, тому файл збережений, щоб не змінювати кількість endpoints.
+
+`routes/callbell_webhooks.py` видалений під час dead code cleanup: роутер ніколи не реєструвався у `server.py`, тому endpoints `/api/webhooks/*` у застосунку не існувало.
 
 ## Відомі конфлікти з фактичним кодом
 
