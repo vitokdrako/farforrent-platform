@@ -244,6 +244,31 @@ runner --verify              # тільки checksum-перевірка, exit co
 
 ## 9. Взаємодія з migration guard і Module Manager
 
+### 9.0 Визначення «живої» БД (contract для оператора)
+
+Імена production-хостів **не** зберігаються в коді: baseline свідомо чистився
+від хоста, тож хардкод у `runner.py` повернув би той самий рядок у Git.
+Перелік живих хостів задає оператор:
+
+| Змінна | Призначення |
+|--------|-------------|
+| `MIGRATION_PRODUCTION_HOSTS` | Кома-розділені фрагменти імен живих хостів. Збіг = відмова від змінюючих команд. |
+| `MIGRATION_TARGET_IS_STAGING` | `1/true/yes/on` — оператор явно підтверджує, що віддалена цільова БД не є production. |
+
+**Default навмисно суворий:** будь-який НЕ-локальний хост вважається
+production, доки не виставлено `MIGRATION_TARGET_IS_STAGING`. Тому для накату
+на віддалений staging знадобиться:
+
+```bash
+export MIGRATION_TARGET_IS_STAGING=true
+python -m migrations install
+```
+
+Причина такого default: guard за списком імен захищає лише від хостів, які
+хтось не забув перелічити. Зайва відмова коштує хвилини роботи, помилковий
+накат на живу БД — відновлення з бекапу. Локальні цілі (`localhost`,
+`127.0.0.1`, `::1`, `0.0.0.0`) працюють без додаткових змінних.
+
 * Runtime-endpoints `/api/migrations/*` (Завдання №3) залишаються закритими
   `ALLOW_RUNTIME_MIGRATIONS` + `X-Migration-Token`. Новий runner — окремий
   CLI-шлях, він **не** відкриває HTTP-доступ до DDL.
@@ -335,3 +360,92 @@ counter-ів. Перевірка структури — лише статичн�
 
 **Baseline не можна вважати перевіреним і не можна застосовувати до жодного
 середовища до накату на порожню MySQL 5.7 у staging.**
+
+## 12. Реалізація runner-а (2026-09-06)
+
+Дизайн §2–§10 реалізований у трьох модулях. Production-схема, API-контракти
+та ORM-моделі не змінювалися.
+
+| Файл | Роль |
+|---|---|
+| `migrations/catalog.py` | Пошук файлів, версії, SHA-256, правила skip, MySQL-aware розбиття SQL |
+| `migrations/history.py` | DDL `schema_migrations`, статуси, конфіг БД, MySQL-backend |
+| `migrations/runner.py` | Команди `status` / `install` / `stamp` / `upgrade` / `verify` |
+| `scripts/verify_staging_schema.py` | Read-only порівняння живої БД із baseline |
+| `tests/test_migration_runner.py` | 23 тести на in-memory backend |
+
+### 12.1 Що робить runner і чого не робить
+
+`install` — лише на `EMPTY`; на непорожній БД відмова замість накату.
+`stamp` — записує `stamped` **без виконання SQL** (`statements_executed = 0`)
+і лише в межах запитаного діапазону. `upgrade` — застосовує тільки pending,
+fail-fast: перша ж помилка записується як `failed` і зупиняє прогін.
+`verify` — читає історію й не змінює нічого. `--dry-run` не виконує жодного
+запису, включно з `schema_migrations`.
+
+Повторний накат вже врегульованої версії неможливий фізично: PK по `version`.
+Зміна файлу після застосування ловиться checksum-ом і блокує `upgrade`
+(тест `test_checksum_mismatch_is_detected_and_blocks_upgrade`). Запис в
+історії без файлу на диску також блокує прогін — середовище, де міграцію
+видалили з репозиторію, не вважається валідним.
+
+### 12.2 Дві STALE-міграції
+
+`001_modify_customers_table.sql` і `add_user_tracking.sql` позначаються
+`skipped` із причиною в `notes`, а не `applied` (§11.3). Тест
+`test_stale_migration_would_really_fail_if_it_were_not_skipped` доказує, що
+без skip вони справді падають, — правило skip перевірене, а не задеклароване.
+
+`add_user_tracking` не має числового префікса, тому сортується після `011`
+і **не** входить у `stamp --to 011`: штамп врегульовує рівно те, що просили.
+Файл лишається pending і буде записаний `skipped` на першому `upgrade`
+(тест `test_stale_legacy_migration_left_pending_by_stamp_is_skipped_on_upgrade`).
+
+### 12.3 Захист від запуску по production
+
+`looks_like_production()` порівнює host/ім'я БД із production-ознаками.
+Без явного `--allow-production` будь-яка команда, що пише, відмовляється
+стартувати. Тести не використовують production credentials — вони працюють
+на in-memory backend і не відкривають з'єднань.
+
+### 12.4 Staging verification — процедура
+
+`scripts/verify_staging_schema.py` парсить baseline і порівнює очікуване з
+`information_schema` живої БД: 64 таблиці, 1 view (саме як view, не як
+phpMyAdmin-заглушка), 2 тригери, 22 FK (включно з перевіркою, що FK висить
+на правильній таблиці), 222 індекси, 49 `AUTO_INCREMENT`-колонок.
+
+```bash
+# порожня MySQL 5.7 у staging
+export MIGRATION_DB_HOST=127.0.0.1 MIGRATION_DB_USER=root \
+       MIGRATION_DB_PASSWORD=... MIGRATION_DB_NAME=rentalhub_staging
+
+python -m migrations status                 # очікується EMPTY
+python -m migrations install --dry-run      # план без запису
+python -m migrations install                # baseline + skip двох stale
+python scripts/verify_staging_schema.py     # структура vs baseline
+python -m migrations upgrade                # має бути no-op
+python -m migrations verify                 # історія без failed
+```
+
+Критерії приймання: `install` завершується без помилок; verification дає
+`RESULT: PASSED`; повторний `upgrade` — no-op; `verify` не показує `failed`.
+
+### 12.5 Що НЕ перевірено (станом на 2026-09-06)
+
+Логіка runner-а перевірена 23 тестами на in-memory backend; розбиття
+реального `000_baseline.sql` на інструкції та цілісність тіл тригерів —
+перевірені на самому файлі. Але **реальний накат на MySQL так і не
+виконувався**: у середовищі немає ні MySQL/MariaDB, ні Docker
+(`mysqld`, `mariadbd`, `docker` відсутні; встановлення блокує
+`setgroups: Operation not permitted`). Наявний лише клієнтський драйвер
+`pymysql` без сервера.
+
+Отже досі **не підтверджено емпірично**: порядок створення view після
+таблиць, реальна застосовність усіх 22 FK, коректність тригерів у MySQL,
+поведінка `AUTO_INCREMENT` без counter-ів, а також те, що `install`
+проходить від початку до кінця на порожній БД.
+
+**Clean install не можна називати перевіреним, а baseline — застосовним,
+доки §12.4 не виконано на справжній порожній MySQL 5.7.** Скрипт
+verification для цього готовий; бракує лише сервера.
