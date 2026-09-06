@@ -39,6 +39,7 @@ from migrations.history import (  # noqa: E402
     HistoryRecord,
     MigrationStatus,
 )
+from migrations import runner as runner_mod  # noqa: E402
 from migrations.runner import (  # noqa: E402
     Action,
     MigrationError,
@@ -580,6 +581,76 @@ def test_upgrade_applies_only_pending_migrations():
     assert "102" in {r.version for r in report.applied}
     assert not report.pending
     assert all("gadgets" in s or HISTORY_TABLE in s for s in backend.executed), backend.executed
+
+
+def test_baseline_covered_migration_left_pending_by_stamp_is_stamped_not_applied():
+    """A covered migration sorting after the stamp cutoff must not be "applied".
+
+    Reproduces the production case found in Завдання №10: `stamp --to 011`
+    settles versions up to its cutoff, leaving `create_product_damage_history`
+    pending even though the table is already in the schema. Its SQL is
+    `CREATE TABLE IF NOT EXISTS`, so applying it would silently do nothing while
+    history recorded `applied` — a change that never happened.
+    """
+    files = standard_set()
+    files["102_add_gadgets.sql"] = GADGETS_SQL
+    directory = make_dir(files)
+    # `gadgets` is already present, exactly as production already has
+    # `product_damage_history`.
+    backend = FakeBackend(tables={"orders", "order_log", "widgets", "gadgets"})
+
+    original = runner_mod.BASELINE_COVERS
+    runner_mod.BASELINE_COVERS = frozenset({"102"})
+    try:
+        Runner(backend, discover(directory), log=lambda *_: None).stamp("101")
+        assert "102" in {
+            m.version
+            for m in Runner(
+                backend, discover(directory), log=lambda *_: None
+            ).status().pending
+        }, "precondition: the cutoff must leave 102 pending"
+
+        backend.executed.clear()
+        runner = Runner(backend, discover(directory), log=lambda *_: None)
+        plan = {item.version: item.action for item in runner.plan_upgrade()}
+        assert plan["102"] is Action.STAMP
+        report = runner.upgrade()
+    finally:
+        runner_mod.BASELINE_COVERS = original
+
+    assert "102" in {r.version for r in report.stamped}
+    assert "102" not in {r.version for r in report.applied}
+    assert not report.pending
+    record = next(r for r in report.stamped if r.version == "102")
+    assert record.statements_executed == 0
+    assert all(
+        HISTORY_TABLE in statement for statement in backend.executed
+    ), f"adoption must execute no schema DDL: {backend.executed}"
+
+
+def test_baseline_covered_migration_absent_from_the_schema_is_still_applied():
+    """Adoption is driven by observed objects, never by the declaration alone."""
+    files = standard_set()
+    files["102_add_gadgets.sql"] = GADGETS_SQL
+    directory = make_dir(files)
+    # This time `gadgets` really is missing, so the SQL has to run.
+    backend = installed_schema()
+
+    original = runner_mod.BASELINE_COVERS
+    runner_mod.BASELINE_COVERS = frozenset({"102"})
+    try:
+        Runner(backend, discover(directory), log=lambda *_: None).stamp("101")
+        backend.executed.clear()
+        runner = Runner(backend, discover(directory), log=lambda *_: None)
+        item = next(i for i in runner.plan_upgrade() if i.version == "102")
+        assert item.action is Action.APPLY
+        assert "gadgets" in (item.reason or "")
+        report = runner.upgrade()
+    finally:
+        runner_mod.BASELINE_COVERS = original
+
+    assert "102" in {r.version for r in report.applied}
+    assert "gadgets" in backend.tables()
 
 
 def test_upgrade_is_a_no_op_when_nothing_is_pending():

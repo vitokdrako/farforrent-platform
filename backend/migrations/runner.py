@@ -738,6 +738,31 @@ class Runner:
     def plan_upgrade(self, to_version: str | None = None) -> list[PlanItem]:
         report = self.status()
         items: list[PlanItem] = []
+
+        # `stamp --to <version>` only settles versions up to its cutoff, so a
+        # baseline-covered migration sorting after it (e.g.
+        # `create_product_damage_history`) survives as pending. Applying it would
+        # be wrong for exactly the reason documented in BASELINE_COVERS: its
+        # `CREATE TABLE IF NOT EXISTS` finds the table already there, "succeeds"
+        # without changing anything, and history records `applied` for a change
+        # that never happened. Adopt it instead — but only once the objects it
+        # claims are observed, so the record stays a fact.
+        candidates = [
+            migration.version
+            for migration in report.pending
+            if migration.version in BASELINE_COVERS
+            and migration.skip_rule is None
+            and not migration.is_baseline
+        ]
+        surviving = self._surviving_evidence(candidates) if candidates else {}
+        base_tables: set[str] = set()
+        present: set[str] = set()
+        triggers: set[str] = set()
+        if candidates:
+            base_tables = self.backend.tables()
+            present = base_tables | self.backend.views()
+            triggers = self.backend.triggers()
+
         for migration in report.pending:
             if to_version is not None and migration.version > to_version:
                 continue
@@ -758,6 +783,32 @@ class Runner:
                         migration.name,
                         Action.SKIP,
                         migration.skip_rule.kind.value,
+                    )
+                )
+                continue
+            if migration.version in BASELINE_COVERS:
+                missing = self._missing_for(
+                    surviving[migration.version], present, base_tables, triggers
+                )
+                if not missing:
+                    items.append(
+                        PlanItem(
+                            migration.version,
+                            migration.name,
+                            Action.STAMP,
+                            "already contained in the baseline snapshot",
+                        )
+                    )
+                    continue
+                # Declared as covered, yet the objects are absent: the SQL
+                # genuinely has to run here. Say so rather than stamping a lie.
+                items.append(
+                    PlanItem(
+                        migration.version,
+                        migration.name,
+                        Action.APPLY,
+                        "baseline-covered but absent from this schema: "
+                        + ", ".join(missing),
                     )
                 )
                 continue
@@ -800,10 +851,31 @@ class Runner:
             return report
 
         files = self.catalog.by_version()
+        fingerprint = schema_fingerprint(self.backend)
         for item in plan:
             migration = files[item.version]
             if item.action is Action.SKIP:
                 self._skip(migration)
+            elif item.action is Action.STAMP:
+                self.log(
+                    f"  {migration.version:<10} {migration.name} — STAMPED "
+                    "(already in baseline; SQL not executed)"
+                )
+                self._record(
+                    HistoryRecord(
+                        version=migration.version,
+                        name=migration.name,
+                        checksum=migration.checksum,
+                        status=MigrationStatus.STAMPED,
+                        applied_by=self.actor,
+                        statements_executed=0,
+                        schema_fingerprint=fingerprint,
+                        notes=(
+                            "contained in 000 baseline snapshot; objects verified "
+                            "present, SQL was NOT executed"
+                        ),
+                    )
+                )
             else:
                 self._apply(migration)
         return self.status()
