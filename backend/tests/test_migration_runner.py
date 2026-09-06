@@ -257,29 +257,59 @@ def test_split_statements_ignores_comments_and_semicolons_in_strings():
     assert statements[0] == "INSERT INTO t (note) VALUES ('a;b')"
 
 
-def test_real_repository_catalog_marks_the_two_stale_migrations():
-    """The documented skip rules must apply to the real files, by their real names."""
+def test_real_repository_catalog_marks_every_stale_migration_with_a_reason():
+    """The documented skip rules must apply to the real files, by their real names.
+
+    Each expected entry pins the *kind* and a substring of the *reason*, so a
+    rule cannot be silently widened into "skip because it was inconvenient".
+    Every skip here was established empirically against MySQL 5.7.44 or against
+    the production dump — see MIGRATION_VERSIONING.md.
+    """
+    expected: dict[str, tuple[str, str]] = {
+        # OpenCart table, different database — never existed in RentalHub.
+        "001": ("incompatible", "OpenCart"),
+        # Targets `finance_transactions`; the real table is `fin_transactions`.
+        "add_user_tracking": ("obsolete", "fin_transactions"),
+        # errno 1215 on clean 5.7.44: event_boards has no `board_id` column.
+        "004": ("superseded", "1215"),
+        # No code path touches `laundry_queue`; routes/laundry.py uses `tasks`.
+        "add_laundry_queue": ("superseded", "laundry_queue"),
+    }
+
     real = discover(BACKEND_DIR / "migrations")
     by_version = {m.version: m for m in real.migrations}
 
     assert real.baseline is not None, "000_baseline.sql must be present"
     assert by_version["001"].name == "modify_customers_table"
-    assert by_version["001"].skip_rule is not None
-    assert "customers" in by_version["001"].skip_rule.reason
 
-    assert "add_user_tracking" in by_version
-    rule = by_version["add_user_tracking"].skip_rule
-    assert rule is not None
-    assert "fin_transactions" in rule.reason
+    for version, (kind, reason_fragment) in expected.items():
+        assert version in by_version, f"{version} missing from the repository"
+        rule = by_version[version].skip_rule
+        assert rule is not None, f"{version} must carry a skip rule"
+        assert rule.kind.value == kind, (version, rule.kind.value)
+        assert reason_fragment in rule.reason, (version, rule.reason)
 
-    # Every other migration must be applicable; a new skip rule should be a
-    # conscious decision, not a side effect.
+    # A new skip rule must be a conscious, documented decision — not a side
+    # effect of someone making a red build go green.
     unexpected = [
         version
         for version, migration in by_version.items()
-        if migration.skip_rule is not None and version not in ("001", "add_user_tracking")
+        if migration.skip_rule is not None and version not in expected
     ]
     assert not unexpected, unexpected
+
+
+def test_skipped_migrations_are_never_also_claimed_by_the_baseline():
+    """`skipped` and `stamped` are mutually exclusive claims about one migration.
+
+    Marking a migration as both "the baseline already contains it" and "it must
+    never run here" would be a contradiction: the first says its effect is
+    present in the schema, the second says its effect was never applied.
+    """
+    from migrations.catalog import BASELINE_COVERS, SKIP_RULES
+
+    overlap = sorted(set(SKIP_RULES) & set(BASELINE_COVERS))
+    assert not overlap, overlap
 
 
 def test_real_baseline_splits_into_executable_statements():

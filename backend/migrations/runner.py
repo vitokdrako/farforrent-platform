@@ -39,6 +39,7 @@ if str(BACKEND_DIR) not in sys.path:  # allow `python migrations/runner.py`
     sys.path.insert(0, str(BACKEND_DIR))
 
 from migrations.catalog import (  # noqa: E402
+    BASELINE_COVERS,
     BASELINE_VERSION,
     SENTINEL_TABLE,
     Catalog,
@@ -489,6 +490,15 @@ class Runner:
                         migration.skip_rule.kind.value,
                     )
                 )
+            elif migration.version in BASELINE_COVERS:
+                items.append(
+                    PlanItem(
+                        migration.version,
+                        migration.name,
+                        Action.STAMP,
+                        "already contained in the baseline snapshot",
+                    )
+                )
             else:
                 items.append(PlanItem(migration.version, migration.name, Action.APPLY))
         return items
@@ -520,9 +530,62 @@ class Runner:
         self._ensure_history()
         assert self.catalog.baseline is not None
         self._apply(self.catalog.baseline)
+
+        # The baseline is production HEAD, so it already contains the result of
+        # every migration in BASELINE_COVERS. Their SQL is adopted, not re-run:
+        # on MySQL 5.7.44 re-running it either fails outright (011: duplicate
+        # column) or silently changes nothing while still "succeeding"
+        # (002/003: CREATE TABLE IF NOT EXISTS), which would record `applied`
+        # for a change that never happened.
+        fingerprint = schema_fingerprint(self.backend)
+        base_tables = self.backend.tables()
+        present = base_tables | self.backend.views()
+        triggers = self.backend.triggers()
+        covered = [m for m in self.catalog.migrations if m.version in BASELINE_COVERS]
+        surviving = self._surviving_evidence([m.version for m in covered])
+        unproven = [
+            (m.version, missing)
+            for m in covered
+            if (
+                missing := self._missing_for(
+                    surviving[m.version], present, base_tables, triggers
+                )
+            )
+        ]
+        if unproven:
+            details = "\n".join(
+                f"  {version}: {', '.join(missing)}" for version, missing in unproven
+            )
+            raise MigrationError(
+                "install aborted after the baseline: these migrations are declared "
+                "as contained in the snapshot, but their objects are absent from "
+                "the schema it just created. The baseline and BASELINE_COVERS "
+                f"disagree; do not trust either until this is resolved.\n{details}"
+            )
+
         for migration in self.catalog.migrations:
             if migration.skip_rule is not None:
                 self._skip(migration)
+            elif migration.version in BASELINE_COVERS:
+                self.log(
+                    f"  {migration.version:<10} {migration.name} — STAMPED "
+                    "(already in baseline; SQL not executed)"
+                )
+                self._record(
+                    HistoryRecord(
+                        version=migration.version,
+                        name=migration.name,
+                        checksum=migration.checksum,
+                        status=MigrationStatus.STAMPED,
+                        applied_by=self.actor,
+                        statements_executed=0,
+                        schema_fingerprint=fingerprint,
+                        notes=(
+                            "contained in 000 baseline snapshot; objects verified "
+                            "present, SQL was NOT executed"
+                        ),
+                    )
+                )
             else:
                 self._apply(migration)
 

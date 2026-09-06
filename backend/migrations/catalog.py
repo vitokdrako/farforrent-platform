@@ -62,8 +62,12 @@ class SkipKind(str, Enum):
 
     #: Targets objects that belong to a different database entirely.
     INCOMPATIBLE = "incompatible"
-    #: Targets an object name that this schema never used (renamed/superseded).
+    #: Targets an object name that this schema never used.
     OBSOLETE = "obsolete"
+    #: A later design replaced this migration's objects with differently named
+    #: ones that the application actually uses. Running it would create a table
+    #: nobody reads, or fail outright against the real schema.
+    SUPERSEDED = "superseded"
 
 
 @dataclass(frozen=True)
@@ -105,7 +109,63 @@ SKIP_RULES: dict[str, SkipRule] = {
         ),
         missing_objects=("finance_transactions",),
     ),
+    "004": SkipRule(
+        kind=SkipKind.SUPERSEDED,
+        reason=(
+            "creates `soft_reservations` with `FOREIGN KEY (board_id) REFERENCES "
+            "event_boards(board_id)`, but `event_boards` is keyed by "
+            "`id varchar(36)` — there is no `board_id` column to point at, so "
+            "MySQL 5.7 refuses it with errno 1215 (verified on a clean 5.7.44 "
+            "instance). The feature actually ships as `event_soft_reservations` "
+            "(varchar(36) keys, FK to `event_boards`.`id`), which is the only "
+            "table routes/event_tool.py reads or writes. `soft_reservations` "
+            "appears nowhere outside this file."
+        ),
+        missing_objects=("soft_reservations",),
+    ),
+    "add_laundry_queue": SkipRule(
+        kind=SkipKind.SUPERSEDED,
+        reason=(
+            "creates `laundry_queue`, which no code path touches. "
+            "routes/laundry.py states it outright at line 904 and implements the "
+            "queue as `tasks` rows with `task_type='laundry_queue'`, then moves "
+            "them into `laundry_batches`/`laundry_items`. Applying it would add "
+            "an orphan table to fresh installs that production does not have."
+        ),
+        missing_objects=("laundry_queue",),
+    ),
 }
+
+#: Migrations whose result is already contained in the baseline snapshot.
+#:
+#: The baseline is ``mysqldump`` of production **HEAD**, not of the database as
+#: it looked before these migrations ran. Re-executing their SQL on top of it is
+#: therefore wrong, and not merely redundant — verified on MySQL 5.7.44:
+#:
+#: * ``011`` fails with errno 1060 ``Duplicate column name 'company_profile_id'``
+#:   because its ``ALTER TABLE orders`` is already part of the snapshot;
+#: * ``002``/``003`` succeed while doing *nothing*: ``CREATE TABLE IF NOT EXISTS``
+#:   finds the table present, and the migration's own column list
+#:   (``board_id INT``, ``event_location``, ``guest_count``) never materialises.
+#:
+#: The second case is the dangerous one: the SQL "succeeds", so a naive runner
+#: records ``applied`` for a change that did not happen. These versions are
+#: adopted with ``status='stamped'`` instead, and only after the objects they
+#: describe are observed in the schema the baseline just created.
+BASELINE_COVERS: frozenset[str] = frozenset(
+    {
+        "002",  # event_boards
+        "003",  # event_board_items
+        "005",  # fin_payments triggers (recursion fix)
+        "006",  # drop fin_transactions_after_insert
+        "007",  # event_favorites
+        "008",  # push_subscriptions
+        "009",  # order_chat_messages
+        "010",  # document_signatures
+        "011",  # company_profiles + orders.company_profile_id
+        "create_product_damage_history",  # product_damage_history
+    }
+)
 
 
 @dataclass(frozen=True)
