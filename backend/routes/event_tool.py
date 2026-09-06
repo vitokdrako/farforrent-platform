@@ -24,6 +24,7 @@ from utils.image_helper import (
 )
 from utils.smart_search import filter_and_rank, parse_query
 from utils.rental_days import calculate_rental_days as _calc_days
+from services.availability import AvailabilityService
 
 logger = logging.getLogger(__name__)
 
@@ -777,67 +778,62 @@ class AvailabilityCheck(BaseModel):
 
 @router.post("/products/check-availability")
 async def check_availability(data: AvailabilityCheck, db: Session = Depends(get_rh_db)):
-    """Перевірити доступність товару на вказані дати"""
-    
-    # Отримати інформацію про товар
-    product_result = db.execute(text("""
-        SELECT product_id, name, quantity, frozen_quantity
-        FROM products WHERE product_id = :id AND status = 1
+    """
+    Перевірити доступність товару на вказані дати.
+
+    ✅ MIGRATED (Завдання №11): розрахунок делегований `AvailabilityService`
+    (точка J у `audit/AVAILABILITY_INVENTORY.md`).
+
+    Стара формула тут відрізнялася від решти системи трьома речами:
+      1) статуси задавалися чорним списком `NOT IN ('cancelled','returned',
+         'completed')`, тому будь-який новий або помилковий статус автоматично
+         резервував товар;
+      2) архівні замовлення не виключалися — закритий ордер тримав склад;
+      3) `order_items.status='refused'` не фільтрувався, тому відмовлені
+         позиції теж займали кількість.
+    На production-даних це давало розходження з `availability_checker` на 429
+    товарах.
+
+    Контракт відповіді збережений дослівно, включно з історичними іменами
+    ключів `soft_reserved` і `available` (у сервісі вони звуться
+    `soft_reserved_quantity` та `available_quantity`).
+    """
+    # Перевірка активності лишається окремим запитом: стара формула давала
+    # 404 через `WHERE ... status = 1`, а `AvailabilityService` навмисно не
+    # фільтрує `products.status` — він рахує склад, а не вирішує, чи товар
+    # опублікований. Без цього запиту знятий з продажу товар віддавав би 200.
+    exists_result = db.execute(text("""
+        SELECT product_id
+        FROM products
+        WHERE product_id = :id AND status = 1
     """), {"id": data.product_id})
-    product = product_result.fetchone()
-    
-    if not product:
+    active_product = exists_result.fetchone()
+    exists_result.close()
+
+    if not active_product:
         raise HTTPException(status_code=404, detail="Product not found")
-    
-    total_quantity = product[2] or 0
-    frozen_quantity = product[3] or 0
-    base_available = total_quantity - frozen_quantity
-    
-    # Перевірити перетин з існуючими замовленнями
-    reserved_result = db.execute(text("""
-        SELECT COALESCE(SUM(oi.quantity), 0) as reserved_qty
-        FROM order_items oi
-        JOIN orders o ON oi.order_id = o.order_id
-        WHERE oi.product_id = :product_id
-        AND o.status NOT IN ('cancelled', 'returned', 'completed')
-        AND o.rental_start_date <= :end_date
-        AND o.rental_end_date >= :start_date
-    """), {
-        "product_id": data.product_id,
-        "start_date": data.reserved_from,
-        "end_date": data.reserved_until
-    })
-    reserved_qty = reserved_result.fetchone()[0] or 0
-    
-    # Перевірити soft reservations з інших бордів
-    soft_reserved_result = db.execute(text("""
-        SELECT COALESCE(SUM(quantity), 0) as soft_reserved
-        FROM event_soft_reservations
-        WHERE product_id = :product_id
-        AND status = 'active'
-        AND expires_at > NOW()
-        AND reserved_from <= :end_date
-        AND reserved_until >= :start_date
-    """), {
-        "product_id": data.product_id,
-        "start_date": data.reserved_from,
-        "end_date": data.reserved_until
-    })
-    soft_reserved = soft_reserved_result.fetchone()[0] or 0
-    
-    available_for_dates = base_available - reserved_qty - soft_reserved
-    is_available = available_for_dates >= data.quantity
-    
+
+    availability = AvailabilityService(db).get_availability(
+        product_id=data.product_id,
+        start_date=data.reserved_from,
+        end_date=data.reserved_until,
+        quantity=data.quantity,
+    )
+
     return {
         "product_id": data.product_id,
         "requested_quantity": data.quantity,
-        "total_quantity": total_quantity,
-        "reserved_quantity": int(reserved_qty),
-        "soft_reserved": int(soft_reserved),
-        "available": max(0, available_for_dates),
-        "is_available": is_available,
+        "total_quantity": availability["total_quantity"],
+        "reserved_quantity": int(availability["reserved_quantity"]),
+        "soft_reserved": int(availability["soft_reserved_quantity"]),
+        "available": availability["available_quantity"],
+        "is_available": availability["is_available"],
         "reserved_from": data.reserved_from,
-        "reserved_until": data.reserved_until
+        "reserved_until": data.reserved_until,
+        # Additive-поля: старі клієнти їх просто не читають.
+        "on_processing_quantity": availability["on_processing_quantity"],
+        "available_ignoring_processing": availability["available_ignoring_processing"],
+        "needs_processing_rush": availability["needs_processing_rush"],
     }
 
 # ============================================================================

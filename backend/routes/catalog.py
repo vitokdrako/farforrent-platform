@@ -6,9 +6,11 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 from datetime import datetime
+from typing import Optional
 
 from database_rentalhub import get_rh_db
 from utils.image_helper import normalize_image_url
+from services.availability import AvailabilityService
 
 router = APIRouter(prefix="/api/catalog", tags=["catalog"])
 
@@ -1303,31 +1305,73 @@ async def update_product(
 @router.get("/check-availability/{sku}")
 async def check_availability(
     sku: str,
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None,
+    quantity: int = 1,
     db: Session = Depends(get_rh_db)
 ):
     """
-    Перевірити доступність товару
-    ✅ MIGRATED: Using RentalHub DB
+    Перевірити доступність товару за SKU на вказаний період.
+
+    ✅ MIGRATED (Завдання №11): розрахунок делегований `AvailabilityService`.
+
+    До міграції endpoint віддавав `p.quantity > 0` і молча відкидав
+    `from_date`/`to_date`, які frontend надсилає з `api/client.ts:119`
+    (точка I в `audit/AVAILABILITY_INVENTORY.md`). Тому позиція, повністю
+    зарезервована замовленнями на потрібні дати, показувалась як доступна.
+
+    Контракт відповіді збережений: ключі `available`, `product_id`, `name`,
+    `quantity`, `message` лишаються на місці. `quantity` і далі означає те,
+    що вже підставлялося в повідомлення «Available: N units» — тобто
+    доступну кількість; загальний залишок доданий окремим полем
+    `total_quantity`.
+
+    Якщо дати не передані, період = сьогодні (доступність «на зараз»).
     """
     result = db.execute(text("""
-        SELECT p.product_id, p.name, p.quantity, p.quantity as inventory_qty
+        SELECT p.product_id, p.name
         FROM products p
         WHERE p.sku = :sku AND p.status = 1
     """), {"sku": sku})
-    
+
     row = result.fetchone()
+    result.close()
+
     if not row:
         return {
             "available": False,
             "message": "Product not found or inactive"
         }
-    
-    quantity = row[3] if row[3] is not None else row[2]
-    
+
+    today = datetime.now().strftime("%Y-%m-%d")
+    start_date = from_date or today
+    end_date = to_date or start_date
+
+    availability = AvailabilityService(db).get_availability(
+        product_id=int(row[0]),
+        start_date=start_date,
+        end_date=end_date,
+        quantity=max(1, quantity),
+    )
+
+    available_quantity = availability["available_quantity"]
+
     return {
-        "available": quantity > 0,
+        "available": availability["is_available"],
         "product_id": row[0],
         "name": row[1],
-        "quantity": quantity,
-        "message": f"Available: {quantity} units" if quantity > 0 else "Out of stock"
+        "quantity": available_quantity,
+        "message": (
+            f"Available: {available_quantity} units"
+            if available_quantity else "Out of stock"
+        ),
+        "requested_quantity": availability["requested_quantity"],
+        "total_quantity": availability["total_quantity"],
+        "reserved_quantity": availability["reserved_quantity"],
+        "soft_reserved_quantity": availability["soft_reserved_quantity"],
+        "on_processing_quantity": availability["on_processing_quantity"],
+        "available_ignoring_processing": availability["available_ignoring_processing"],
+        "needs_processing_rush": availability["needs_processing_rush"],
+        "from_date": start_date,
+        "to_date": end_date,
     }

@@ -341,5 +341,389 @@ class TestServiceContract(unittest.TestCase):
             self.assertIn(field, result, f"втрачено поле контракту: {field}")
 
 
+class TestCatalogCheckAvailabilityMigration(unittest.TestCase):
+    """
+    Точка I — `GET /api/catalog/check-availability/{sku}` (Завдання №11).
+
+    До міграції endpoint віддавав `p.quantity > 0` і молча відкидав
+    `from_date`/`to_date`, які надсилає frontend (`api/client.ts:119`).
+    Тести закріплюють дві речі: дати справді враховуються, а старі поля
+    відповіді не зникли — інакше UI зламається без жодної помилки.
+
+    Роут перевіряється статично (AST), бо його імпорт тягне за собою
+    з'єднання з БД і обов'язкові `RH_DB_*` env — тест не повинен цього
+    вимагати.
+    """
+
+    @staticmethod
+    def _route_function():
+        import ast
+
+        path = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            "routes", "catalog.py",
+        )
+        with open(path, encoding="utf-8") as handle:
+            source = handle.read()
+        tree = ast.parse(source)
+        for node in ast.walk(tree):
+            if isinstance(node, ast.AsyncFunctionDef) and node.name == "check_availability":
+                return node, ast.get_source_segment(source, node), source
+        raise AssertionError("endpoint check_availability не знайдено в routes/catalog.py")
+
+    def test_endpoint_accepts_date_window(self):
+        """Дати більше не відкидаються: параметри мусять бути в сигнатурі."""
+        node, _, _ = self._route_function()
+        args = [a.arg for a in node.args.args]
+        for expected in ("from_date", "to_date", "quantity"):
+            self.assertIn(
+                expected, args,
+                f"параметр {expected} втрачено — endpoint знову ігнорує період",
+            )
+
+    def test_endpoint_delegates_to_service(self):
+        """Формула не має дублюватися в роуті."""
+        _, body, source = self._route_function()
+        self.assertIn("AvailabilityService", source)
+        self.assertIn("get_availability", body)
+        for leftover in ("frozen_quantity", "SUM(oi.quantity)", "order_items"):
+            self.assertNotIn(
+                leftover, body,
+                f"у роуті залишився власний розрахунок ({leftover})",
+            )
+
+    def test_legacy_response_keys_preserved(self):
+        """Старі ключі відповіді лишаються — їх уже споживає frontend."""
+        import ast
+
+        node, _, _ = self._route_function()
+        keys = set()
+        for sub in ast.walk(node):
+            if isinstance(sub, ast.Return) and isinstance(sub.value, ast.Dict):
+                for key in sub.value.keys:
+                    if isinstance(key, ast.Constant):
+                        keys.add(key.value)
+        for expected in ("available", "product_id", "name", "quantity", "message"):
+            self.assertIn(expected, keys, f"втрачено поле контракту: {expected}")
+
+    def test_dates_change_result_for_order_held_product(self):
+        """Товар, зайнятий замовленням у періоді, вільний поза періодом."""
+        held = _FakeDB(stock=(1, 0, 0, "available", "STL0001", "Стіл"), reserved=1)
+        free = _FakeDB(stock=(1, 0, 0, "available", "STL0001", "Стіл"), reserved=0)
+
+        busy = AvailabilityService(held).get_availability(
+            1, "2026-09-06", "2026-09-20", 1
+        )
+        later = AvailabilityService(free).get_availability(
+            1, "2027-06-01", "2027-06-05", 1
+        )
+
+        self.assertEqual(busy["available_quantity"], 0)
+        self.assertFalse(busy["is_available"])
+        self.assertEqual(later["available_quantity"], 1)
+        self.assertTrue(later["is_available"])
+
+    def test_frozen_quantity_is_not_date_dependent(self):
+        """Обробка тримає товар незалежно від періоду (рішення 3)."""
+        db = _FakeDB(stock=(2, 2, 0, "available", "S", "N"), reserved=0)
+        for start, end in (("2026-09-06", "2026-09-20"), ("2027-06-01", "2027-06-05")):
+            result = AvailabilityService(db).get_availability(1, start, end, 1)
+            self.assertEqual(result["available_quantity"], 0)
+            self.assertEqual(result["available_ignoring_processing"], 2)
+
+
+class TestEventToolCheckAvailabilityMigration(unittest.TestCase):
+    """
+    Точка D — `POST /api/event/products/check-availability` (Завдання №11).
+
+    Ця точка була найнебезпечнішою з усіх 11: статуси задавалися чорним
+    списком `NOT IN ('cancelled','returned','completed')`, тому будь-який
+    новий або помилковий статус автоматично починав резервувати товар.
+    Плюс не виключалися архівні замовлення й відмовлені позиції.
+
+    Вимір на production-знімку: різниця стосується 1 товару — `FC2225`
+    «Стілець Віденський», 6 -> 61 (+55 од. звільнено з архівного
+    замовлення 7970). Падінь доступності немає жодного, тобто міграція
+    точки D тільки повертає в обіг фантомно зайнятий склад.
+
+    Роут перевіряється статично (AST): його імпорт тягне `database_rentalhub`
+    і обов'язкові `RH_DB_*` env.
+    """
+
+    @staticmethod
+    def _route_function():
+        import ast
+
+        path = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            "routes", "event_tool.py",
+        )
+        with open(path, encoding="utf-8") as handle:
+            source = handle.read()
+        tree = ast.parse(source)
+        for node in ast.walk(tree):
+            if isinstance(node, ast.AsyncFunctionDef) and node.name == "check_availability":
+                return node, ast.get_source_segment(source, node), source
+        raise AssertionError(
+            "endpoint check_availability не знайдено в routes/event_tool.py"
+        )
+
+    @classmethod
+    def _route_code(cls):
+        """
+        Лише виконувані інструкції роуту, без docstring.
+
+        Потрібно саме так: docstring навмисно цитує стару формулу
+        (`NOT IN ('cancelled',...)`) як пояснення дефекту, і перевірка по
+        всьому тексту функції спрацьовувала б на цій цитаті замість
+        реального SQL. Тест мусить дивитися на код, а не на комментар.
+        """
+        import ast
+
+        node, _, source = cls._route_function()
+        statements = list(node.body)
+        if (statements and isinstance(statements[0], ast.Expr)
+                and isinstance(statements[0].value, ast.Constant)
+                and isinstance(statements[0].value.value, str)):
+            statements = statements[1:]
+        return "\n".join(
+            ast.get_source_segment(source, stmt) or "" for stmt in statements
+        )
+
+    def test_endpoint_delegates_to_service(self):
+        """Власний розрахунок прибраний, формула — у сервісі."""
+        _, _, source = self._route_function()
+        code = self._route_code()
+        self.assertIn("AvailabilityService", source)
+        self.assertIn("get_availability", code)
+        for leftover in ("SUM(oi.quantity)", "COALESCE(SUM(quantity)", "base_available"):
+            self.assertNotIn(
+                leftover, code,
+                f"у роуті залишився власний розрахунок ({leftover})",
+            )
+
+    def test_blacklist_statuses_removed(self):
+        """
+        Головний дефект точки J: чорний список статусів.
+
+        Поки в SQL роуту лишається `NOT IN`, кожен новий статус замовлення
+        буде резервувати товар автоматично і безшумно.
+        """
+        code = self._route_code().replace('"', "'")
+        self.assertNotIn("NOT IN ('cancelled'", code)
+        self.assertNotIn("o.status NOT IN", code)
+
+    def test_inactive_product_still_returns_404(self):
+        """
+        Знятий з продажу товар мусить і далі давати 404.
+
+        `AvailabilityService` навмисно не фільтрує `products.status`, тому
+        роут зобов'язаний перевіряти активність окремо — інакше міграція
+        тихо перетворила б 404 на 200.
+        """
+        code = self._route_code()
+        self.assertIn("status = 1", code)
+        self.assertIn("404", code)
+
+    def test_legacy_response_keys_preserved(self):
+        """Контракт відповіді точки J, включно з історичним `soft_reserved`."""
+        import ast
+
+        node, _, _ = self._route_function()
+        keys = set()
+        for sub in ast.walk(node):
+            if isinstance(sub, ast.Return) and isinstance(sub.value, ast.Dict):
+                for key in sub.value.keys:
+                    if isinstance(key, ast.Constant):
+                        keys.add(key.value)
+        for expected in (
+            "product_id", "requested_quantity", "total_quantity",
+            "reserved_quantity", "soft_reserved", "available",
+            "is_available", "reserved_from", "reserved_until",
+        ):
+            self.assertIn(expected, keys, f"втрачено поле контракту: {expected}")
+
+    def test_archived_order_no_longer_holds_stock(self):
+        """
+        Відтворює виміряний випадок `FC2225`: 6 -> 61.
+
+        Стара формула точки D рахувала архівне замовлення (55 од.),
+        канонічна — ні.
+        """
+        old_style = _FakeDB(
+            stock=(61, 0, 0, "available", "FC2225", "Стілець Віденський"),
+            reserved=55,
+        )
+        canonical = _FakeDB(
+            stock=(61, 0, 0, "available", "FC2225", "Стілець Віденський"),
+            reserved=0,
+        )
+        self.assertEqual(
+            AvailabilityService(old_style).get_availability(558, "a", "b", 1)[
+                "available_quantity"
+            ],
+            6,
+        )
+        self.assertEqual(
+            AvailabilityService(canonical).get_availability(558, "a", "b", 1)[
+                "available_quantity"
+            ],
+            61,
+        )
+
+    def test_soft_reserved_key_maps_to_service_field(self):
+        """
+        Історична назва ключа збережена, значення береться з сервісу.
+
+        У сервісі поле зветься `soft_reserved_quantity`, у відповіді точки D
+        мусить лишитися `soft_reserved` — інакше event-tool UI отримає
+        `undefined` без жодної помилки.
+        """
+        db = _FakeDB(stock=(20, 0, 0, "available", "S", "N"), soft=6)
+        result = AvailabilityService(db).get_availability(1, "a", "b", 1)
+        self.assertEqual(result["soft_reserved_quantity"], 6)
+
+        code = self._route_code()
+        self.assertIn('"soft_reserved"', code)
+        self.assertIn("soft_reserved_quantity", code)
+
+
+class TestOrderModificationsMigration(unittest.TestCase):
+    """
+    Точка J — `routes/order_modifications.py` (Завдання №11).
+
+    Найпростіша й найгрубіша з усіх формул: `available = products.quantity`,
+    тобто загальний залишок без замовлень, без заморозки, без дат. Через це
+    дозамовлення дозволяло додати товар, який фізично вже роздано в оренду.
+
+    Точка має три незалежні перевірки, і всі три використовували цю формулу:
+    додавання позиції, зміна кількості та відновлення відмовленої позиції.
+    Тести закріплюють міграцію всіх трьох і незмінність текстів помилок —
+    їх показує UI комплектувальника.
+
+    Роут перевіряється статично (AST): його імпорт тягне `database_rentalhub`
+    і обов'язкові `RH_DB_*` env.
+    """
+
+    @classmethod
+    def _source(cls):
+        path = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            "routes", "order_modifications.py",
+        )
+        with open(path, encoding="utf-8") as handle:
+            return handle.read()
+
+    @classmethod
+    def _function_code(cls, name):
+        """Виконуваний код функції без docstring."""
+        import ast
+
+        source = cls._source()
+        tree = ast.parse(source)
+        for node in ast.walk(tree):
+            if (isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+                    and node.name == name):
+                statements = list(node.body)
+                if (statements and isinstance(statements[0], ast.Expr)
+                        and isinstance(statements[0].value, ast.Constant)
+                        and isinstance(statements[0].value.value, str)):
+                    statements = statements[1:]
+                return "\n".join(
+                    ast.get_source_segment(source, stmt) or "" for stmt in statements
+                )
+        raise AssertionError(f"функцію {name} не знайдено в routes/order_modifications.py")
+
+    def test_helper_delegates_to_service(self):
+        """Єдиний хелпер точки J рахує доступність через сервіс."""
+        code = self._function_code("get_available_quantity")
+        self.assertIn("AvailabilityService", code)
+        self.assertIn("get_availability", code)
+        self.assertIn("available_quantity", code)
+
+    def test_helper_passes_rental_window(self):
+        """Дати замовлення передаються в сервіс — без них перетин не рахується."""
+        code = self._function_code("get_available_quantity")
+        self.assertIn("start_date", code)
+        self.assertIn("end_date", code)
+        self.assertIn("_rental_window", code)
+
+    def test_helper_does_not_exclude_current_order(self):
+        """
+        Поточне замовлення НЕ виключається з резерву.
+
+        Це свідомо: перевірки точки J порівнюють доступність із приростом
+        кількості (`quantity_diff`), а позиції самого замовлення вже
+        враховані як зарезервовані. Якби додати `exclude_order_id`, той самий
+        товар порахувався б двічі й ліміт склада можна було б перевищити.
+        """
+        code = self._function_code("get_available_quantity")
+        self.assertNotIn("exclude_order_id", code)
+
+    def test_add_item_uses_canonical_quantity(self):
+        """Додавання позиції більше не звіряється із загальним залишком."""
+        code = self._function_code("add_item_to_order")
+        self.assertIn("get_available_quantity(db, order, request.product_id)", code)
+        self.assertNotIn('product["available_quantity"] < request.quantity', code)
+
+    def test_update_quantity_uses_canonical_quantity(self):
+        """Зміна кількості рахує доступність сервісом, а не `p.quantity`."""
+        code = self._function_code("update_item_quantity")
+        self.assertIn("get_available_quantity(db, order,", code)
+        self.assertNotIn("available = int(item[7] or 0)", code)
+
+    def test_restore_item_uses_canonical_quantity(self):
+        """Відновлення відмовленої позиції не читає залишок напряму."""
+        code = self._function_code("restore_refused_item")
+        self.assertIn("get_available_quantity(db, order, product_id)", code)
+        self.assertNotIn("SELECT quantity FROM products", code)
+
+    def test_error_messages_preserved(self):
+        """Тексти помилок — частина контракту UI комплектувальника."""
+        source = self._source()
+        self.assertIn("Недостатня кількість на складі. Доступно:", source)
+        self.assertIn("Недостатня кількість товару на складі. Доступно:", source)
+
+    def test_no_raw_quantity_availability_left(self):
+        """Стара формула точки J не має лишитися ні в одній з трьох перевірок."""
+        for name in ("add_item_to_order", "update_item_quantity", "restore_refused_item"):
+            code = self._function_code(name)
+            self.assertNotIn(
+                "p.quantity as available", code,
+                f"{name}: залишився розрахунок за загальним залишком",
+            )
+
+    def test_order_held_stock_blocks_addition(self):
+        """
+        Числовий сенс міграції: товар, зайнятий іншими замовленнями,
+        більше не можна дозамовити.
+
+        Стара формула бачила `quantity = 10` і пропускала будь-яку кількість.
+        """
+        db = _FakeDB(stock=(10, 0, 0, "available", "S", "Стілець"), reserved=10)
+        result = AvailabilityService(db).get_availability(1, "2026-09-06", "2026-09-20", 1)
+        self.assertEqual(result["total_quantity"], 10)
+        self.assertEqual(result["available_quantity"], 0)
+        self.assertFalse(result["is_available"])
+
+    def test_frozen_stock_blocks_addition(self):
+        """Заморожене (обробка) теж більше не вважається доступним."""
+        db = _FakeDB(stock=(10, 4, 0, "on_wash", "S", "Скатертина"), reserved=0)
+        result = AvailabilityService(db).get_availability(1, "2026-09-06", "2026-09-20", 6)
+        self.assertEqual(result["available_quantity"], 6)
+        self.assertTrue(result["is_available"])
+        self.assertFalse(
+            AvailabilityService(db).get_availability(1, "2026-09-06", "2026-09-20", 7)[
+                "is_available"
+            ]
+        )
+
+    def test_helper_is_read_only(self):
+        """Перевірка доступності не має мутувати склад."""
+        code = self._function_code("get_available_quantity").upper()
+        for verb in ("UPDATE PRODUCTS", "INSERT INTO", "DELETE FROM"):
+            self.assertNotIn(verb, code)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

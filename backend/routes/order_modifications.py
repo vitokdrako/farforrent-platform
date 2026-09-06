@@ -12,6 +12,7 @@ import json
 
 from database_rentalhub import get_rh_db
 from utils.user_tracking_helper import get_current_user_dependency
+from services.availability import AvailabilityService
 
 router = APIRouter(prefix="/api/orders", tags=["order-modifications"])
 
@@ -191,6 +192,55 @@ def get_product_info(db: Session, product_id: int) -> dict:
     }
 
 
+def _rental_window(order: dict):
+    """Період аренди замовлення у вигляді (`YYYY-MM-DD`, `YYYY-MM-DD`)."""
+    start = order.get("rental_start_date")
+    end = order.get("rental_end_date")
+    if not start or not end:
+        return None
+
+    def _fmt(value):
+        if hasattr(value, "strftime"):
+            return value.strftime("%Y-%m-%d")
+        return str(value)[:10]
+
+    return _fmt(start), _fmt(end)
+
+
+def get_available_quantity(db: Session, order: dict, product_id: int) -> int:
+    """
+    Доступна кількість товару на період замовлення.
+
+    Раніше тут стояло `available = products.quantity` — загальний залишок без
+    урахування замовлень, заморозки й soft-резервів (точка J аудиту). Через це
+    дозамовлення пропускало товар, який фізично вже роздано. Тепер число дає
+    канонічний `AvailabilityService`.
+
+    Поточне замовлення НЕ виключається з резерву: його позиції вже враховані як
+    зарезервовані, тому перевірка порівнюється з приростом кількості, як і в
+    попередній реалізації.
+    """
+    window = _rental_window(order)
+    if window is None:
+        # Без періоду перетин порахувати неможливо. Лишаємо історичну поведінку
+        # (загальний залишок), щоб не заблокувати склад на битих даних.
+        result = db.execute(
+            text("SELECT quantity FROM products WHERE product_id = :product_id"),
+            {"product_id": product_id},
+        )
+        row = result.fetchone()
+        result.close()
+        return int(row[0] or 0) if row else 0
+
+    start_date, end_date = window
+    data = AvailabilityService(db).get_availability(
+        product_id=product_id,
+        start_date=start_date,
+        end_date=end_date,
+    )
+    return int(data["available_quantity"])
+
+
 def recalculate_order_totals(db: Session, order_id: int):
     """Recalculate order totals based on active items"""
     # Get rental_days
@@ -356,11 +406,12 @@ async def add_item_to_order(
     # Get product info
     product = get_product_info(db, request.product_id)
     
-    # Check availability
-    if product["available_quantity"] < request.quantity:
+    # Check availability (канонічний розрахунок на період замовлення)
+    available_quantity = get_available_quantity(db, order, request.product_id)
+    if available_quantity < request.quantity:
         raise HTTPException(
             status_code=400,
-            detail=f"Недостатня кількість на складі. Доступно: {product['available_quantity']}"
+            detail=f"Недостатня кількість на складі. Доступно: {available_quantity}"
         )
     
     # Calculate prices
@@ -517,7 +568,7 @@ async def update_item_quantity(
     # Get current item
     result = db.execute(text("""
         SELECT oi.id, oi.product_id, oi.product_name, oi.quantity, oi.price, 
-               oi.original_quantity, p.price as loss_value, p.quantity as available
+               oi.original_quantity, p.price as loss_value
         FROM order_items oi
         LEFT JOIN products p ON oi.product_id = p.product_id
         WHERE oi.id = :item_id AND oi.order_id = :order_id
@@ -530,7 +581,10 @@ async def update_item_quantity(
     old_quantity = item[3]
     price_per_day = float(item[4] or 0)
     loss_value = float(item[6] or 0)
-    available = int(item[7] or 0)
+    # Доступність рахує канонічний сервіс на період замовлення, а не
+    # `products.quantity` — загальний залишок не враховував ні інші
+    # замовлення, ні заморозку.
+    available = get_available_quantity(db, order, item[1])
     original_quantity = item[5] or old_quantity
     
     if request.quantity < 0:
@@ -761,12 +815,10 @@ async def restore_refused_item(
     new_total = price_per_day * original_qty * rental_days
     product_id = item[1]
     
-    # ✅ Перевірити наявність товару перед відновленням
-    avail_result = db.execute(text("""
-        SELECT quantity FROM products WHERE product_id = :product_id
-    """), {"product_id": product_id})
-    avail_row = avail_result.fetchone()
-    available_qty = avail_row[0] if avail_row else 0
+    # ✅ Перевірити наявність товару перед відновленням.
+    # Відмовлена позиція має status = 'refused' і товар не тримає, тому
+    # порівнюємо з повною кількістю, яку відновлюємо.
+    available_qty = get_available_quantity(db, order, product_id)
     
     if available_qty < original_qty:
         raise HTTPException(
