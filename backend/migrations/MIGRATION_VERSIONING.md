@@ -164,18 +164,20 @@ if state is State.EMPTY and not baseline_exists():
     )
 ```
 
-Крок 3 змінився принципово: **не** «застосувати 001..N». Дві legacy-міграції
-звертаються до таблиць, яких у RentalHub-базі не існує, тому на чистій
-установці вони впадуть із `Table doesn't exist`. Runner мусить знати список
-STALE (§11) і пропускати їх, записуючи як skipped.
+Крок 3 змінився принципово: **не** «застосувати 001..N». Чотири legacy-міграції
+не застосовні до цієї схеми — одні звертаються до таблиць, яких у RentalHub-базі
+не існує (падіння з `Table doesn't exist`), інші конфліктують із production-
+об'єктами (реальне падіння `004` з errno 1215 на MySQL 5.7.44). Runner мусить
+знати список STALE (§12.2) і пропускати їх, записуючи як skipped. Міграції,
+чий ефект уже є в baseline, отримують `stamped` без DDL (`BASELINE_COVERS`).
 
 ### 6.2 Upgrade existing installation (наш production)
 
 ```
 1. detect_state() -> LEGACY_UNTRACKED
 2. створити schema_migrations
-3. STAMP: записати 000..011 як applied (applied_by='stamp'), DDL НЕ виконувати
-4. STALE-міграції (§11) штампувати як skipped, а не applied
+3. STAMP: записати 000..011 як stamped (statements_executed=0), DDL НЕ виконувати
+4. STALE-міграції (§12.2) записувати як skipped, а не applied/stamped
 5. далі застосовувати лише 012+
 ```
 
@@ -186,13 +188,13 @@ STALE (§11) і пропускати їх, записуючи як skipped.
 Штамп виконується явною командою, ніколи автоматично:
 
 ```
-python -m migrations.runner --stamp 011
+python -m migrations.runner stamp --to 011
 ```
 
 ### 6.3 Повторний запуск (idempotent rerun)
 
 ```
-python -m migrations.runner --upgrade
+python -m migrations.runner upgrade
 ```
 
 * застосовані версії пропускаються за `PRIMARY KEY (version)`;
@@ -205,7 +207,7 @@ python -m migrations.runner --upgrade
 ### 6.4 Dry run
 
 ```
-python -m migrations.runner --upgrade --dry-run
+python -m migrations.runner upgrade --dry-run
 ```
 
 Друкує план (які версії, у якому порядку, який стан визначено) без єдиного
@@ -216,11 +218,12 @@ DDL. Обов'язковий крок перед production.
 ## 7. CLI
 
 ```
-runner --status              # стан + список pending/applied + перевірка checksum
-runner --upgrade [--to N]    # застосувати pending
-runner --dry-run             # план без виконання
-runner --stamp N             # позначити 000..N як applied без DDL
-runner --verify              # тільки checksum-перевірка, exit code для CI
+runner status                # стан + список pending/applied + перевірка checksum
+runner install               # clean install на порожню БД (baseline + решта)
+runner upgrade [--to N]      # застосувати pending
+runner upgrade --dry-run     # план без виконання
+runner stamp --to N          # позначити 000..N як stamped без DDL
+runner verify                # тільки checksum-перевірка, exit code для CI
 ```
 
 Місце: `backend/migrations/runner.py`, окремим модулем.
@@ -232,9 +235,9 @@ runner --verify              # тільки checksum-перевірка, exit co
 ## 8. Перевірка в CI
 
 1. підняти порожню MySQL;
-2. `runner --upgrade` → мусить дати повну схему (після появи baseline);
-3. `runner --upgrade` ще раз → **0 змін** (доказ ідемпотентності);
-4. `runner --verify` → checksum-и цілі;
+2. `runner install` → мусить дати повну схему (baseline + застосовні міграції);
+3. `runner upgrade` ще раз → **0 змін** (доказ ідемпотентності);
+4. `runner verify` → checksum-и цілі;
 5. порівняти отриману схему з `baseline_schema.sql` — розбіжність = провал.
 
 Крок 3 — головний: він відловлює неідемпотентні міграції до того, як вони
@@ -285,14 +288,16 @@ python -m migrations install
 
 | # | Крок | Статус |
 |---|---|---|
-| 1 | `runner.py` + `schema_migrations` + `--status`/`--stamp` | не зроблено |
-| 2 | Проштампувати production як `011` | блокує доступ до БД |
-| 3 | Отримати dump → `000_baseline.sql` | **зроблено 2026-09-05** |
-| 4 | CI clean-install тест на порожній MySQL | блокує відсутність MySQL |
-| 5 | Перенести inline DDL у міграції | після кроку 4 |
+| 1 | `runner.py` + `schema_migrations` + `status`/`stamp` | **зроблено 2026-09-06** (§12) |
+| 2 | Проштампувати production як `011` | **не зроблено** — потребує backup + дозволу (§13.3) |
+| 3 | Отримати dump → `000_baseline.sql` | **зроблено 2026-09-05** (§11) |
+| 4 | Clean-install тест на порожній MySQL | **зроблено 2026-09-06** на 5.7.44 (§13) |
+| 5 | Перенести inline DDL у міграції | не зроблено |
 
-Крок 1 можна робити вже зараз — він не потребує доступу до БД і не змінює
-структуру даних.
+Кроки 1, 3, 4 закриті. Крок 2 свідомо лишається відкритим: штамп production —
+одноразова необоротна операція, вона виконується вручну за протоколом §13.3.
+Крок 4 виконано локально на portable MySQL 5.7.44; винесення цієї ж
+послідовності в CI-джоб — окреме завдання.
 
 ---
 
@@ -330,7 +335,9 @@ production-хоста. Ненульовий результат — ненуль�
 ### 11.3 Зіставлення з legacy-міграціями
 
 `scripts/compare_baseline_migrations.py` (read-only) порівнює таблиці, яких
-вимагає кожна міграція, зі складом baseline. Результат: 12 узгоджених, 2 STALE.
+вимагає кожна міграція, зі складом baseline. Результат на 2026-09-05:
+12 узгоджених, 2 STALE. Реальний накат на MySQL 5.7.44 згодом знайшов ще
+дві — фінальний перелік із чотирьох див. §12.2, обставини знахідки — §13.1.
 
 | Міграція | Відсутня таблиця | Причина |
 |---|---|---|
@@ -349,17 +356,21 @@ production-хоста. Ненульовий результат — ненуль�
 `SHOW COLUMNS`, тому відсутність таблиці не є runtime-помилкою: блок legacy
 просто не активується.
 
-### 11.4 Що НЕ перевірено
+### 11.4 Статус перевірки baseline
 
-Реальний накат baseline на MySQL не виконувався: у середовищі немає
-MySQL/MariaDB, встановлення неможливе (`setgroups: Operation not permitted`).
-Отже **не підтверджено**: порядок створення view після таблиць, коректність
-тригерів, застосовність усіх 22 FK, поведінка `AUTO_INCREMENT` без
-counter-ів. Перевірка структури — лише статична: усі 12 цілей FK присутні,
-`ALTER TABLE` без відповідного `CREATE TABLE` немає.
+На момент §11 перевірка була **лише статичною** (усі 12 цілей FK присутні,
+`ALTER TABLE` без відповідного `CREATE TABLE` немає), бо сервера MySQL у
+середовищі не було.
 
-**Baseline не можна вважати перевіреним і не можна застосовувати до жодного
-середовища до накату на порожню MySQL 5.7 у staging.**
+Це обмеження знято — §13. Накат виконано на MySQL 5.7.44 і підтверджено
+емпірично те, що раніше було під питанням: порядок створення view після
+таблиць, застосовність усіх 22 FK, коректність обох тригерів, поведінка
+`AUTO_INCREMENT` без counter-ів. Baseline розгортається на порожню БД від
+початку до кінця, verification дає `RESULT: PASSED`.
+
+Межі: перевірено MySQL 5.7.44 і **структуру**, не міграцію даних.
+Застосування до production і далі потребує backup, плану відкату й
+явного дозволу (§13.3).
 
 ## 12. Реалізація runner-а (2026-09-06)
 
@@ -372,7 +383,7 @@ counter-ів. Перевірка структури — лише статичн�
 | `migrations/history.py` | DDL `schema_migrations`, статуси, конфіг БД, MySQL-backend |
 | `migrations/runner.py` | Команди `status` / `install` / `stamp` / `upgrade` / `verify` |
 | `scripts/verify_staging_schema.py` | Read-only порівняння живої БД із baseline |
-| `tests/test_migration_runner.py` | 23 тести на in-memory backend |
+| `tests/test_migration_runner.py` | 26 тестів на in-memory backend |
 
 ### 12.1 Що робить runner і чого не робить
 
@@ -389,12 +400,29 @@ fail-fast: перша ж помилка записується як `failed` і 
 історії без файлу на диску також блокує прогін — середовище, де міграцію
 видалили з репозиторію, не вважається валідним.
 
-### 12.2 Дві STALE-міграції
+### 12.2 Чотири STALE-міграції
 
-`001_modify_customers_table.sql` і `add_user_tracking.sql` позначаються
-`skipped` із причиною в `notes`, а не `applied` (§11.3). Тест
-`test_stale_migration_would_really_fail_if_it_were_not_skipped` доказує, що
-без skip вони справді падають, — правило skip перевірене, а не задеклароване.
+Спочатку таких міграцій вважалося дві; накат на справжню MySQL 5.7.44 (§13)
+знайшов ще дві. Усі чотири позначаються `skipped` із причиною в `notes`, а не
+`applied`:
+
+| Версія | Kind | Чому не запускається |
+|---|---|---|
+| `001_modify_customers_table` | `incompatible` | `customers` — таблиця OpenCart в іншій БД; у RentalHub її ніколи не було |
+| `add_user_tracking` | `obsolete` | цілиться в `finance_transactions`; реальна таблиця — `fin_transactions`, а перша назва існує лише в ORM-моделі |
+| `004_create_soft_reservations` | `superseded` | `FOREIGN KEY (board_id) REFERENCES event_boards(board_id)`, але `event_boards` має ключ `id varchar(36)` — MySQL 5.7 відмовляє з errno 1215 (перевірено на 5.7.44); робочу таблицю `event_soft_reservations` уже містить baseline |
+| `add_laundry_queue` | `superseded` | `laundry_queue` не читає жоден code path: `routes/laundry.py` реалізує чергу як рядки `tasks` з `task_type='laundry_queue'` |
+
+Тест `test_stale_migration_would_really_fail_if_it_were_not_skipped` доказує,
+що без skip міграція справді падає, — правило skip перевірене, а не
+задеклароване. Тест
+`test_real_repository_catalog_marks_every_stale_migration_with_a_reason`
+закріплює `kind` і причину кожного правила, щоб skip не можна було молча
+розширити на «незручну» міграцію.
+
+`skipped` і `BASELINE_COVERS` — взаємно виключні твердження про одну міграцію
+(«її ефекту в схемі немає» проти «її ефект уже в baseline»); інваріант
+перевіряє `test_skipped_migrations_are_never_also_claimed_by_the_baseline`.
 
 `add_user_tracking` не має числового префікса, тому сортується після `011`
 і **не** входить у `stamp --to 011`: штамп врегульовує рівно те, що просили.
@@ -420,32 +448,83 @@ phpMyAdmin-заглушка), 2 тригери, 22 FK (включно з пер�
 export MIGRATION_DB_HOST=127.0.0.1 MIGRATION_DB_USER=root \
        MIGRATION_DB_PASSWORD=... MIGRATION_DB_NAME=rentalhub_staging
 
-python -m migrations status                 # очікується EMPTY
-python -m migrations install --dry-run      # план без запису
-python -m migrations install                # baseline + skip двох stale
-python scripts/verify_staging_schema.py     # структура vs baseline
-python -m migrations upgrade                # має бути no-op
-python -m migrations verify                 # історія без failed
+# CLI — це `migrations.runner`; у пакета немає `__main__.py`
+python -m migrations.runner status              # очікується EMPTY
+python -m migrations.runner install --dry-run   # план без запису
+python -m migrations.runner install             # baseline + stamp/skip legacy
+python scripts/verify_staging_schema.py         # структура vs baseline
+python -m migrations.runner upgrade             # має бути no-op
+python -m migrations.runner verify              # історія без failed
 ```
 
 Критерії приймання: `install` завершується без помилок; verification дає
 `RESULT: PASSED`; повторний `upgrade` — no-op; `verify` не показує `failed`.
 
-### 12.5 Що НЕ перевірено (станом на 2026-09-06)
+### 12.5 Статус верифікації
 
-Логіка runner-а перевірена 23 тестами на in-memory backend; розбиття
-реального `000_baseline.sql` на інструкції та цілісність тіл тригерів —
-перевірені на самому файлі. Але **реальний накат на MySQL так і не
-виконувався**: у середовищі немає ні MySQL/MariaDB, ні Docker
-(`mysqld`, `mariadbd`, `docker` відсутні; встановлення блокує
-`setgroups: Operation not permitted`). Наявний лише клієнтський драйвер
-`pymysql` без сервера.
+Розділ §12.5 раніше фіксував, що реального накату не було: у середовищі
+не було ні MySQL/MariaDB, ні Docker. Це обмеження знято — див. §13:
+portable MySQL 5.7.44 запущено локально й усі сценарії §12.4 виконано
+емпірично. Baseline більше не «неперевірений».
 
-Отже досі **не підтверджено емпірично**: порядок створення view після
-таблиць, реальна застосовність усіх 22 FK, коректність тригерів у MySQL,
-поведінка `AUTO_INCREMENT` без counter-ів, а також те, що `install`
-проходить від початку до кінця на порожній БД.
+## 13. Емпірична верифікація на MySQL 5.7.44 (2026-09-06)
 
-**Clean install не можна називати перевіреним, а baseline — застосовним,
-доки §12.4 не виконано на справжній порожній MySQL 5.7.** Скрипт
-verification для цього готовий; бракує лише сервера.
+Сервер: portable MySQL **5.7.44**, ізольований datadir, `127.0.0.1:13306`,
+`utf8mb4` / `utf8mb4_unicode_ci`. **Production БД не торкалися жодною
+командою** — усі прогони на локальних staging-схемах.
+
+### 13.1 Що знайшов реальний накат
+
+Перший `install` упав на `004` із `errno 1215` — саме те, чого не могли
+показати in-memory тести. Розбір падіння виявив ще три розходження між
+legacy-міграціями та production-baseline і призвів до двох нових правил у
+`catalog.py`:
+
+* `BASELINE_COVERS` — міграція, чий ефект уже є в baseline, отримує
+  `stamped` замість повторного накату (`002`, `003`, `005`–`011`).
+* `SUPERSEDED` — міграція, яку витіснила інша реалізація (`004`,
+  `add_laundry_queue`), отримує `skipped` із причиною.
+
+Без цих правил clean install був непрацездатним. Це головний результат
+задачі: помилку знайшов сервер, а не рецензія коду.
+
+### 13.2 Виконані сценарії
+
+| # | Сценарій | Результат |
+|---|---|---|
+| 1 | `status` на порожній БД | `EMPTY`, 15 pending |
+| 2 | `install --dry-run` | план без запису; `TABLES_AFTER_DRYRUN: 0` (навіть `schema_migrations` не створено) |
+| 3 | `install` на `EMPTY` | 1 applied, 10 stamped, 4 skipped, 0 failed |
+| 4 | `verify_staging_schema.py` | `RESULT: PASSED` — 64 таблиці, 1 view, 2 тригери, 22 FK, 222 індекси, `AUTO_INCREMENT` |
+| 5 | `v_order_finance` | queryable як справжній view |
+| 6 | `upgrade` після install | no-op, 0 pending |
+| 7 | повторний `install` на непорожній БД | відмова, схема не змінена |
+| 8 | fingerprint між прогонами | стабільний `9a7beeb9…33f21` |
+| 9 | `upgrade` на `LEGACY_UNTRACKED` | **відмова** з вимогою спершу `stamp` |
+| 10 | `stamp --to 011` (adoption) | 10 stamped, 2 skipped; 64 таблиці **без змін**, 0 виконаних SQL-інструкцій |
+| 11 | повторний `stamp` | no-op: 12 рядків історії, 0 виконаних інструкцій |
+| 12 | verification adopted-БД | `RESULT: PASSED` |
+| 13 | checksum mismatch (правка застосованого файлу) | `verify` і `upgrade` відмовляють; після відкату файлу — `OK` |
+| 14 | збій посеред `upgrade` | `012` applied, `013` `failed` з текстом помилки, `014` **не пробувався** |
+| 15 | `upgrade` після збою | заблоковано, доки `failed`-рядок не прибрано вручну |
+
+Ключове для adoption: `stamp` на legacy-БД не створив ні `soft_reservations`,
+ні `laundry_queue`, залишив 2 тригери й 64 таблиці незмінними, а всі рядки
+історії мають `statements_executed = 0`. Це доказ, що штамп визнає схему, а
+не переписує її.
+
+### 13.3 Межі верифікації
+
+Перевірено MySQL **5.7.44**; на 8.x накат не запускався. Baseline
+перевірений як **структура** — дані не мігрувалися й не порівнювалися.
+Тестові схеми (`adopt_db`, `fail_db`) створювалися з того самого baseline,
+тому це перевірка runner-а на production-*структурі*, а не на копії
+production-*даних*.
+
+Прогони №13–15 навмисно псували стан, тому виконувалися на окремій
+`fail_db`; файли міграцій після них відновлені байт-у-байт (`diff -r` чистий),
+пробні `012`–`014` видалені.
+
+**Stamping production досі заборонено** без свіжого backup, перевіреного
+плану відкату й явного дозволу — емпірична перевірка на staging знімає
+питання про працездатність runner-а, але не замінює дозвіл на дію з живою БД.
