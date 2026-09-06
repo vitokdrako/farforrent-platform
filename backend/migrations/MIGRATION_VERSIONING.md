@@ -147,14 +147,14 @@ def detect_state(conn) -> State:
 
 ```
 1. створити schema_migrations
-2. застосувати 000_baseline.sql        ← поки НЕ існує, див. SCHEMA_GAP.md §7
-3. застосувати 001..N по зростанню version
-4. записати кожну в schema_migrations
+2. застосувати 000_baseline.sql        ← згенерований 2026-09-05 з live dump
+3. застосувати лише APPLICABLE-міграції (§11) по зростанню version
+4. записати кожну в schema_migrations; STALE — як skipped, без DDL
 ```
 
-Наразі крок 2 неможливий: 71 об'єкт відсутній у Git. Тому clean install
-**заблокований** до отримання дампу — і runner мусить сказати це прямо, а не
-впасти на середині з `Table 'orders' doesn't exist`:
+**Оновлено 2026-09-05.** Крок 2 більше не заблокований: `000_baseline.sql`
+згенерований із живого дампа (§11). Перевірку відсутності baseline лишаємо —
+вона потрібна для середовищ, куди файл не потрапив:
 
 ```python
 if state is State.EMPTY and not baseline_exists():
@@ -164,13 +164,19 @@ if state is State.EMPTY and not baseline_exists():
     )
 ```
 
+Крок 3 змінився принципово: **не** «застосувати 001..N». Дві legacy-міграції
+звертаються до таблиць, яких у RentalHub-базі не існує, тому на чистій
+установці вони впадуть із `Table doesn't exist`. Runner мусить знати список
+STALE (§11) і пропускати їх, записуючи як skipped.
+
 ### 6.2 Upgrade existing installation (наш production)
 
 ```
 1. detect_state() -> LEGACY_UNTRACKED
 2. створити schema_migrations
 3. STAMP: записати 000..011 як applied (applied_by='stamp'), DDL НЕ виконувати
-4. далі застосовувати лише 012+
+4. STALE-міграції (§11) штампувати як skipped, а не applied
+5. далі застосовувати лише 012+
 ```
 
 Штампування без виконання — принципове рішення. Схема вже містить результат
@@ -252,13 +258,80 @@ runner --verify              # тільки checksum-перевірка, exit co
 
 ## 10. Порядок реалізації
 
-| # | Крок | Блокер |
+| # | Крок | Статус |
 |---|---|---|
-| 1 | `runner.py` + `schema_migrations` + `--status`/`--stamp` | немає |
-| 2 | Проштампувати production як `011` | доступ до БД |
-| 3 | Отримати dump → `000_baseline.sql` | доступ до БД |
-| 4 | CI clean-install тест | крок 3 |
-| 5 | Перенести inline DDL у міграції | крок 4 |
+| 1 | `runner.py` + `schema_migrations` + `--status`/`--stamp` | не зроблено |
+| 2 | Проштампувати production як `011` | блокує доступ до БД |
+| 3 | Отримати dump → `000_baseline.sql` | **зроблено 2026-09-05** |
+| 4 | CI clean-install тест на порожній MySQL | блокує відсутність MySQL |
+| 5 | Перенести inline DDL у міграції | після кроку 4 |
 
-Кроки 1 і 2 можна робити вже зараз — вони не потребують baseline і не
-змінюють структуру даних.
+Крок 1 можна робити вже зараз — він не потребує доступу до БД і не змінює
+структуру даних.
+
+---
+
+## 11. Результати live dump (2026-09-05)
+
+Baseline згенерований `scripts/extract_baseline.py` з phpMyAdmin-дампа
+(75,7 МБ, MySQL 5.7.44). Дамп у Git **не** комітився.
+
+### 11.1 Склад baseline
+
+| Об'єкт | Кількість |
+|---|---|
+| Таблиці | 64 |
+| View (`v_order_finance`) | 1 |
+| Тригери | 2 |
+| `ALTER TABLE` | 128 |
+| PRIMARY KEY | 64 |
+| UNIQUE KEY | 24 |
+| KEY (index) | 134 |
+| FOREIGN KEY | 22 |
+
+Відкинуто: 428 блоків даних, 2 транзакційні інструкції, 8 службових
+комментарів заголовка, 3 backup-таблиці (`fin_payments_bk_20260617_1955`,
+`fin_transactions_bk_20260617_1955`, `orders_discount_bk_20260617_1955`).
+
+Автоматичні safety-перевірки в екстракторі (усі мусять бути 0): залишкові
+`INSERT`, `DEFINER=`, `*_bk_*`, `COMMIT`/`START TRANSACTION`, ім'я
+production-хоста. Ненульовий результат — ненульовий exit code.
+
+### 11.2 Чому прибрано `START TRANSACTION` / `COMMIT`
+
+Транзакційними межами володіє runner. Залишений у файлі `COMMIT` тихо
+закрив би транзакцію runner-а посередині накату й зламав відкат при збої.
+
+### 11.3 Зіставлення з legacy-міграціями
+
+`scripts/compare_baseline_migrations.py` (read-only) порівнює таблиці, яких
+вимагає кожна міграція, зі складом baseline. Результат: 12 узгоджених, 2 STALE.
+
+| Міграція | Відсутня таблиця | Причина |
+|---|---|---|
+| `001_modify_customers_table.sql` | `customers` | Це таблиця OpenCart (інша БД). У RentalHub її ніколи не було |
+| `add_user_tracking.sql` | `finance_transactions` | У production таблиця зветься `fin_transactions`; `finance_transactions` існує лише в ORM-моделі |
+
+Наслідок для §6.2: штамп «000..011 як applied» був би неправдою. `001`
+ніколи не застосовувався до цієї БД, і його треба записати як skipped —
+інакше checksum-історія фіксує зміну, якої в схемі немає.
+
+Наслідок для коду: `models_sqlalchemy.py:700` оголошує
+`__tablename__ = 'finance_transactions'` для таблиці, якої не існує. Модель
+не видаляємо в межах цієї задачі, але фіксуємо як розходження ORM↔схема.
+
+`routes/clients.py` звертається до `customers` під `try/except` навколо
+`SHOW COLUMNS`, тому відсутність таблиці не є runtime-помилкою: блок legacy
+просто не активується.
+
+### 11.4 Що НЕ перевірено
+
+Реальний накат baseline на MySQL не виконувався: у середовищі немає
+MySQL/MariaDB, встановлення неможливе (`setgroups: Operation not permitted`).
+Отже **не підтверджено**: порядок створення view після таблиць, коректність
+тригерів, застосовність усіх 22 FK, поведінка `AUTO_INCREMENT` без
+counter-ів. Перевірка структури — лише статична: усі 12 цілей FK присутні,
+`ALTER TABLE` без відповідного `CREATE TABLE` немає.
+
+**Baseline не можна вважати перевіреним і не можна застосовувати до жодного
+середовища до накату на порожню MySQL 5.7 у staging.**
