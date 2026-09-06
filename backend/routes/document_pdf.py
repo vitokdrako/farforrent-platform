@@ -19,11 +19,11 @@ import os
 import uuid
 
 from database_rentalhub import get_rh_db
-from routes.document_render import (
-    build_document_context, 
-    jinja_env, 
+from services.document_context import (
+    build_document_context,
+    jinja_env,
     DOCUMENT_TEMPLATES,
-    get_watermark_text
+    get_watermark_text,
 )
 
 router = APIRouter(prefix="/api/documents", tags=["document-pdf"])

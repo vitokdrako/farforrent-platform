@@ -28,7 +28,11 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from database_rentalhub import get_rh_db, RHSessionLocal
-from routes.order_chat import _serialize_message, _list_messages, _verify_order_belongs_to_client
+from services.chat_service import (
+    serialize_message as _serialize_message,
+    list_messages as _list_messages,
+    verify_order_belongs_to_client as _verify_order_belongs_to_client,
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/ws", tags=["websocket-chat"])
@@ -128,7 +132,7 @@ async def chat_client_ws(websocket: WebSocket, order_id: int, token: str = Query
     db = RHSessionLocal()
     try:
         # 1. Auth via JWT
-        from routes.event_tool import decode_token
+        from core.security import decode_jwt_token as decode_token
         try:
             payload = decode_token(token)
             customer_id = payload.get("sub")

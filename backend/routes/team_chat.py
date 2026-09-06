@@ -433,60 +433,13 @@ async def reopen_thread(
 
 
 # === Task-Chat: send task notification to general channel ===
-
-def notify_task_in_chat(db: Session, user_id: int, user_name: str, task_title: str, task_id: str, assignee_name: str = "", priority: str = "", due_date: str = ""):
-    """Create message in Загальний channel when task is created"""
-    general = db.execute(text("SELECT id FROM chat_channels WHERE type = 'general' LIMIT 1")).fetchone()
-    if not general:
-        return None
-
-    parts = [f"Нова задача: {task_title}"]
-    if assignee_name:
-        parts.append(f"Виконавець: {assignee_name}")
-    if priority:
-        p_labels = {"high": "Високий", "medium": "Середній", "low": "Низький"}
-        parts.append(f"Пріоритет: {p_labels.get(priority, priority)}")
-    if due_date:
-        parts.append(f"Дедлайн: {due_date[:10]}")
-
-    msg_text = "\n".join(parts)
-
-    db.execute(text("""
-        INSERT INTO chat_messages (channel_id, user_id, message, task_id)
-        VALUES (:ch_id, :uid, :msg, :tid)
-    """), {"ch_id": general[0], "uid": user_id, "msg": msg_text, "tid": task_id})
-
-    msg_id = db.execute(text("SELECT LAST_INSERT_ID()")).scalar()
-    db.execute(text("UPDATE chat_channels SET updated_at = NOW() WHERE id = :ch_id"), {"ch_id": general[0]})
-    db.commit()
-    return msg_id
-
-
-def notify_task_status_change(db: Session, user_id: int, task_id: str, new_status: str):
-    """Add a thread reply to the task message when status changes"""
-    # Find the original task message
-    orig = db.execute(text("""
-        SELECT id, channel_id FROM chat_messages WHERE task_id = :tid AND reply_to IS NULL LIMIT 1
-    """), {"tid": task_id}).fetchone()
-    if not orig:
-        return
-
-    status_labels = {"todo": "До виконання", "in_progress": "В роботі", "done": "Виконано"}
-    status_text = status_labels.get(new_status, new_status)
-
-    # Get user name
-    u = db.execute(text("SELECT firstname, lastname FROM users WHERE user_id = :uid"), {"uid": user_id}).fetchone()
-    name = f"{u[0] or ''} {u[1] or ''}".strip() if u else "System"
-
-    msg_text = f"Статус змінено: {status_text}"
-
-    db.execute(text("""
-        INSERT INTO chat_messages (channel_id, user_id, message, reply_to, task_id)
-        VALUES (:ch_id, :uid, :msg, :parent, :tid)
-    """), {"ch_id": orig[1], "uid": user_id, "msg": msg_text, "parent": orig[0], "tid": task_id})
-
-    db.execute(text("UPDATE chat_channels SET updated_at = NOW() WHERE id = :ch_id"), {"ch_id": orig[1]})
-    db.commit()
+# Канонічна реалізація — services/chat_notifications.py, щоб routes/tasks.py
+# не імпортував ці функції з цього роута (route -> route). Реекспорт нижче
+# зберігає сумісність для наявних імпортів.
+from services.chat_notifications import (  # noqa: E402
+    notify_task_in_chat,
+    notify_task_status_change,
+)
 
 
 # === Team Members ===

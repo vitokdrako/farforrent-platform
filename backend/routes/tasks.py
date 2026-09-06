@@ -243,7 +243,7 @@ async def create_task(
     
     # === Task-Chat Integration: notify in chat ===
     try:
-        from routes.team_chat import notify_task_in_chat
+        from services.chat_notifications import notify_task_in_chat
         assignee_name = ""
         if task.assigned_to_id:
             arow = db.execute(text("SELECT firstname, lastname FROM users WHERE user_id = :uid"), {"uid": task.assigned_to_id}).fetchone()
@@ -372,7 +372,7 @@ async def update_task(
     # === Task-Chat Integration: notify status change ===
     if task.status is not None:
         try:
-            from routes.team_chat import notify_task_status_change
+            from services.chat_notifications import notify_task_status_change
             # Get user_id from authorization header if available
             notify_task_status_change(db=db, user_id=1, task_id=task_id, new_status=task.status)
         except Exception as e:

@@ -195,10 +195,70 @@ def get_jwt_secret() -> str:
     return secret
 
 
+# ---------------------------------------------------------------------------
+# JWT decoding (canonical, framework-neutral)
+# ---------------------------------------------------------------------------
+
+
+class TokenError(RuntimeError):
+    """Помилка перевірки JWT, незалежна від web-фреймворку.
+
+    Route-шар мапить її у власний HTTP-контракт (наприклад, 401), а
+    WebSocket-шар — у власний close-code. Сам core не знає про FastAPI.
+
+    Attributes:
+        reason: `"expired"` або `"invalid"`.
+        message: Текст, який історично віддавався клієнту.
+    """
+
+    def __init__(self, reason: str, message: str):
+        super().__init__(message)
+        self.reason = reason
+        self.message = message
+
+
+def decode_jwt_token(token: str) -> dict:
+    """Декодувати та перевірити JWT.
+
+    Формат токена не змінюється: той самий секрет (`get_jwt_secret`), той
+    самий алгоритм (`JWT_ALGORITHM` = HS256), той самий payload. Claim `sub`
+    приводиться до int, коли це можливо — для customer-токенів Event Tool;
+    admin/manager-токени мають `sub` у вигляді email-рядка і залишаються
+    без змін, щоб виклик вище повернув коректний 401, а не 500.
+
+    Args:
+        token: Закодований JWT.
+
+    Returns:
+        Розкодований payload.
+
+    Raises:
+        TokenError: Токен протермінований (`reason="expired"`) або
+            недійсний (`reason="invalid"`).
+    """
+    import jwt
+
+    try:
+        payload = jwt.decode(token, get_jwt_secret(), algorithms=[JWT_ALGORITHM])
+        if "sub" in payload:
+            try:
+                payload["sub"] = int(payload["sub"])
+            except (TypeError, ValueError):
+                pass
+        return payload
+    except jwt.ExpiredSignatureError:
+        raise TokenError("expired", "Token expired")
+    except jwt.InvalidTokenError as exc:
+        logger.error("JWT decode error: %s", exc)
+        raise TokenError("invalid", "Invalid token")
+
+
 __all__ = [
     "BACKEND_DIR",
     "JWT_ALGORITHM",
     "SecurityConfigError",
+    "TokenError",
+    "decode_jwt_token",
     "get_bool_env",
     "get_environment",
     "get_jwt_secret",

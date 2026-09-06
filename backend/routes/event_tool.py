@@ -156,42 +156,28 @@ def create_refresh_token(data: dict) -> str:
     return jwt.encode(to_encode, get_secret_key(), algorithm=ALGORITHM)
 
 def decode_token(token: str) -> dict:
+    """Декодувати JWT Event Tool.
+
+    Канонічна реалізація — `core.security.decode_jwt_token`. Тут лишається
+    лише мапінг у HTTP-контракт: ті самі 401 і ті самі тексти помилок,
+    той самий секрет, алгоритм і payload.
+    """
+    from core.security import TokenError, decode_jwt_token
     try:
-        payload = jwt.decode(token, get_secret_key(), algorithms=[ALGORITHM])
-        # Конвертуємо sub назад в int (тільки для customer-токенів Event Tool;
-        # admin/manager JWT мають sub=email-string — для них залишаємо як є,
-        # щоб get_current_customer повернув коректний 401 замість 500)
-        if "sub" in payload:
-            try:
-                payload["sub"] = int(payload["sub"])
-            except (TypeError, ValueError):
-                pass
-        return payload
-    except jwt.ExpiredSignatureError:
-        raise HTTPException(status_code=401, detail="Token expired")
-    except jwt.InvalidTokenError as e:
-        logger.error(f"JWT decode error: {e}")
-        raise HTTPException(status_code=401, detail="Invalid token")
+        return decode_jwt_token(token)
+    except TokenError as exc:
+        raise HTTPException(status_code=401, detail=exc.message)
+
 
 def get_current_customer(token: str, db: Session):
-    """Отримати поточного користувача з токена"""
-    payload = decode_token(token)
-    customer_id = payload.get("sub")
-    if not customer_id:
-        raise HTTPException(status_code=401, detail="Invalid token")
-    
-    result = db.execute(text("SELECT * FROM event_customers WHERE customer_id = :id"), {"id": customer_id})
-    row = result.fetchone()
-    if not row:
-        raise HTTPException(status_code=401, detail="Customer not found")
-    
-    return {
-        "customer_id": row[0],
-        "email": row[1],
-        "firstname": row[3],
-        "lastname": row[4],
-        "telephone": row[5]
-    }
+    """Отримати поточного користувача з токена.
+
+    Канонічна реалізація — `services.customer_identity.get_current_customer`;
+    routes/order_chat.py тепер імпортує її звідти, а не з цього роута.
+    """
+    from services.customer_identity import get_current_customer as _impl
+    return _impl(token, db)
+
 
 def get_token_from_header(authorization: Optional[str] = Header(None)) -> str:
     """Витягти токен з Authorization header"""
