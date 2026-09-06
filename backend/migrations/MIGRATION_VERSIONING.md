@@ -620,9 +620,84 @@ production-снапшоті, а не лише читанням коду:
 
 ### 14.7 Що лишилося — окремий крок із дозволом
 
-Production `stamp --to 011` **не виконано**. Умови запуску незмінні й
-обов'язкові всі разом: свіжий backup production, явний дозвіл людини,
-перевірений план відкату, фінальне підтвердження підключення та ідентичності
-цілі (`status` мусить показати `LEGACY_UNTRACKED` і очікуваний fingerprint).
-Не перевірено досі: MySQL 8.x і міграція реальних **даних** (перевірялася
-структура).
+Виконано на відновленій копії production-дампа — див. §15. На **живому**
+production `stamp --to 011` досі **не виконано**: не було ні доступу, ні
+credentials. Умови запуску незмінні й обов'язкові всі разом: свіжий backup
+production, явний дозвіл людини, перевірений план відкату, фінальне
+підтвердження підключення та ідентичності цілі (`status` мусить показати
+`LEGACY_UNTRACKED` і очікуваний fingerprint). Не перевірено досі: MySQL 8.x і
+міграція реальних **даних** (перевірялася структура).
+
+## 15. Операція `stamp --to 011` на копії production-дампа (2026-09-06)
+
+Джерело істини: `/workspace/uploads/farforre_rentalhub.sql`,
+SHA-256 `506a79c7258dde6dbd7f2f8cd33cc6b10a49f252198aa815e055f2c34d4e752b`.
+Дамп відновлено двічі на MySQL 5.7.44 (`127.0.0.1:13306`):
+`prod_snapshot` — недоторканий еталон для перехресного порівняння,
+`stamp_target` — ціль операції. Живий production не контактувався.
+
+### 15.1 Стан ДО
+
+| Параметр | Значення |
+|---|---|
+| state | `LEGACY_UNTRACKED` |
+| fingerprint | `f4a34636893a2de242fbc681b37fa1334a2533c5a5fabc72995dc8c7a12c0ccc` |
+| `schema_migrations` | відсутня |
+| pending | 15 |
+| таблиці / колонки | 67 / 869 |
+| view / тригери / FK / індекси | 1 / 2 / 22 / 222 |
+
+### 15.2 Dry-run перед записом
+
+План: 10 `stamp`, 2 `skip` (001 incompatible, 004 superseded), жодного
+`blocked` чи `unverifiable`. Після dry-run `schema_migrations` не створено,
+таблиць залишилось 67 — тобто сухий прогін дійсно нічого не пише.
+
+### 15.3 Реальна операція
+
+`stamp --to 011` (без `upgrade`), exit code `0`:
+
+- `STAMPED 10`, `skipped 2`, `applied 0`;
+- state перейшов `LEGACY_UNTRACKED` → `TRACKED`;
+- `pending 3` (`add_laundry_queue`, `add_user_tracking` — будуть skip;
+  `create_product_damage_history` — залишено свідомо, поза межею `--to 011`);
+- `failed 0`, `checksum mismatch 0`, `schema mismatch 0`.
+
+### 15.4 Доказ нульового DDL
+
+Прямий запит до історії: `total_rows: 12`, `status_applied: 0`,
+`total_statements_executed: 0` — по кожному з 12 рядків `stmts=0`. Жодна
+міграція не виконала SQL; штамп лишився суто обліковим записом.
+
+### 15.5 Доказ незмінності схеми
+
+Побудовано побайтові знімки ДО і ПІСЛЯ (колонки з типами, nullability,
+defaults, extra; індекси з порядком і унікальністю; FK; тригери; таблиці):
+
+| Зріз | diff (before → after) |
+|---|---|
+| columns | 0 |
+| indexes | 0 |
+| fks | 0 |
+| triggers | 0 |
+| tables | 0 |
+
+Fingerprint не змінився: `f4a34636…` до і після. Незалежна перехресна
+перевірка проти недоторканого `prod_snapshot` теж дала `0` розбіжностей по
+columns / indexes / tables. Єдиний новий об'єкт у `stamp_target` —
+`schema_migrations`; жодного об'єкта не втрачено (`only_in_prod_snapshot:
+(none)`).
+
+### 15.6 Пост-перевірки
+
+`runner verify` — exit `0`, `OK`. Тести: `28 passed` (migration runner),
+`19 passed` (security). `py_compile` по `runner.py`, `catalog.py`,
+`history.py` — чистий. `upgrade` не запускався: `create_product_damage_history`
+у таблиці історії відсутній (`0` рядків).
+
+### 15.7 Висновок
+
+Операція `stamp --to 011` на реальній production-схемі безпечна й
+відтворювана: вона не змінює структуру, не виконує DDL і не чіпає дані. Для
+живого production процедура готова, але потребує окремого запуску з backup,
+credentials і фінальним підтвердженням цілі за §9.0.

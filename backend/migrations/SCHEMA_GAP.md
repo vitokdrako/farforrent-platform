@@ -379,9 +379,16 @@ SELECT TABLE_NAME, COLUMN_NAME, CONSTRAINT_NAME,
 Лишилося:
 
 5. **Проштампувати production** як `baseline + 001..011`
-   (`stamp --to 011`, без виконання DDL). Механізм перевірено на копії схеми,
-   але на production ще не запускався. Обов'язкові умови: свіжий backup,
-   явний дозвіл, перевірений план відкату — `MIGRATION_VERSIONING.md §13.3`.
+   (`stamp --to 011`, без виконання DDL). Операцію повністю виконано й
+   задокументовано на відновленій копії production-дампа
+   (`MIGRATION_VERSIONING.md §15`): 10 stamped, 2 skipped, `applied 0`,
+   `total_statements_executed 0`, fingerprint `f4a34636…` до і після
+   однаковий, diff по колонках/індексах/FK/тригерах/таблицях — `0`,
+   перехресна перевірка проти недоторканого еталона дампа — `0` розбіжностей,
+   єдиний новий об'єкт — `schema_migrations`. На **живому** production не
+   запускалося: не було доступу й credentials. Обов'язкові умови незмінні:
+   свіжий backup, явний дозвіл, перевірений план відкату —
+   `MIGRATION_VERSIONING.md §13.3`.
 
    Готовність підтверджена аудитом на снапшоті production-дампа
    (`MIGRATION_VERSIONING.md §14`): baseline і production розходяться **лише**
