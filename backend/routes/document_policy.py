@@ -11,6 +11,7 @@ from typing import Optional, List, Dict, Any
 from pydantic import BaseModel
 
 from database_rentalhub import get_rh_db
+from services.finance import get_finance_service
 
 router = APIRouter(prefix="/api/documents/policy", tags=["document-policy"])
 
@@ -498,18 +499,17 @@ async def check_document_policy(
             SELECT 
                 o.order_id, o.status, o.deal_mode, o.delivery_type,
                 o.payer_profile_id, o.active_annex_id,
-                COALESCE(d.held_amount, 0) as deposit_held,
-                COALESCE(d.held_amount - d.used_amount - d.refunded_amount, 0) as deposit_to_refund,
                 COALESCE((SELECT SUM(fee) FROM product_damage_history WHERE order_id = o.order_id), 0) as damage_total,
                 (SELECT COUNT(*) > 0 FROM product_damage_history WHERE order_id = o.order_id) as has_damage,
                 (SELECT COUNT(*) > 0 FROM issue_cards WHERE order_id = o.order_id) as has_issue_card
             FROM orders o
-            LEFT JOIN fin_deposit_holds d ON d.order_id = o.order_id
             WHERE o.order_id = :order_id
         """), {"order_id": order_id})
         
         row = order_result.fetchone()
         if row:
+            # Дані застави — через FinanceService, без прямого доступу до fin_*
+            deposit_balance = get_finance_service().get_order_deposit_balance(db, order_id)
             order_data = {
                 "order_id": row[0],
                 "status": row[1],
@@ -517,11 +517,11 @@ async def check_document_policy(
                 "delivery_type": row[3] or "pickup",
                 "payer_profile_id": row[4],
                 "active_annex_id": row[5],
-                "deposit_held": float(row[6] or 0),
-                "deposit_to_refund": float(row[7] or 0),
-                "damage_total": float(row[8] or 0),
-                "has_damage": bool(row[9]),
-                "has_issue_card": bool(row[10])
+                "deposit_held": deposit_balance.deposit_held,
+                "deposit_to_refund": deposit_balance.deposit_to_refund,
+                "damage_total": float(row[6] or 0),
+                "has_damage": bool(row[7]),
+                "has_issue_card": bool(row[8])
             }
             
             # Use order's payer if not specified
@@ -607,13 +607,10 @@ async def get_available_documents_for_order(
         SELECT 
             o.order_id, o.status, o.deal_mode, o.delivery_type,
             o.payer_profile_id, o.active_annex_id,
-            COALESCE(d.held_amount, 0) as deposit_held,
-            COALESCE(d.held_amount - d.used_amount - d.refunded_amount, 0) as deposit_to_refund,
             COALESCE((SELECT SUM(fee) FROM product_damage_history WHERE order_id = o.order_id), 0) as damage_total,
             (SELECT COUNT(*) > 0 FROM product_damage_history WHERE order_id = o.order_id) as has_damage,
             (SELECT COUNT(*) > 0 FROM issue_cards WHERE order_id = o.order_id) as has_issue_card
         FROM orders o
-        LEFT JOIN fin_deposit_holds d ON d.order_id = o.order_id
         WHERE o.order_id = :order_id
     """), {"order_id": order_id})
     
@@ -621,6 +618,8 @@ async def get_available_documents_for_order(
     if not row:
         raise HTTPException(status_code=404, detail="Order not found")
     
+    # Дані застави — через FinanceService, без прямого доступу до fin_*
+    deposit_balance = get_finance_service().get_order_deposit_balance(db, order_id)
     order_data = {
         "order_id": row[0],
         "status": row[1],
@@ -628,11 +627,11 @@ async def get_available_documents_for_order(
         "delivery_type": row[3] or "pickup",
         "payer_profile_id": row[4],
         "active_annex_id": row[5],
-        "deposit_held": float(row[6] or 0),
-        "deposit_to_refund": float(row[7] or 0),
-        "damage_total": float(row[8] or 0),
-        "has_damage": bool(row[9]),
-        "has_issue_card": bool(row[10])
+        "deposit_held": deposit_balance.deposit_held,
+        "deposit_to_refund": deposit_balance.deposit_to_refund,
+        "damage_total": float(row[6] or 0),
+        "has_damage": bool(row[7]),
+        "has_issue_card": bool(row[8])
     }
     
     payer_data = None

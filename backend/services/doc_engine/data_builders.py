@@ -11,6 +11,7 @@ import base64
 import mimetypes
 from pathlib import Path
 from services.company_config import get_company_config
+from services.finance import get_finance_service
 
 # ============================================================
 # ЗОБРАЖЕННЯ ТОВАРІВ — ЄДИНЕ ДЖЕРЕЛО ПРАВДИ
@@ -296,33 +297,31 @@ def build_order_data(db: Session, order_id: str, options: dict) -> dict:
     # Конвертуємо order_id в int для коректного порівняння
     order_id_int = int(order_id) if order_id else 0
     
-    # Платежі по ордеру (status може бути 'completed' або 'confirmed')
-    payments_result = db.execute(text("""
-        SELECT payment_type, method, amount, note, occurred_at
-        FROM fin_payments
-        WHERE order_id = :order_id AND status IN ('completed', 'confirmed')
-        ORDER BY occurred_at
-    """), {"order_id": order_id_int})
-    
+    # Платежі по ордеру (лише підтверджені) — через FinanceService
+    finance = get_finance_service()
+    payments_snapshot = finance.list_order_payments(
+        db, order_id_int, statuses=("completed", "confirmed")
+    )
+
     payments = []
     rent_paid = 0
     damage_paid = 0
     additional_paid = 0
-    
-    for p in payments_result:
+
+    for p in payments_snapshot:
         payments.append({
-            "type": p[0],
-            "method": p[1],
-            "amount": float(p[2] or 0),
-            "note": p[3] or "",
-            "date": p[4].strftime("%d.%m.%Y") if p[4] else ""
+            "type": p.payment_type,
+            "method": p.method,
+            "amount": p.amount,
+            "note": p.note or "",
+            "date": p.occurred_at.strftime("%d.%m.%Y") if p.occurred_at else ""
         })
-        if p[0] == "rent":
-            rent_paid += float(p[2] or 0)
-        elif p[0] == "damage":
-            damage_paid += float(p[2] or 0)
-        elif p[0] == "additional":
-            additional_paid += float(p[2] or 0)
+        if p.payment_type == "rent":
+            rent_paid += p.amount
+        elif p.payment_type == "damage":
+            damage_paid += p.amount
+        elif p.payment_type == "additional":
+            additional_paid += p.amount
     
     # Шкода по ордеру
     damage_result = db.execute(text("""
@@ -333,25 +332,19 @@ def build_order_data(db: Session, order_id: str, options: dict) -> dict:
     damage_row = damage_result.fetchone()
     total_damage = float(damage_row[0]) if damage_row and damage_row[0] else 0
     
-    # Застава
-    deposit_result = db.execute(text("""
-        SELECT held_amount, used_amount, refunded_amount, actual_amount, currency, exchange_rate
-        FROM fin_deposit_holds
-        WHERE order_id = :order_id
-        LIMIT 1
-    """), {"order_id": order_id_int})
-    deposit_row = deposit_result.fetchone()
-    
+    # Застава — через FinanceService
+    deposit_record = finance.get_order_deposit(db, order_id_int).deposit
+
     deposit_data = None
-    if deposit_row:
+    if deposit_record:
         deposit_data = {
-            "held": float(deposit_row[0] or 0),
-            "used": float(deposit_row[1] or 0),
-            "refunded": float(deposit_row[2] or 0),
-            "actual_amount": float(deposit_row[3] or 0),
-            "currency": deposit_row[4] or "UAH",
-            "exchange_rate": float(deposit_row[5] or 1),
-            "available": float(deposit_row[0] or 0) - float(deposit_row[1] or 0) - float(deposit_row[2] or 0)
+            "held": deposit_record.held_amount,
+            "used": deposit_record.used_amount,
+            "refunded": deposit_record.refunded_amount,
+            "actual_amount": deposit_record.actual_amount,
+            "currency": deposit_record.currency,
+            "exchange_rate": deposit_record.exchange_rate,
+            "available": deposit_record.available_amount
         }
     
     # Компанія - вибір на основі executor_type з options
@@ -756,22 +749,20 @@ def build_defect_act_data(db: Session, order_id: str, options: dict) -> dict:
             "stage": stage,
         })
     
-    # Get late fees
-    late_result = db.execute(text("""
-        SELECT amount, status, note FROM fin_payments 
-        WHERE order_id = :order_id AND payment_type = 'late'
-        ORDER BY occurred_at
-    """), {"order_id": order_id})
-    
+    # Get late fees — через FinanceService
+    late_snapshot = get_finance_service().list_order_payments(
+        db, order_id, payment_types=("late",)
+    )
+
     late_rows = []
     late_total = 0
-    for row in late_result:
-        amt = float(row[0] or 0)
+    for row in late_snapshot:
+        amt = row.amount
         late_total += amt
         late_rows.append({
-            "note": row[2] or "Прострочення повернення",
+            "note": row.note or "Прострочення повернення",
             "amount": amt,
-            "status": row[1],
+            "status": row.status,
         })
     
     now = datetime.now()

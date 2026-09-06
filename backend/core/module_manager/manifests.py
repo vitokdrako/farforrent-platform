@@ -364,7 +364,10 @@ DOCUMENTS = ModuleManifest(
         "Doc engine, рендер шаблонів, PDF, підписи, email-розсилка, "
         "рамкові договори та додатки."
     ),
-    requires=("core", "rental", "crm", "finance"),
+    # Finance більше НЕ в requires: після введення FinanceService (Завдання №6)
+    # Documents не звертається до fin_* напряму і при Finance = OFF
+    # деградує контрольовано (нулі + status="disabled"), а не падає з 500.
+    requires=("core", "rental", "crm"),
     default_enabled=True,
     routes=(
         R("routes.documents"),
@@ -400,9 +403,13 @@ DOCUMENTS = ModuleManifest(
         "order_annexes",
     ),
     notes=(
-        "Залежить від Finance: читає fin_payments / fin_deposit_holds / "
-        "fin_deposit_events напряму. Тому 'Finance = OFF' поки неможливий.",
-        "document_pdf.py імпортує routes.document_render (route -> route).",
+        "Finance-дані читаються ТІЛЬКИ через services.finance.FinanceService "
+        "(read-only фасад). Прямих SQL до fin_payments / fin_deposit_holds / "
+        "fin_deposit_events у модулі немає — 'Finance = OFF' тепер допустимий.",
+        "При Finance = OFF документи генеруються з нульовими фінансовими "
+        "блоками і status='disabled'; це очікувана деградація, не помилка.",
+        "Нові Finance-поля в документах додавати лише через FinanceService, "
+        "не новим raw SQL — інакше boundary знову зламається.",
         "routes/pdf.py — legacy reportlab проти OpenCart.",
     ),
 )

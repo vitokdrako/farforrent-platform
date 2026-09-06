@@ -12,6 +12,7 @@ import os
 
 from database_rentalhub import get_rh_db
 from services.company_config import get_company_config
+from services.finance import get_finance_service
 
 # Base URL for images - use backend URL from environment
 BACKEND_BASE_URL = os.environ.get("BACKEND_BASE_URL", "https://backrentalhub.farforrent.com.ua")
@@ -2522,14 +2523,9 @@ async def preview_settlement_act(
         "cancelled": "Скасовано", "partial_return": "Часткове повернення"
     }
 
-    # === 2. PAYMENTS ===
-    payments_rows = db.execute(text("""
-        SELECT id, payment_type, method, amount, currency,
-               payer_name, occurred_at, note, status, description
-        FROM fin_payments
-        WHERE order_id = :order_id
-        ORDER BY occurred_at ASC
-    """), {"order_id": order_id}).fetchall()
+    # === 2. PAYMENTS (через FinanceService, без прямого доступу до fin_*) ===
+    finance = get_finance_service()
+    payments_snapshot = finance.list_order_payments(db, order_id)
 
     rent_paid = 0
     damage_paid = 0
@@ -2541,11 +2537,10 @@ async def preview_settlement_act(
     method_labels = {"cash": "Готівка", "card": "Картка", "bank": "Безготівка",
                      "iban": "IBAN", "online": "Онлайн", "p2p": "P2P"}
 
-    for p in payments_rows:
-        amt = float(p[3] or 0)
-        ptype = p[1]
-        status = p[8]
-        if status in ('completed', 'confirmed'):
+    for p in payments_snapshot:
+        amt = p.amount
+        ptype = p.payment_type
+        if p.is_settled:
             if ptype in ('rent', 'additional'):
                 rent_paid += amt
             elif ptype == 'damage':
@@ -2555,22 +2550,18 @@ async def preview_settlement_act(
 
             # Тільки реальні оплати (confirmed/completed) в деталях
             payments_detail.append({
-                "date": _format_date_ua(p[6]),
+                "date": _format_date_ua(p.occurred_at),
                 "type_label": type_labels.get(ptype, ptype),
-                "method_label": method_labels.get(p[2], p[2] or "—"),
+                "method_label": method_labels.get(p.method, p.method or "—"),
                 "amount": _format_currency(amt),
-                "note": p[9] or p[7] or ""
+                "note": p.description or p.note or ""
             })
 
     total_paid = rent_paid + damage_paid + late_paid
 
-    # === 3. DEPOSIT ===
-    deposit_row = db.execute(text("""
-        SELECT id, held_amount, used_amount, refunded_amount, status,
-               actual_amount, currency, exchange_rate
-        FROM fin_deposit_holds
-        WHERE order_id = :order_id LIMIT 1
-    """), {"order_id": order_id}).fetchone()
+    # === 3. DEPOSIT (через FinanceService) ===
+    deposit_snapshot = finance.get_order_deposit(db, order_id)
+    deposit_record = deposit_snapshot.deposit
 
     dep_held_uah = 0
     dep_actual = 0
@@ -2579,29 +2570,24 @@ async def preview_settlement_act(
     dep_refunded = 0
     dep_available = 0
 
-    if deposit_row:
-        dep_held_uah = float(deposit_row[1] or 0)
-        dep_actual = float(deposit_row[5]) if deposit_row[5] else dep_held_uah
-        dep_currency = deposit_row[6] or "UAH"
-        dep_used = float(deposit_row[2] or 0)
-        dep_refunded = float(deposit_row[3] or 0)
-        dep_available = dep_held_uah - dep_used - dep_refunded
+    if deposit_record:
+        dep_held_uah = deposit_record.held_amount
+        dep_actual = deposit_record.display_amount
+        dep_currency = deposit_record.currency
+        dep_used = deposit_record.used_amount
+        dep_refunded = deposit_record.refunded_amount
+        dep_available = deposit_record.available_amount
 
     currency_symbol = {"UAH": "грн", "USD": "$", "EUR": "€"}.get(dep_currency, dep_currency)
 
     # Deposit refund events (для деталізації в акті)
     deposit_refund_events = []
-    if deposit_row:
-        dep_events = db.execute(text("""
-            SELECT event_type, amount, occurred_at, note
-            FROM fin_deposit_events WHERE deposit_id = :dep_id AND event_type = 'refunded'
-            ORDER BY occurred_at
-        """), {"dep_id": deposit_row[0]}).fetchall()
+    if deposit_record:
         deposit_refund_events = [
-            {"amount": _format_currency(float(e[1] or 0)),
-             "date": _format_date_ua(e[2]),
-             "note": e[3] or "Повернення застави"}
-            for e in dep_events
+            {"amount": _format_currency(e.amount),
+             "date": _format_date_ua(e.occurred_at),
+             "note": e.note or "Повернення застави"}
+            for e in finance.list_deposit_refund_events(db, deposit_record.id)
         ]
 
     # === 4. DAMAGE ===
@@ -2622,12 +2608,8 @@ async def preview_settlement_act(
         "fee": _format_currency(float(r[4] or 0)), "note": r[5] or ""
     } for r in damage_items_rows]
 
-    # === 5. LATE FEES (from fin_payments - тільки нарахування менеджера, status='pending') ===
-    late_total_row = db.execute(text("""
-        SELECT COALESCE(SUM(amount), 0) FROM fin_payments
-        WHERE order_id = :order_id AND payment_type = 'late' AND status = 'pending'
-    """), {"order_id": order_id}).fetchone()
-    late_final = float(late_total_row[0]) if late_total_row else 0
+    # === 5. LATE FEES (тільки нарахування менеджера, status='pending') ===
+    late_final = finance.get_pending_late_total(db, order_id).total
 
     # === 5b. DAMAGE (from product_damage_history - manager-decided amounts) ===
     # Use damage_total_val already computed above
@@ -2650,7 +2632,7 @@ async def preview_settlement_act(
     discount_percent = float(order_row[11] or 0)
     
     # Визначаємо чи total_price ДО чи ПІСЛЯ знижки
-    has_discount_payment = any(p[1] == 'discount' for p in payments_rows)
+    has_discount_payment = payments_snapshot.has_payment_type('discount')
     
     if has_discount_payment and discount > 0:
         # total_price = ціна ДО знижки
@@ -2729,6 +2711,7 @@ async def preview_settlement_act(
             "is_manager_override": is_manager_override,
             "manager_note": manager_note or "",
         },
+        "finance_available": payments_snapshot.available,
         "generated_at": datetime.now().strftime("%d.%m.%Y %H:%M"),
     }
 
