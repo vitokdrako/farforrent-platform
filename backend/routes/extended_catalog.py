@@ -25,6 +25,14 @@ async def search_products(
     """
     Розширений пошук товарів
     ✅ MIGRATED: Using RentalHub DB
+
+    Завдання №11, точка «extended_catalog»: свідомо НЕ переведена на
+    `AvailabilityService`. Контракт endpoint-а не має періоду аренди
+    (`from_date`/`to_date`), а `quantity` / `inventory_quantity` / `in_stock`
+    описують фізичний залишок складу, а не доступність на дати. Підміна
+    `p.quantity` канонічною доступністю без періоду змінила б зміст трьох
+    полів відповіді й фільтра `in_stock`, тому тут виправлений лише
+    доведений баг у count-запиті.
     """
     sql = """
         SELECT 
@@ -98,7 +106,11 @@ async def search_products(
     if max_price is not None:
         count_sql += " AND p.price <= :max_price"
     if in_stock:
-        count_sql += " AND (i.quantity > 0 OR p.quantity > 0)"
+        # Той самий фільтр, що й у списку. Раніше тут стояло
+        # `(i.quantity > 0 OR p.quantity > 0)`, хоча в `FROM` немає аліаса `i`
+        # (таблиця inventory злита в products) — count падав із
+        # «Unknown column 'i.quantity'», тобто `?in_stock=true` віддавав 500.
+        count_sql += " AND p.quantity > 0"
     
     total_result = db.execute(text(count_sql), params)
     total = total_result.scalar()

@@ -923,5 +923,360 @@ class TestInventoryProcessingMigration(unittest.TestCase):
         self.assertEqual(physical_gate, 2)
 
 
+class TestCatalogListMigration(unittest.TestCase):
+    """
+    Точки B і B2 — списки каталогу в `routes/catalog.py` (Завдання №11).
+
+    Тут жили ДВІ окремі формули (`/api/catalog/items-by-category` і `/api/catalog`),
+    які рахували доступність як `quantity - reserved - in_rent - PDH`. Це давало
+    три незалежні дефекти одночасно:
+      1. подвійне віднімання — `reserved` і `in_rent` перетинаються, бо `issued`
+         входить в обидва набори старих статусів;
+      2. фантомні статуси `pending` / `on_rent` (0 рядків у production);
+      3. «на обробці» бралося з `product_damage_history`, яке розходилося з
+         `products.frozen_quantity` на 181 товарі.
+    """
+
+    @classmethod
+    def _source(cls):
+        path = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            "routes", "catalog.py",
+        )
+        with open(path, encoding="utf-8") as handle:
+            return handle.read()
+
+    @classmethod
+    def _function_code(cls, name):
+        """Виконуваний код функції без docstring (щоб не ловити цитати)."""
+        import ast
+
+        source = cls._source()
+        tree = ast.parse(source)
+        for node in ast.walk(tree):
+            if (isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+                    and node.name == name):
+                statements = list(node.body)
+                if (statements and isinstance(statements[0], ast.Expr)
+                        and isinstance(statements[0].value, ast.Constant)
+                        and isinstance(statements[0].value.value, str)):
+                    statements = statements[1:]
+                return "\n".join(
+                    ast.get_source_segment(source, stmt) or "" for stmt in statements
+                )
+        raise AssertionError(f"функцію {name} не знайдено в routes/catalog.py")
+
+    def test_items_by_category_delegates_to_service(self):
+        """Точка B рахує доступність сервісом, а не власним SQL."""
+        code = self._function_code("get_items_by_category")
+        self.assertIn("AvailabilityService", code)
+        self.assertIn("get_bulk_availability", code)
+        self.assertIn("get_bulk_in_rent", code)
+
+    def test_items_by_category_old_formula_removed(self):
+        """Формула з подвійним відніманням прибрана з роуту."""
+        code = self._function_code("get_items_by_category")
+        self.assertNotIn(
+            "max(0, total_qty - reserved_qty - in_rent_qty - total_processing)", code
+        )
+
+    def test_items_by_category_no_phantom_statuses_in_reservation_sql(self):
+        """
+        Резервуючі статуси більше не задаються локально. Перевіряється саме
+        відсутність старих агрегатів `SUM(CASE WHEN o.status IN (...))`, бо
+        довідковий запит «у кого товар» цілком легально лишає перелік статусів.
+        """
+        code = self._function_code("get_items_by_category")
+        self.assertNotIn("THEN oi.quantity ELSE 0 END) as reserved", code)
+        self.assertNotIn("THEN oi.quantity ELSE 0 END) as in_rent", code)
+
+    def test_partial_returns_not_double_counted(self):
+        """
+        `partial_return` тепер резервує через статус замовлення (рішення 2),
+        тому попереднє `in_rent_qty += partial_return_qty` дало б подвійний
+        облік тих самих одиниць.
+        """
+        code = self._function_code("get_items_by_category")
+        self.assertNotIn("in_rent_qty += partial_return_qty", code)
+
+    def test_processing_comes_from_frozen_quantity(self):
+        """Кількість «на обробці» — канонічна, журнал дає лише пропорції типів."""
+        for name in ("get_items_by_category", "get_catalog_items"):
+            code = self._function_code(name)
+            self.assertIn('canon.get("on_processing_quantity", 0)', code)
+
+    def test_processing_breakdown_matches_canonical_total(self):
+        """
+        Числовий інваріант розкладки: сума бейджів дорівнює канонічній
+        кількості на обробці за будь-яких пропорцій журналу.
+        """
+        for total_processing, proc in (
+            (0, {"wash": 5, "restoration": 0, "laundry": 0}),
+            (7, {"wash": 0, "restoration": 0, "laundry": 0}),
+            (6, {"wash": 3, "restoration": 2, "laundry": 1}),
+            (10, {"wash": 1, "restoration": 1, "laundry": 1}),
+            (5, {"wash": 7, "restoration": 3, "laundry": 0}),
+        ):
+            proc_sum = proc["wash"] + proc["restoration"] + proc["laundry"]
+            if total_processing == 0:
+                wash = restoration = laundry = 0
+            elif proc_sum == 0:
+                wash, restoration, laundry = total_processing, 0, 0
+            elif proc_sum == total_processing:
+                wash, restoration, laundry = proc["wash"], proc["restoration"], proc["laundry"]
+            else:
+                wash = min(total_processing, round(total_processing * proc["wash"] / proc_sum))
+                restoration = min(
+                    total_processing - wash,
+                    round(total_processing * proc["restoration"] / proc_sum),
+                )
+                laundry = total_processing - wash - restoration
+            self.assertGreaterEqual(min(wash, restoration, laundry), 0)
+            self.assertEqual(
+                wash + restoration + laundry,
+                total_processing,
+                f"розкладка не збігається з канонічним total={total_processing}",
+            )
+
+    def test_catalog_items_reservations_use_service(self):
+        """Точка B2 (`/api/catalog?include_reservations=true`) теж на сервісі."""
+        code = self._function_code("get_catalog_items")
+        self.assertIn("get_bulk_availability", code)
+        self.assertIn("get_bulk_in_rent", code)
+        self.assertNotIn("AND o.rental_end_date >= CURDATE()", code)
+
+    def test_catalog_items_without_reservations_keeps_legacy_behaviour(self):
+        """
+        Без `include_reservations` точка B2 історично НЕ враховувала резерви.
+        Починати це тихо не можна — інакше змінилася б відповідь за замовчуванням.
+        """
+        code = self._function_code("get_catalog_items")
+        self.assertIn("max(0, total_qty - total_processing)", code)
+
+    def test_catalog_items_response_keys_preserved(self):
+        """Контракт відповіді каталогу — його читає кілька екранів UI."""
+        code = self._function_code("get_catalog_items")
+        for key in ("available", "reserved", "in_rent", "rented", "in_restore",
+                    "on_wash", "on_restoration", "on_laundry", "frozen_quantity",
+                    "in_laundry", "total", "quantity"):
+            self.assertIn(f'"{key}"', code)
+
+    def test_catalog_routes_do_not_mutate_stock(self):
+        """Списки каталогу лишаються read-only."""
+        for name in ("get_items_by_category", "get_catalog_items"):
+            code = self._function_code(name).upper()
+            for verb in ("UPDATE PRODUCTS", "INSERT INTO", "DELETE FROM"):
+                self.assertNotIn(verb, code)
+
+
+class TestInventoryAdjustmentsMigration(unittest.TestCase):
+    """
+    `GET /api/inventory-adjustments/product/{id}/status` (Завдання №11).
+
+    Незадокументована 12-та формула: «заморожено» рахувалося як сума позицій
+    у статусах `('processing','ready_for_issue','issued','on_rent')`, тобто з
+    фантомним `on_rent`, без `awaiting_customer`/`partial_return`, без
+    реального `products.frozen_quantity` і без фільтра архівних замовлень.
+    """
+
+    @classmethod
+    def _source(cls):
+        path = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            "routes", "inventory_adjustments.py",
+        )
+        with open(path, encoding="utf-8") as handle:
+            return handle.read()
+
+    @classmethod
+    def _function_code(cls, name):
+        import ast
+
+        source = cls._source()
+        tree = ast.parse(source)
+        for node in ast.walk(tree):
+            if (isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+                    and node.name == name):
+                statements = list(node.body)
+                if (statements and isinstance(statements[0], ast.Expr)
+                        and isinstance(statements[0].value, ast.Constant)
+                        and isinstance(statements[0].value.value, str)):
+                    statements = statements[1:]
+                return "\n".join(
+                    ast.get_source_segment(source, stmt) or "" for stmt in statements
+                )
+        raise AssertionError(
+            f"функцію {name} не знайдено в routes/inventory_adjustments.py"
+        )
+
+    def test_delegates_to_service(self):
+        code = self._function_code("get_product_status")
+        self.assertIn("AvailabilityService", code)
+        self.assertIn("get_availability", code)
+
+    def test_old_status_list_removed(self):
+        """Локальний перелік статусів із фантомним `on_rent` прибраний."""
+        code = self._function_code("get_product_status")
+        self.assertNotIn("'ready_for_issue', 'issued', 'on_rent'", code)
+        self.assertNotIn("COALESCE(SUM(oi.quantity), 0)", code)
+
+    def test_response_keys_preserved(self):
+        """Історичні ключі відповіді збережені дослівно."""
+        code = self._function_code("get_product_status")
+        for key in ("product_id", "total_quantity", "frozen_quantity",
+                    "in_rent_quantity", "available_quantity", "status",
+                    "in_stock", "available_for_rent", "all_in_use"):
+            self.assertIn(f'"{key}"', code)
+
+    def test_frozen_quantity_keeps_historical_meaning(self):
+        """
+        Тут `frozen_quantity` історично означає «тримають замовлення», тому
+        мапиться на `reserved_quantity`, а не на `products.frozen_quantity` —
+        інакше зміст поля змінився б без попередження.
+        """
+        code = self._function_code("get_product_status")
+        self.assertIn('availability["reserved_quantity"]', code)
+
+    def test_http_exception_not_swallowed(self):
+        """404/501 із сервісного шару не мусять перетворюватися на 500."""
+        code = self._function_code("get_product_status")
+        self.assertIn("except HTTPException:", code)
+
+    def test_numeric_effect_of_migration(self):
+        """
+        Числовий сенс: товар із заморозкою більше не показується доступним.
+        Стара формула віднімала лише замовлення, тому обробку не бачила.
+        """
+        db = _FakeDB(stock=(10, 4, 0, "on_wash", "S", "Ваза"), reserved=3)
+        result = AvailabilityService(db).get_availability(1, None, None, 1)
+        legacy_available = max(0, 10 - 3)   # стара формула: без обробки
+        self.assertEqual(legacy_available, 7)
+        self.assertEqual(result["available_quantity"], 3)
+
+
+class TestRemainingAvailabilityPoints(unittest.TestCase):
+    """
+    Три залишкові точки Завдання №11: `warehouse`, `extended_catalog`,
+    `calendar_events`.
+
+    Аудит показав, що жодна з них не є точкою розрахунку доступності на
+    період, тому їх НЕ переводили на `AvailabilityService`. Ці тести
+    закріплюють саме такий вердикт: якщо в котромусь із файлів з'явиться
+    власна формула доступності, тест впаде і рішення доведеться переглянути,
+    а не «доносити» тихцем.
+    """
+
+    @staticmethod
+    def _source(filename):
+        path = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            "routes", filename,
+        )
+        with open(path, encoding="utf-8") as handle:
+            return handle.read()
+
+    @classmethod
+    def _executable_code(cls, filename):
+        """
+        Лише виконуваний код модуля: без docstring і без комментарів.
+
+        Перша версія цих тестів шукала рядки у всьому файлі й тому падала на
+        власному тексті — docstring згадує `AvailabilityService` і `from_date`,
+        а комментар цитує зламаний `i.quantity`. Перевірка «формула відсутня»
+        мусить дивитися на код, інакше вона забороняє документувати рішення.
+        """
+        import ast
+
+        tree = ast.parse(cls._source(filename))
+        for node in ast.walk(tree):
+            body = getattr(node, "body", None)
+            if not isinstance(body, list):
+                continue
+            if (isinstance(node, (ast.Module, ast.FunctionDef,
+                                  ast.AsyncFunctionDef, ast.ClassDef))
+                    and body
+                    and isinstance(body[0], ast.Expr)
+                    and isinstance(body[0].value, ast.Constant)
+                    and isinstance(body[0].value.value, str)):
+                del body[0]
+        return ast.unparse(tree)
+
+    def test_extended_catalog_count_alias_bug_fixed(self):
+        """
+        Доведений баг: у count-запиті стояв аліас `i`, якого немає в `FROM`
+        (таблиця inventory злита в products). Запит із `?in_stock=true`
+        падав `Unknown column 'i.quantity'`, тобто endpoint віддавав 500.
+        """
+        code = self._executable_code("extended_catalog.py")
+        self.assertNotIn("i.quantity", code)
+        self.assertIn("AND p.quantity > 0", code)
+
+    def test_extended_catalog_count_matches_list_filter(self):
+        """
+        `in_stock` мусить фільтрувати список і count однаково, інакше
+        пагінація рахувала б інший набір товарів, ніж показує сторінка.
+        """
+        code = self._executable_code("extended_catalog.py")
+        self.assertEqual(code.count("AND p.quantity > 0"), 2)
+
+    def test_extended_catalog_has_no_rental_period_contract(self):
+        """
+        Обґрунтування, чому точку не переведено на сервіс: у endpoint-а немає
+        періоду аренди, тому канонічну доступність тут порахувати нема на що.
+
+        Перевіряється саме СИГНАТУРА `search_products`, а не весь модуль:
+        сусідній endpoint `get_extended_product_info` легально читає
+        `o.rental_start_date` як довідку «у кого товар», і заборона згадувати
+        цю колонку будь-де перетворила б тест на перешкоду без причини.
+        """
+        import ast
+
+        tree = ast.parse(self._source("extended_catalog.py"))
+        signature = None
+        for node in ast.walk(tree):
+            if (isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+                    and node.name == "search_products"):
+                signature = ast.unparse(node.args)
+                break
+        self.assertIsNotNone(signature, "endpoint search_products не знайдено")
+        for param in ("from_date", "to_date", "rental_start", "rental_end"):
+            self.assertNotIn(param, signature)
+
+    def test_extended_catalog_stock_fields_unchanged(self):
+        """Три поля фізичного залишку лишаються фізичним залишком."""
+        code = self._executable_code("extended_catalog.py")
+        for key in ("'quantity'", "'inventory_quantity'", "'in_stock'"):
+            self.assertIn(key, code)
+        self.assertNotIn("AvailabilityService", code)
+
+    def test_warehouse_has_no_availability_formula(self):
+        """
+        `warehouse.py` не рахує доступність узагалі — ні `p.quantity`, ні
+        `frozen_quantity`, ні агрегатів по `order_items`. Тому переводити
+        нічого; точка закрита як no-op.
+        """
+        code = self._executable_code("warehouse.py")
+        for marker in ("frozen_quantity", "p.quantity",
+                       "available_quantity", "AvailabilityService"):
+            self.assertNotIn(marker, code)
+
+    def test_calendar_available_is_money_not_stock(self):
+        """
+        У календарі `available` — це залишок застави (`held - used -
+        refunded`), а не товарна доступність. Змішати їх означало б
+        показувати гроші як одиниці складу.
+        """
+        code = self._executable_code("calendar_events.py")
+        self.assertIn("available = held - used - refunded", code)
+        self.assertNotIn("frozen_quantity", code)
+        self.assertNotIn("AvailabilityService", code)
+
+    def test_calendar_does_not_query_products_stock(self):
+        """Календар не звертається до складських кількостей `products`."""
+        code = self._executable_code("calendar_events.py")
+        for marker in ("FROM products", "p.quantity", "oi.quantity"):
+            self.assertNotIn(marker, code)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
