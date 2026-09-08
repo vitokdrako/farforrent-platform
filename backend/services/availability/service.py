@@ -79,8 +79,8 @@ class AvailabilityService:
     def _reserved_by_orders(
         self,
         product_id: int,
-        start_date: str,
-        end_date: str,
+        start_date: Optional[str],
+        end_date: Optional[str],
         statuses: tuple,
         exclude_order_id: Optional[int] = None,
     ) -> int:
@@ -90,6 +90,13 @@ class AvailabilityService:
         Враховує рішення 1 і 2 (перелік статусів), рішення 6 (архівні
         замовлення не резервують) і `order_items.status` — відмовлена
         позиція товар не тримає.
+
+        Якщо період не задано (`None`), фільтр за датами не додається взагалі
+        і рахуються всі замовлення в резервуючих статусах. Це потрібно точкам
+        «стан складу зараз» (картка видачі, інвентаризація), які історично
+        працювали без періоду. Раніше `None` підставлявся в порівняння з
+        `NULL`, і замовлення тихо переставали враховуватися — саме цей дефект
+        виявив контрольний вимір точки K.
         """
         status_sql, status_params = statuses_placeholder("st", statuses)
 
@@ -100,18 +107,26 @@ class AvailabilityService:
             WHERE oi.product_id = :product_id
               AND COALESCE(oi.status, '{ACTIVE_ITEM_STATUS}') = :item_status
               AND o.status IN {status_sql}
-              AND o.rental_start_date <= :end_date
-              AND o.rental_end_date >= :start_date
         """
-        if EXCLUDE_ARCHIVED_ORDERS:
-            query += " AND COALESCE(o.is_archived, 0) = 0"
 
         params = {
             "product_id": product_id,
             "item_status": ACTIVE_ITEM_STATUS,
-            "start_date": start_date,
-            "end_date": end_date,
         }
+
+        # Обидві межі мусять бути задані: одна дата без другої дала б
+        # напіввідкритий інтервал і непередбачуваний результат.
+        if start_date and end_date:
+            query += """
+              AND o.rental_start_date <= :end_date
+              AND o.rental_end_date >= :start_date
+            """
+            params["start_date"] = start_date
+            params["end_date"] = end_date
+
+        if EXCLUDE_ARCHIVED_ORDERS:
+            query += " AND COALESCE(o.is_archived, 0) = 0"
+
         params.update(status_params)
 
         if exclude_order_id:
@@ -128,8 +143,8 @@ class AvailabilityService:
     def _soft_reserved(
         self,
         product_id: int,
-        start_date: str,
-        end_date: str,
+        start_date: Optional[str],
+        end_date: Optional[str],
         exclude_board_id: Optional[str] = None,
     ) -> int:
         """
@@ -147,15 +162,21 @@ class AvailabilityService:
             WHERE sr.product_id = :product_id
               AND COALESCE(sr.status, :active_status) = :active_status
               AND sr.expires_at > NOW()
-              AND sr.reserved_from <= :end_date
-              AND sr.reserved_until >= :start_date
         """
         params = {
             "product_id": product_id,
             "active_status": SOFT_RESERVATION_ACTIVE_STATUS,
-            "start_date": start_date,
-            "end_date": end_date,
         }
+
+        # Та сама причина, що й у резервах замовлень: без періоду фільтр за
+        # датами не додається, інакше порівняння з `NULL` обнулило б резерви.
+        if start_date and end_date:
+            query += """
+              AND sr.reserved_from <= :end_date
+              AND sr.reserved_until >= :start_date
+            """
+            params["start_date"] = start_date
+            params["end_date"] = end_date
         if exclude_board_id:
             query += " AND sr.board_id != :exclude_board_id"
             params["exclude_board_id"] = exclude_board_id
@@ -177,8 +198,8 @@ class AvailabilityService:
     def get_availability(
         self,
         product_id: int,
-        start_date: str,
-        end_date: str,
+        start_date: Optional[str],
+        end_date: Optional[str],
         quantity: int = 1,
         exclude_order_id: Optional[int] = None,
         exclude_board_id: Optional[str] = None,
@@ -188,8 +209,9 @@ class AvailabilityService:
 
         Args:
             product_id: ID товару.
-            start_date: початок періоду, `YYYY-MM-DD`.
-            end_date: кінець періоду, `YYYY-MM-DD`.
+            start_date: початок періоду, `YYYY-MM-DD`, або `None` — «зараз»
+                (усі замовлення в резервуючих статусах, без фільтра дат).
+            end_date: кінець періоду, `YYYY-MM-DD`, або `None`.
             quantity: запитувана кількість (для прапорця `is_available`).
             exclude_order_id: не враховувати це замовлення (редагування).
             exclude_board_id: не враховувати soft-резерви цього мудборда.
@@ -278,14 +300,18 @@ class AvailabilityService:
     def get_bulk_availability(
         self,
         product_ids: List[int],
-        start_date: str,
-        end_date: str,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
     ) -> Dict[int, Dict]:
         """
         Доступність для списку товарів (каталог, календар).
 
         Один запит на резерви й один на soft-резерви замість N+1: каталог
         показує тисячі позицій, тому поштучний виклик тут неприйнятний.
+
+        Як і в `get_availability`, відсутній період означає «стан зараз»:
+        фільтр за датами не додається, щоб порівняння з `NULL` не обнуляло
+        резерви (дефект, знайдений контрольним виміром точки K).
         """
         if not product_ids:
             return {}
@@ -324,18 +350,22 @@ class AvailabilityService:
             WHERE oi.product_id IN {id_fragment}
               AND COALESCE(oi.status, '{ACTIVE_ITEM_STATUS}') = :item_status
               AND o.status IN {status_sql}
+        """
+        if start_date and end_date:
+            reserved_query += """
               AND o.rental_start_date <= :end_date
               AND o.rental_end_date >= :start_date
-        """
+            """
         if EXCLUDE_ARCHIVED_ORDERS:
             reserved_query += " AND COALESCE(o.is_archived, 0) = 0"
         reserved_query += " GROUP BY oi.product_id"
 
         reserved_params = {
             "item_status": ACTIVE_ITEM_STATUS,
-            "start_date": start_date,
-            "end_date": end_date,
         }
+        if start_date and end_date:
+            reserved_params["start_date"] = start_date
+            reserved_params["end_date"] = end_date
         reserved_params.update(id_params)
         reserved_params.update(status_params)
 
@@ -347,10 +377,16 @@ class AvailabilityService:
         if COUNT_SOFT_RESERVATIONS:
             soft_params = {
                 "active_status": SOFT_RESERVATION_ACTIVE_STATUS,
-                "start_date": start_date,
-                "end_date": end_date,
             }
             soft_params.update(id_params)
+            soft_date_filter = ""
+            if start_date and end_date:
+                soft_date_filter = """
+                          AND sr.reserved_from <= :end_date
+                          AND sr.reserved_until >= :start_date
+                """
+                soft_params["start_date"] = start_date
+                soft_params["end_date"] = end_date
             try:
                 soft_result = self.db.execute(
                     text(
@@ -360,8 +396,7 @@ class AvailabilityService:
                         WHERE sr.product_id IN {id_fragment}
                           AND COALESCE(sr.status, :active_status) = :active_status
                           AND sr.expires_at > NOW()
-                          AND sr.reserved_from <= :end_date
-                          AND sr.reserved_until >= :start_date
+                          {soft_date_filter}
                         GROUP BY sr.product_id
                         """
                     ),

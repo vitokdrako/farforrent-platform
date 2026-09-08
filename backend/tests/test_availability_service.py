@@ -117,6 +117,80 @@ class _FakeDB:
         return ""
 
 
+class _DateAwareDB(_FakeDB):
+    """
+    Стаб, що імітує реальну поведінку SQL при порівнянні з `NULL`.
+
+    Потрібен, бо звичайний `_FakeDB` віддає однакові резерви незалежно від
+    дат, і саме тому пропустив реальний дефект: коли роут передавав
+    `start_date=None`, у SQL потрапляло `o.rental_start_date <= NULL`, що в
+    MySQL завжди `NULL` (тобто «не підходить»), і резерви тихо ставали 0.
+
+    Тут відтворено лише цей факт: якщо запит містить фільтр за датами, а
+    значення межі не передане — вибірка порожня, як у справжній БД.
+    """
+
+    def execute(self, statement, params=None):
+        sql = str(statement)
+        has_date_filter = "rental_start_date" in sql or "reserved_from" in sql
+        if has_date_filter and not (params or {}).get("start_date"):
+            self.queries.append(sql)
+            return _FakeResult([(0,)])
+        return super().execute(statement, params)
+
+
+class TestNoPeriodMeansNow(unittest.TestCase):
+    """
+    Точки «стан складу зараз» (картка видачі) працюють без періоду.
+
+    Дефект знайшов контрольний вимір, а не тест: `reserved` падав у 0 для
+    320 товарів, бо `None` підставлявся у порівняння з датою. Ці тести
+    закріплюють правильну поведінку — без періоду фільтр не додається.
+    """
+
+    def test_no_date_filter_when_period_absent(self):
+        """Без періоду в SQL резервів не має бути порівнянь за датами."""
+        db = _FakeDB(stock=(10, 0, 0, "available", "S", "N"), reserved=4)
+        AvailabilityService(db).get_availability(1, None, None, 1)
+        sql = db.sql_for("SUM(oi.quantity)")
+        self.assertNotIn("rental_start_date", sql)
+        self.assertNotIn("rental_end_date", sql)
+
+    def test_reserved_counted_without_period(self):
+        """Головний регрес: без періоду резерви рахуються, а не обнуляються."""
+        db = _DateAwareDB(stock=(10, 0, 0, "available", "S", "N"), reserved=4)
+        result = AvailabilityService(db).get_availability(1, None, None, 1)
+        self.assertEqual(result["reserved_quantity"], 4)
+        self.assertEqual(result["available_quantity"], 6)
+
+    def test_period_filter_still_applied_when_dates_given(self):
+        """З датами фільтр мусить залишатися — інакше зникне облік періоду."""
+        db = _FakeDB(reserved=4)
+        AvailabilityService(db).get_availability(1, "2026-09-06", "2026-09-20", 1)
+        sql = db.sql_for("SUM(oi.quantity)")
+        self.assertIn("rental_start_date", sql)
+        self.assertIn("rental_end_date", sql)
+
+    def test_half_open_period_is_ignored(self):
+        """Одна дата без другої дала б непередбачуваний інтервал."""
+        db = _FakeDB(reserved=4)
+        AvailabilityService(db).get_availability(1, "2026-09-06", None, 1)
+        self.assertNotIn("rental_start_date", db.sql_for("SUM(oi.quantity)"))
+
+    def test_soft_reservations_without_period(self):
+        """Soft-резерви без періоду теж не мають зникати."""
+        db = _DateAwareDB(stock=(20, 0, 0, "available", "S", "N"), soft=6)
+        result = AvailabilityService(db).get_availability(1, None, None, 1)
+        self.assertEqual(result["soft_reserved_quantity"], 6)
+
+    def test_bulk_without_period_keeps_reservations(self):
+        """Той самий інваріант для bulk-розрахунку каталогу й календаря."""
+        db = _DateAwareDB(stock=(10, 0, 0, "available", "S", "N"), reserved=3)
+        result = AvailabilityService(db).get_bulk_availability([1, 2])
+        self.assertEqual(result[1]["reserved_quantity"], 3)
+        self.assertEqual(result[1]["available_quantity"], 7)
+
+
 class TestCanonicalRules(unittest.TestCase):
     """Правила як контракт: фантомних статусів немає, стан не впливає."""
 
@@ -723,6 +797,130 @@ class TestOrderModificationsMigration(unittest.TestCase):
         code = self._function_code("get_available_quantity").upper()
         for verb in ("UPDATE PRODUCTS", "INSERT INTO", "DELETE FROM"):
             self.assertNotIn(verb, code)
+
+
+class TestInventoryProcessingMigration(unittest.TestCase):
+    """
+    Точка G — `routes/inventory.py`, `POST /api/inventory/send-to-processing`
+    (Завдання №11).
+
+    Стара формула: `available = products.quantity - products.frozen_quantity`.
+    Ні замовлень, ні soft-резервів, ні періоду аренди.
+
+    Особливість цієї точки, яку тести мусять зафіксувати окремо: поріг
+    БЛОКУВАННЯ свідомо лишився фізичним. Відправка на мийку — операція з
+    фізичним товаром, тому броня на майбутню дату не має її забороняти,
+    інакше комірник не змив би товар, який завтра їде до клієнта.
+    Канонічна доступність тут працює як попередження, а не як заборона.
+
+    Роут перевіряється статично (AST): його імпорт тягне `database_rentalhub`
+    і обов'язкові `RH_DB_*` env.
+    """
+
+    @classmethod
+    def _source(cls):
+        path = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            "routes", "inventory.py",
+        )
+        with open(path, encoding="utf-8") as handle:
+            return handle.read()
+
+    @classmethod
+    def _function_code(cls, name):
+        """Виконуваний код функції без docstring."""
+        import ast
+
+        source = cls._source()
+        tree = ast.parse(source)
+        for node in ast.walk(tree):
+            if (isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+                    and node.name == name):
+                statements = list(node.body)
+                if (statements and isinstance(statements[0], ast.Expr)
+                        and isinstance(statements[0].value, ast.Constant)
+                        and isinstance(statements[0].value.value, str)):
+                    statements = statements[1:]
+                return "\n".join(
+                    ast.get_source_segment(source, stmt) or "" for stmt in statements
+                )
+        raise AssertionError(f"функцію {name} не знайдено в routes/inventory.py")
+
+    def test_delegates_to_service(self):
+        """Стан складу читається сервісом, а не власним SQL роуту."""
+        code = self._function_code("send_to_processing")
+        self.assertIn("AvailabilityService", code)
+        self.assertIn("get_availability", code)
+
+    def test_old_formula_removed(self):
+        """Формула `quantity - frozen_quantity` більше не живе в роуті."""
+        code = self._function_code("send_to_processing")
+        self.assertNotIn("SELECT product_id, sku, name, quantity, frozen_quantity", code)
+        self.assertNotIn("(quantity or 0) - (frozen_qty or 0)", code)
+
+    def test_gate_stays_physical(self):
+        """
+        Поріг блокування — фізичний залишок мінус обробка, НЕ канонічна
+        доступність. Це головна вимога до цієї точки.
+        """
+        code = self._function_code("send_to_processing")
+        self.assertIn('snapshot["total_quantity"] - frozen_qty', code)
+        self.assertIn("if data.quantity > available_qty", code)
+
+    def test_reservation_conflict_is_warning_only(self):
+        """Конфлікт із бронею повідомляється, але не блокує операцію."""
+        code = self._function_code("send_to_processing")
+        self.assertIn("conflicts_with_reservations", code)
+        self.assertNotIn("if data.quantity > canonical_available", code)
+
+    def test_legacy_response_keys_preserved(self):
+        """Історичні ключі відповіді — контракт кабінету переобліку."""
+        code = self._function_code("send_to_processing")
+        for key in ("success", "message", "queue_id", "product_id",
+                    "sku", "quantity", "action_type", "new_frozen_quantity"):
+            self.assertIn(f'"{key}"', code)
+
+    def test_missing_product_still_404(self):
+        """Відсутній товар і далі дає 404, а не падіння на `None`."""
+        code = self._function_code("send_to_processing")
+        self.assertIn('snapshot["product_exists"]', code)
+        self.assertIn("Product not found", code)
+
+    def test_broken_write_off_branch_is_explicit(self):
+        """
+        Гілка `write_off` читала неоголошену `current_qty`, тобто завжди
+        падала `NameError` -> HTTP 500. Її не «оживлено»: вона зменшує
+        `products.quantity`, а це предмет окремого Завдання №12.
+        Відмова мусить бути явною, а не трейсбеком.
+        """
+        code = self._function_code("send_to_processing")
+        self.assertNotIn("current_qty", code)
+        self.assertIn("status_code=501", code)
+        self.assertNotIn("SET quantity = :new_qty", code)
+
+    def test_freeze_mutation_unchanged(self):
+        """Механіка заморозки для мийки/реставрації/хімчистки не змінена."""
+        code = self._function_code("send_to_processing")
+        self.assertIn("SET frozen_quantity = :frozen_qty", code)
+        self.assertIn("(frozen_qty or 0) + data.quantity", code)
+
+    def test_processing_does_not_block_itself(self):
+        """
+        Числовий сенс: товар, весь запас якого зайнятий замовленнями, усе одно
+        можна відправити в обробку, бо фізично він на складі.
+        """
+        db = _FakeDB(stock=(10, 0, 0, "available", "S", "Скатертина"), reserved=10)
+        snapshot = AvailabilityService(db).get_availability(1, "2026-09-08", "2026-09-08", 1)
+        physical_gate = snapshot["total_quantity"] - snapshot["on_processing_quantity"]
+        self.assertEqual(snapshot["available_quantity"], 0)
+        self.assertEqual(physical_gate, 10)
+
+    def test_already_frozen_stock_blocks(self):
+        """А ось уже заморожене в обробку вдруге відправити не можна."""
+        db = _FakeDB(stock=(10, 8, 0, "on_wash", "S", "Келих"), reserved=0)
+        snapshot = AvailabilityService(db).get_availability(1, "2026-09-08", "2026-09-08", 1)
+        physical_gate = snapshot["total_quantity"] - snapshot["on_processing_quantity"]
+        self.assertEqual(physical_gate, 2)
 
 
 if __name__ == "__main__":

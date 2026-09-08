@@ -12,9 +12,36 @@ import uuid
 import json
 
 from database_rentalhub import get_rh_db
+from services.availability import AvailabilityService
+from services.availability.rules import IN_RENT_ORDER_STATUSES
 from utils.user_tracking_helper import get_current_user_dependency
 
 router = APIRouter(prefix="/api/issue-cards", tags=["issue-cards"])
+
+
+def _count_in_rent(db: Session, product_id: int) -> int:
+    """Скільки одиниць товару фізично зараз у клієнта.
+
+    Це НЕ доступність, а окрема інформаційна метрика картки видачі, тому
+    вона лишається власним запитом, а не полем `AvailabilityService`.
+
+    Від старої версії відрізняється двома речами: перелік статусів береться
+    з канонічних правил (замість локального списку з фантомним `on_rent`),
+    і відмовлені позиції не рахуються.
+    """
+    placeholders = ", ".join(f":st_{i}" for i in range(len(IN_RENT_ORDER_STATUSES)))
+    params = {f"st_{i}": status for i, status in enumerate(IN_RENT_ORDER_STATUSES)}
+    params["product_id"] = product_id
+    row = db.execute(text(f"""
+        SELECT COALESCE(SUM(oi.quantity), 0)
+        FROM order_items oi
+        JOIN orders o ON oi.order_id = o.order_id
+        WHERE oi.product_id = :product_id
+          AND o.status IN ({placeholders})
+          AND COALESCE(o.is_archived, 0) = 0
+          AND COALESCE(oi.status, 'active') = 'active'
+    """), params).fetchone()
+    return int(row[0]) if row and row[0] is not None else 0
 
 
 def _record_discount_to_finance(db: Session, order_id: int, user_id: int, user_name: str):
@@ -121,7 +148,6 @@ def parse_issue_card(row, db: Session = None):
                 
                 if product_row:
                     product_id = product_row[0]
-                    total_quantity = int(product_row[4]) if product_row[4] else 0
                     
                     # Зберігаємо product_id для використання далі
                     item['product_id'] = product_id
@@ -148,37 +174,34 @@ def parse_issue_card(row, db: Session = None):
                             'shelf': shelf
                         }
                     
-                    # ВАЖЛИВО: Рахуємо статуси з order_items (так само як availability_checker)
-                    # Зарезервовано (заморожено) - статуси processing, ready_for_issue, issued, on_rent
-                    reserved_result = db.execute(text("""
-                        SELECT COALESCE(SUM(oi.quantity), 0) as reserved
-                        FROM order_items oi
-                        JOIN orders o ON oi.order_id = o.order_id
-                        WHERE oi.product_id = :product_id
-                        AND o.status IN ('processing', 'ready_for_issue', 'issued', 'on_rent')
-                        AND o.is_archived = 0
-                    """), {"product_id": product_id})
-                    reserved_qty = int(reserved_result.fetchone()[0])
-                    
-                    # В оренді зараз - статуси issued, on_rent
-                    in_rent_result = db.execute(text("""
-                        SELECT COALESCE(SUM(oi.quantity), 0) as in_rent
-                        FROM order_items oi
-                        JOIN orders o ON oi.order_id = o.order_id
-                        WHERE oi.product_id = :product_id
-                        AND o.status IN ('issued', 'on_rent')
-                        AND o.is_archived = 0
-                    """), {"product_id": product_id})
-                    in_rent_qty = int(in_rent_result.fetchone()[0])
-                    
-                    # Доступно = Всього - Зарезервовано
-                    available_qty = total_quantity - reserved_qty
-                    
-                    # Встановлюємо актуальні статуси
-                    item['available'] = available_qty if available_qty >= 0 else 0
-                    item['reserved'] = reserved_qty
-                    item['in_rent'] = in_rent_qty
-                    item['in_restore'] = 0  # TODO: рахувати з damages коли буде реалізовано
+                    # Стан складу читається канонічним AvailabilityService
+                    # (Завдання №11, точка K). Раніше тут був власний SQL:
+                    #
+                    #   reserved = SUM(oi.quantity) WHERE o.status IN
+                    #       ('processing','ready_for_issue','issued','on_rent')
+                    #   available = p.quantity - reserved
+                    #
+                    # Три дефекти цієї формули:
+                    #   1. `on_rent` — фантомний статус (0 рядків у production),
+                    #      натомість справжні `awaiting_customer` і
+                    #      `partial_return` не резервували нічого;
+                    #   2. не віднімалася заморозка (`frozen_quantity`), тому
+                    #      товар на мийці вважався доступним для видачі;
+                    #   3. не фільтрувалися відмовлені позиції
+                    #      (`order_items.status='refused'`).
+                    snapshot = AvailabilityService(db).get_availability(
+                        product_id=product_id,
+                        start_date=None,
+                        end_date=None,
+                        quantity=1,
+                    )
+
+                    # Ключі відповіді збережені дослівно: їх читає картка
+                    # видачі комплектувальника.
+                    item['available'] = snapshot["available_quantity"]
+                    item['reserved'] = snapshot["reserved_quantity"]
+                    item['in_rent'] = _count_in_rent(db, product_id)
+                    item['in_restore'] = snapshot["on_processing_quantity"]
                     
                     # Завантажуємо pre_damage (шкода зафіксована при видачі для ЦЬОГО замовлення)
                     try:

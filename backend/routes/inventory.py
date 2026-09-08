@@ -10,6 +10,7 @@ from sqlalchemy import or_, text
 from datetime import datetime
 
 from database_rentalhub import get_rh_db  # ✅ Using RentalHub DB
+from services.availability import AvailabilityService
 
 router = APIRouter(prefix="/api/inventory", tags=["inventory"])
 
@@ -171,25 +172,43 @@ async def send_to_processing(
     if data.action_type not in action_labels:
         raise HTTPException(status_code=400, detail=f"Invalid action_type: {data.action_type}")
     
-    # Перевірити наявність товару
-    result = db.execute(text("""
-        SELECT product_id, sku, name, quantity, frozen_quantity 
-        FROM products 
-        WHERE product_id = :product_id
-    """), {"product_id": data.product_id})
-    
-    product = result.fetchone()
-    if not product:
+    # Стан складу читається через канонічний AvailabilityService — власного
+    # SQL-розрахунку в цьому роуті більше немає (Завдання №11, точка G).
+    #
+    # Стара формула: available = products.quantity - products.frozen_quantity.
+    # Вона не бачила ні замовлень, ні soft-резервів, ні періоду аренди.
+    today = datetime.now().strftime("%Y-%m-%d")
+    snapshot = AvailabilityService(db).get_availability(
+        product_id=data.product_id,
+        start_date=today,
+        end_date=today,
+        quantity=data.quantity,
+    )
+
+    if not snapshot["product_exists"]:
         raise HTTPException(status_code=404, detail="Product not found")
-    
-    product_id, sku, name, quantity, frozen_qty = product
-    available_qty = (quantity or 0) - (frozen_qty or 0)
-    
+
+    sku = snapshot["sku"]
+    name = snapshot["product_name"]
+    frozen_qty = snapshot["on_processing_quantity"]
+
+    # ПОРІГ БЛОКУВАННЯ свідомо залишений фізичним: скільки одиниць реально
+    # лежить на складі й ще не в обробці. Відправка на мийку — операція з
+    # фізичним товаром, тому броня на майбутню дату не має її забороняти:
+    # інакше комірник не змив би товар, який завтра їде до клієнта.
+    available_qty = max(0, snapshot["total_quantity"] - frozen_qty)
+
     if data.quantity > available_qty:
         raise HTTPException(
             status_code=400, 
             detail=f"Недостатньо доступної кількості. Доступно: {available_qty}, запитано: {data.quantity}"
         )
+
+    # Канонічна доступність на сьогодні йде у відповідь як попередження:
+    # оператор має бачити, що товар потрібен активному замовленню, навіть
+    # якщо операцію не заблоковано.
+    canonical_available = snapshot["available_quantity"]
+    conflicts_with_reservations = data.quantity > canonical_available
     
     # Маппінг action_type до state в БД
     action_to_state = {
@@ -198,18 +217,28 @@ async def send_to_processing(
         'laundry': 'on_laundry'
     }
     
-    # Списання - зменшуємо кількість, не заморожуємо
+    # Списання. ЗНАЙДЕНО ПРИ МІГРАЦІЇ (Завдання №11, точка G): ця гілка ніколи
+    # не працювала — вона читає `current_qty`, яка в функції не визначена
+    # (розпаковувалася `quantity`). Тобто будь-який виклик з
+    # `action_type='write_off'` завершувався `NameError` -> HTTP 500 ще до
+    # будь-яких моїх змін.
+    #
+    # Гілку свідомо НЕ «оживлено»: вона зменшує `products.quantity`, а це саме
+    # той клас операцій, який власник виніс в окремий Inventory Quantity
+    # Semantics Audit (Завдання №12). Увімкнути списання тут означало б
+    # почати змінювати фізичні залишки складу без окремого рішення.
+    #
+    # Тому непрацездатність зафіксована явно, замість падіння з NameError:
+    # факт «списання через цей endpoint не підтримується» тепер видно
+    # оператору, а не лише в трейсбеку.
     if data.action_type == 'write_off':
-        new_qty = max(0, (current_qty or 0) - data.quantity)
-        db.execute(text("""
-            UPDATE products 
-            SET quantity = :new_qty
-            WHERE product_id = :product_id
-        """), {
-            "new_qty": new_qty,
-            "product_id": data.product_id
-        })
-        new_frozen_qty = frozen_qty or 0  # Не змінюємо frozen
+        raise HTTPException(
+            status_code=501,
+            detail=(
+                "Списання через цей endpoint не підтримується. "
+                "Використайте оформлення пошкодження/списання у Damage Hub."
+            ),
+        )
     else:
         # Заморозити товар для обробки
         new_state = action_to_state.get(data.action_type, 'processing')
@@ -318,5 +347,12 @@ async def send_to_processing(
         "sku": data.sku,
         "quantity": data.quantity,
         "action_type": data.action_type,
-        "new_frozen_quantity": new_frozen_qty
+        "new_frozen_quantity": new_frozen_qty,
+        # Additive-поля з канонічного розрахунку. Історичні ключі вище не
+        # змінені, тому наявний UI переобліку працює як раніше.
+        "canonical_available_quantity": canonical_available,
+        "physical_available_quantity": available_qty,
+        "conflicts_with_reservations": conflicts_with_reservations,
+        "reserved_quantity": snapshot["reserved_quantity"],
+        "soft_reserved_quantity": snapshot["soft_reserved_quantity"]
     }
