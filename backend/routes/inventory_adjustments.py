@@ -9,6 +9,7 @@ from datetime import datetime
 import uuid
 
 from database_rentalhub import get_rh_db
+from services.availability import AvailabilityService
 
 router = APIRouter(prefix="/api/inventory-adjustments", tags=["inventory-adjustments"])
 
@@ -152,43 +153,38 @@ async def get_product_status(
     - Доступно
     """
     try:
-        # Загальна кількість
-        result = db.execute(text("""
-            SELECT quantity FROM products WHERE product_id = :product_id
-        """), {"product_id": product_id})
-        row = result.fetchone()
-        total_qty = int(row[0]) if row else 0
-        
-        # Заморожено (в активних замовленнях)
-        frozen_result = db.execute(text("""
-            SELECT COALESCE(SUM(oi.quantity), 0)
-            FROM order_items oi
-            JOIN orders o ON oi.order_id = o.order_id
-            WHERE oi.product_id = :product_id
-            AND o.status IN ('processing', 'ready_for_issue', 'issued', 'on_rent')
-        """), {"product_id": product_id})
-        frozen_row = frozen_result.fetchone()
-        frozen_qty = int(frozen_row[0]) if frozen_row else 0
-        
-        # В оренді (видано)
-        in_rent_result = db.execute(text("""
-            SELECT COALESCE(SUM(oi.quantity), 0)
-            FROM order_items oi
-            JOIN orders o ON oi.order_id = o.order_id
-            WHERE oi.product_id = :product_id
-            AND o.status IN ('issued', 'on_rent')
-        """), {"product_id": product_id})
-        in_rent_row = in_rent_result.fetchone()
-        in_rent_qty = int(in_rent_row[0]) if in_rent_row else 0
-        
-        available_qty = max(0, total_qty - frozen_qty)
-        
+        # ✅ MIGRATED (Завдання №11): розрахунок делегований `AvailabilityService`.
+        #
+        # Стара формула тут була окремою, дванадцятою: «заморожено» вона
+        # рахувала як суму позицій замовлень у статусах
+        # `('processing','ready_for_issue','issued','on_rent')`, тобто
+        # (1) містила фантомний `on_rent` (0 рядків у production),
+        # (2) пропускала `awaiting_customer` і `partial_return`,
+        # (3) не віднімала реальний `products.frozen_quantity` (обробку),
+        # (4) не відсікала архівні замовлення й відмовлені позиції.
+        #
+        # Імена полів відповіді збережені дослівно: `frozen_quantity` тут
+        # історично означає «скільки тримають замовлення», а не
+        # `products.frozen_quantity`, тому мапиться на `reserved_quantity`.
+        availability = AvailabilityService(db).get_availability(
+            product_id=product_id,
+            start_date=None,
+            end_date=None,
+        )
+
+        total_qty = availability["total_quantity"]
+        frozen_qty = availability["reserved_quantity"]
+        in_rent_qty = availability["in_rent"]
+        available_qty = availability["available_quantity"]
+
         return {
             "product_id": product_id,
             "total_quantity": total_qty,
             "frozen_quantity": frozen_qty,
             "in_rent_quantity": in_rent_qty,
             "available_quantity": available_qty,
+            # Additive: обробка раніше не була видна цій точці взагалі.
+            "on_processing_quantity": availability["on_processing_quantity"],
             "status": {
                 "in_stock": total_qty > 0,
                 "available_for_rent": available_qty > 0,
@@ -196,5 +192,7 @@ async def get_product_status(
             }
         }
         
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Помилка отримання статусу: {str(e)}")

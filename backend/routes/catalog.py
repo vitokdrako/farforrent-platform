@@ -309,36 +309,29 @@ async def get_items_by_category(
         
         # Якщо вказані дати - перевіряємо доступність на конкретний період
         use_date_filter = date_from and date_to
-        
+
+        # ✅ MIGRATED (Завдання №11, точка B): резерв, soft-резерви й обробка
+        # рахуються `AvailabilityService`. До міграції тут жили власні формули
+        # з фантомними статусами (`pending`, `on_rent`), без фільтра архівних
+        # замовлень і відмовлених позицій, а «на обробці» бралося з
+        # `product_damage_history` — джерела, яке розходилося з
+        # `frozen_quantity` на 181 товарі.
+        availability_svc = AvailabilityService(db)
+        bulk_availability = availability_svc.get_bulk_availability(
+            product_ids,
+            start_date=date_from if use_date_filter else None,
+            end_date=date_to if use_date_filter else None,
+        )
+        in_rent_dict = availability_svc.get_bulk_in_rent(
+            product_ids,
+            start_date=date_from if use_date_filter else None,
+            end_date=date_to if use_date_filter else None,
+        )
+        reserved_dict = {
+            pid: data["reserved_quantity"] for pid, data in bulk_availability.items()
+        }
+
         if use_date_filter:
-            # Резерви на конкретний період (перетинання дат)
-            reserved_result = db.execute(text("""
-                SELECT oi.product_id, COALESCE(SUM(oi.quantity), 0) as reserved
-                FROM order_items oi
-                JOIN orders o ON oi.order_id = o.order_id
-                WHERE oi.product_id IN :product_ids
-                AND o.status IN ('processing', 'ready_for_issue', 'awaiting_customer', 'pending')
-                AND o.rental_start_date <= :date_to
-                AND o.rental_end_date >= :date_from
-                GROUP BY oi.product_id
-            """).bindparams(product_ids=tuple(product_ids) if len(product_ids) > 1 else (product_ids[0],)), 
-            {"date_from": date_from, "date_to": date_to})
-            reserved_dict = {row[0]: int(row[1]) for row in reserved_result}
-            
-            # В оренді на конкретний період
-            in_rent_result = db.execute(text("""
-                SELECT oi.product_id, COALESCE(SUM(oi.quantity), 0) as in_rent
-                FROM order_items oi
-                JOIN orders o ON oi.order_id = o.order_id
-                WHERE oi.product_id IN :product_ids
-                AND o.status IN ('issued', 'on_rent')
-                AND o.rental_start_date <= :date_to
-                AND o.rental_end_date >= :date_from
-                GROUP BY oi.product_id
-            """).bindparams(product_ids=tuple(product_ids) if len(product_ids) > 1 else (product_ids[0],)),
-            {"date_from": date_from, "date_to": date_to})
-            in_rent_dict = {row[0]: int(row[1]) for row in in_rent_result}
-            
             # У кого в оренді на цей період
             who_has_result = db.execute(text("""
                 SELECT 
@@ -360,25 +353,9 @@ async def get_items_by_category(
             """).bindparams(product_ids=tuple(product_ids) if len(product_ids) > 1 else (product_ids[0],)),
             {"date_from": date_from, "date_to": date_to})
         else:
-            # Без дат - показуємо поточний стан: один запит замість трьох
-            combined_result = db.execute(text("""
-                SELECT 
-                    oi.product_id,
-                    SUM(CASE WHEN o.status IN ('processing', 'ready_for_issue', 'awaiting_customer', 'pending') THEN oi.quantity ELSE 0 END) as reserved,
-                    SUM(CASE WHEN o.status IN ('issued', 'on_rent') THEN oi.quantity ELSE 0 END) as in_rent
-                FROM order_items oi
-                JOIN orders o ON oi.order_id = o.order_id
-                WHERE oi.product_id IN :product_ids
-                AND o.status IN ('processing', 'ready_for_issue', 'awaiting_customer', 'pending', 'issued', 'on_rent')
-                AND o.rental_end_date >= CURDATE()
-                GROUP BY oi.product_id
-            """).bindparams(product_ids=tuple(product_ids) if len(product_ids) > 1 else (product_ids[0],)))
-            reserved_dict = {}
-            in_rent_dict = {}
-            for row in combined_result:
-                reserved_dict[row[0]] = int(row[1] or 0)
-                in_rent_dict[row[0]] = int(row[2] or 0)
-            
+            # Без дат — «стан складу зараз». Резерв і `in_rent` уже порахував
+            # сервіс (без фільтра дат), тому тут лишається лише перелік
+            # замовлень для підказки «у кого товар».
             who_has_result = db.execute(text("""
                 SELECT 
                     oi.product_id, 
@@ -450,7 +427,12 @@ async def get_items_by_category(
             pass
         # ========== КІНЕЦЬ ЧАСТКОВИХ ПОВЕРНЕНЬ ==========
         
-        # Тепер рахуємо реальні дані обробки з product_damage_history
+        # Розкладка обробки за типами (мийка / реставрація / хімчистка).
+        # ⚠️ Це ЛИШЕ розкладка для UI-фільтрів і бейджів. Джерелом кількості
+        # «на обробці» для доступності є `products.frozen_quantity` (рішення 3),
+        # бо `product_damage_history` розходився з ним на 181 товарі. Тут журнал
+        # використовується тільки щоб показати, ЯКОГО типу обробка, а не СКІЛЬКИ
+        # одиниць віднімати зі складу.
         processing_dict = {}  # product_id -> {wash: N, restoration: N, laundry: N}
         try:
             processing_rows = db.execute(text("""
@@ -492,29 +474,54 @@ async def get_items_by_category(
         
         for row in results:
             product_id = row[0]
-            total_qty = row[8] or 0
+            canon = bulk_availability.get(product_id, {})
+            total_qty = canon.get("total_quantity", row[8] or 0)
             reserved_qty = reserved_dict.get(product_id, 0)
             in_rent_qty = in_rent_dict.get(product_id, 0)
-            
-            # ✅ Додаємо товари з часткових повернень до "в оренді"
+
+            # ⚠️ Часткові повернення БІЛЬШЕ не додаються до `in_rent`: статус
+            # `partial_return` тепер сам резервує товар (рішення 2), тому
+            # попереднє додавання дало б подвійний облік тих самих одиниць.
             partial_return_info = partial_return_dict.get(product_id, {"qty": 0, "orders": []})
-            partial_return_qty = partial_return_info["qty"]
-            in_rent_qty += partial_return_qty  # Рахуємо як "в оренді"
-            
-            # Отримуємо реальні кількості з product_damage_history
+
             product_state = row[18] if len(row) > 18 else None
             family_id = row[21] if len(row) > 21 else None
-            
-            # Кількість на обробці з реальних даних кабінету шкоди (SSOT)
+
+            # Канонічна доступність — уже з урахуванням резерву, soft-резервів
+            # і `frozen_quantity`; локальна формула тут більше не рахується.
+            available_qty = canon.get("available_quantity", 0)
+            total_processing = canon.get("on_processing_quantity", 0)
+
+            # Розкладка обробки за типами. Журнал показує ЛИШЕ пропорції; сума
+            # приводиться до канонічного `frozen_quantity`, щоб бейджі не
+            # суперечили числу «доступно».
             proc = processing_dict.get(product_id, {"wash": 0, "restoration": 0, "laundry": 0})
-            on_wash_qty = proc["wash"]
-            on_restoration_qty = proc["restoration"]
-            on_laundry_qty = proc["laundry"]
-            
-            # Доступно = всього - резерв - в оренді - на обробці (з PDH, а не frozen_quantity)
-            total_processing = on_wash_qty + on_restoration_qty + on_laundry_qty
-            available_qty = max(0, total_qty - reserved_qty - in_rent_qty - total_processing)
-            
+            proc_sum = proc["wash"] + proc["restoration"] + proc["laundry"]
+            if total_processing == 0:
+                on_wash_qty = on_restoration_qty = on_laundry_qty = 0
+            elif proc_sum == 0:
+                # Заморожено є, а типу обробки журнал не знає — показуємо як мийку,
+                # інакше одиниці зникли б з усіх бейджів.
+                on_wash_qty, on_restoration_qty, on_laundry_qty = total_processing, 0, 0
+            elif proc_sum == total_processing:
+                on_wash_qty = proc["wash"]
+                on_restoration_qty = proc["restoration"]
+                on_laundry_qty = proc["laundry"]
+            else:
+                # Кламп обов'язковий: незалежне округлення двох часток могло
+                # дати суму БІЛЬШУ за канонічний total (наприклад 5 од. при
+                # пропорціях 7:3 давало 4+2), а `max(0, ...)` це переповнення
+                # лише приховував. Тепер остача завжди «добирає» рівно total.
+                on_wash_qty = min(
+                    total_processing,
+                    round(total_processing * proc["wash"] / proc_sum),
+                )
+                on_restoration_qty = min(
+                    total_processing - on_wash_qty,
+                    round(total_processing * proc["restoration"] / proc_sum),
+                )
+                on_laundry_qty = total_processing - on_wash_qty - on_restoration_qty
+
             # Stats
             stats["total"] += total_qty
             stats["available"] += available_qty
@@ -628,14 +635,18 @@ async def get_catalog_items(
     
     sql += f" ORDER BY p.product_id DESC LIMIT {limit}"
     
-    result = db.execute(text(sql), params)
-    
+    # Рядки матеріалізуються одразу: доступність рахується bulk-запитом по
+    # product_id, тому курсор довелося б обходити двічі.
+    rows = db.execute(text(sql), params).fetchall()
+    availability_svc = AvailabilityService(db)
+
     # Оптимізація: отримати статистику для всіх товарів одним запитом
     reserved_dict = {}
     in_rent_dict = {}
     in_restore_dict = {}
+    bulk_availability = {}
     
-    # Реальні дані обробки з product_damage_history
+    # Розкладка обробки за типами — лише довідка для UI (див. точку B).
     processing_dict = {}
     try:
         proc_rows = db.execute(text("""
@@ -662,22 +673,18 @@ async def get_catalog_items(
         pass
     
     if include_reservations:
-        # Об'єднаний запит: резерви + оренда за один раз
-        combined_result = db.execute(text("""
-            SELECT 
-                oi.product_id,
-                SUM(CASE WHEN o.status IN ('processing', 'ready_for_issue', 'awaiting_customer', 'pending') THEN oi.quantity ELSE 0 END) as reserved,
-                SUM(CASE WHEN o.status IN ('issued', 'on_rent') THEN oi.quantity ELSE 0 END) as in_rent
-            FROM order_items oi
-            JOIN orders o ON oi.order_id = o.order_id
-            WHERE o.status IN ('processing', 'ready_for_issue', 'awaiting_customer', 'pending', 'issued', 'on_rent')
-            AND o.rental_end_date >= CURDATE()
-            GROUP BY oi.product_id
-        """))
-        for row in combined_result:
-            reserved_dict[row[0]] = int(row[1] or 0)
-            in_rent_dict[row[0]] = int(row[2] or 0)
-        
+        # ✅ MIGRATED (Завдання №11, точка B2): резерв і «у клієнта» рахує
+        # `AvailabilityService`. Стара формула мала фантомні статуси
+        # (`pending`, `on_rent`), не відсікала архівні замовлення й відмовлені
+        # позиції, а `rental_end_date >= CURDATE()` тихо звільняв товар
+        # прострочених оренд, які фізично не повернулися.
+        catalog_product_ids = [r[0] for r in rows]
+        bulk_availability = availability_svc.get_bulk_availability(catalog_product_ids)
+        in_rent_dict = availability_svc.get_bulk_in_rent(catalog_product_ids)
+        reserved_dict = {
+            pid: data["reserved_quantity"] for pid, data in bulk_availability.items()
+        }
+
         # На реставрації - тепер з product_damage_history (єдине джерело)
         in_restore_result = db.execute(text("""
             SELECT pdh.product_id, SUM(COALESCE(pdh.qty, 1) - COALESCE(pdh.processed_qty, 0)) as restore_qty
@@ -690,7 +697,7 @@ async def get_catalog_items(
         in_restore_dict = {row[0]: int(row[1]) for row in in_restore_result}
     
     items = []
-    for row in result:
+    for row in rows:
         family_id = row[14] if len(row) > 14 else None
         family_name = row[15] if len(row) > 15 else None
         family_description = row[16] if len(row) > 16 else None
@@ -701,19 +708,45 @@ async def get_catalog_items(
         total_qty = row[10] or 0
         
         # Отримати статистику з pre-loaded словників
+        canon = bulk_availability.get(product_id, {})
         reserved_qty = reserved_dict.get(product_id, 0)
         in_rent_qty = in_rent_dict.get(product_id, 0)
         in_restore_qty = in_restore_dict.get(product_id, 0)
-        
-        # Визначити on_wash/restoration/laundry з реальних даних кабінету шкоди (SSOT)
+
+        # Обробка — з канонічного `frozen_quantity` (рішення 3); журнал дає
+        # лише пропорції типів, як і в точці B.
+        total_processing = canon.get("on_processing_quantity", 0)
         proc = processing_dict.get(product_id, {"wash": 0, "restoration": 0, "laundry": 0})
-        on_wash_qty = proc["wash"]
-        on_restoration_qty = proc["restoration"]
-        on_laundry_qty = proc["laundry"]
-        
-        # Доступно = всього - резерв - в оренді - на обробці (з PDH)
-        total_processing = on_wash_qty + on_restoration_qty + on_laundry_qty
-        available_qty = max(0, total_qty - reserved_qty - in_rent_qty - total_processing)
+        proc_sum = proc["wash"] + proc["restoration"] + proc["laundry"]
+        if total_processing == 0:
+            on_wash_qty = on_restoration_qty = on_laundry_qty = 0
+        elif proc_sum == 0:
+            on_wash_qty, on_restoration_qty, on_laundry_qty = total_processing, 0, 0
+        elif proc_sum == total_processing:
+            on_wash_qty = proc["wash"]
+            on_restoration_qty = proc["restoration"]
+            on_laundry_qty = proc["laundry"]
+        else:
+            # Той самий кламп, що в точці B: сума розкладки мусить дорівнювати
+            # канонічному `frozen_quantity`, інакше бейджі суперечили б числу
+            # «доступно».
+            on_wash_qty = min(
+                total_processing,
+                round(total_processing * proc["wash"] / proc_sum),
+            )
+            on_restoration_qty = min(
+                total_processing - on_wash_qty,
+                round(total_processing * proc["restoration"] / proc_sum),
+            )
+            on_laundry_qty = total_processing - on_wash_qty - on_restoration_qty
+
+        # Канонічна доступність. Без `include_reservations` сервіс не викликався,
+        # тому зберігається історична поведінка «залишок мінус обробка»:
+        # цей режим ніколи не враховував резерви й не має починати цього тихо.
+        if canon:
+            available_qty = canon.get("available_quantity", 0)
+        else:
+            available_qty = max(0, total_qty - total_processing)
         
         items.append({
             "id": row[0],

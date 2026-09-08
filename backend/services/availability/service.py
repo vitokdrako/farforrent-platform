@@ -429,3 +429,56 @@ class AvailabilityService:
                 ),
             }
         return out
+
+    def get_bulk_in_rent(
+        self,
+        product_ids: List[int],
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+    ) -> Dict[int, int]:
+        """
+        Кількість, яка фізично у клієнта, по списку товарів.
+
+        Це НЕ доступність, а окрема інформаційна метрика (та сама, що поле
+        `in_rent` у `get_availability`). Метод виділений, щоб каталог і
+        event-tool не тримали власних переліків статусів: саме локальні
+        списки з фантомним `on_rent` і давали розбіжності між точками.
+
+        Як і в решті методів, відсутність періоду означає «стан зараз» —
+        фільтр за датами не додається, щоб порівняння з `NULL` не обнуляло
+        результат.
+        """
+        if not product_ids:
+            return {}
+
+        id_keys = [f"pid{i}" for i in range(len(product_ids))]
+        id_fragment = "(" + ", ".join(f":{k}" for k in id_keys) + ")"
+        params = {k: v for k, v in zip(id_keys, product_ids)}
+
+        status_sql, status_params = statuses_placeholder("rt", IN_RENT_ORDER_STATUSES)
+        params.update(status_params)
+        params["item_status"] = ACTIVE_ITEM_STATUS
+
+        query = f"""
+            SELECT oi.product_id, COALESCE(SUM(oi.quantity), 0)
+            FROM order_items oi
+            JOIN orders o ON oi.order_id = o.order_id
+            WHERE oi.product_id IN {id_fragment}
+              AND COALESCE(oi.status, '{ACTIVE_ITEM_STATUS}') = :item_status
+              AND o.status IN {status_sql}
+        """
+        if start_date and end_date:
+            query += """
+              AND o.rental_start_date <= :end_date
+              AND o.rental_end_date >= :start_date
+            """
+            params["start_date"] = start_date
+            params["end_date"] = end_date
+        if EXCLUDE_ARCHIVED_ORDERS:
+            query += " AND COALESCE(o.is_archived, 0) = 0"
+        query += " GROUP BY oi.product_id"
+
+        result = self.db.execute(text(query), params)
+        found = {int(r[0]): int(r[1] or 0) for r in result}
+        result.close()
+        return {pid: found.get(pid, 0) for pid in product_ids}
