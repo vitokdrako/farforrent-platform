@@ -97,23 +97,58 @@ export default function IssueCardWorkspace() {
       
       // Завантажуємо замовлення
       const orderId = issueCardData.order_id
-      let orderData
+      let orderData = {}
       
       try {
         const res = await axios.get(`${BACKEND_URL}/api/decor-orders/${orderId}`)
-        orderData = res.data
+        orderData = res.data || {}
       } catch {
-        const res = await axios.get(`${BACKEND_URL}/api/orders/${orderId}`)
-        orderData = res.data
+        try {
+          const res = await axios.get(`${BACKEND_URL}/api/orders/${orderId}`)
+          orderData = res.data || {}
+        } catch (err) {
+          console.warn(`[IssueCardWorkspace] Order ${orderId} not accessible, falling back to issue_card data`, err)
+          // Якщо обидва endpoint-и провалились — не падаємо, беремо все з issueCardData
+          orderData = {
+            order_id: orderId,
+            order_number: issueCardData.order_number,
+            customer_name: issueCardData.customer_name,
+            customer_phone: issueCardData.customer_phone,
+            customer_email: issueCardData.customer_email,
+            rental_start_date: issueCardData.rental_start_date,
+            rental_end_date: issueCardData.rental_end_date,
+            total_rental: issueCardData.total_rental,
+            total_deposit: issueCardData.deposit_amount,
+            items: issueCardData.items || [],
+            status: issueCardData.status,
+          }
+        }
       }
       
       setOrder(orderData)
       
-      // Клієнт
-      const names = (orderData.client_name || '').split(' ')
-      setClientName(orderData.client_name || `${names[0] || ''} ${names.slice(1).join(' ')}`)
-      setClientPhone(orderData.client_phone || orderData.telephone || '')
-      setClientEmail(orderData.client_email || orderData.email || '')
+      // Клієнт — беремо з orderData, а якщо порожнє, fallback на issueCardData
+      // (parse_issue_card бекенду вже віддає customer_name/phone/email через JOIN на orders)
+      const clientNameVal =
+        orderData.client_name
+        || orderData.customer_name
+        || issueCardData.customer_name
+        || ''
+      const clientPhoneVal =
+        orderData.client_phone
+        || orderData.customer_phone
+        || orderData.telephone
+        || issueCardData.customer_phone
+        || ''
+      const clientEmailVal =
+        orderData.client_email
+        || orderData.customer_email
+        || orderData.email
+        || issueCardData.customer_email
+        || ''
+      setClientName(clientNameVal)
+      setClientPhone(clientPhoneVal)
+      setClientEmail(clientEmailVal)
       
       // Дати
       setIssueDate(orderData.rent_date || orderData.rental_start_date || orderData.issue_date || todayISO())

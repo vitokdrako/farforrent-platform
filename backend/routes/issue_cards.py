@@ -105,6 +105,41 @@ def parse_issue_card(row, db: Session = None):
         except:
             items = []
     
+    # Fallback: якщо в issue_cards.items порожньо — тягнемо з order_items таблиці.
+    # Це рятує старі картки, в яких JSON не був записаний при створенні.
+    if db and not items and row[1]:  # row[1] = order_id
+        try:
+            oi_result = db.execute(text("""
+                SELECT oi.product_id, oi.product_name, oi.quantity, oi.price,
+                       p.sku, p.image_url, p.zone, p.aisle, p.shelf,
+                       p.category_name, p.price AS loss_value
+                FROM order_items oi
+                LEFT JOIN products p ON oi.product_id = p.product_id
+                WHERE oi.order_id = :order_id
+                  AND (oi.status IS NULL OR oi.status != 'refused')
+            """), {"order_id": row[1]})
+            for oi in oi_result:
+                items.append({
+                    "id": oi[0],
+                    "product_id": oi[0],
+                    "name": oi[1] or "",
+                    "quantity": int(oi[2] or 0),
+                    "qty": int(oi[2] or 0),
+                    "price": float(oi[3] or 0),
+                    "sku": oi[4] or str(oi[0] or ""),
+                    "article": oi[4] or str(oi[0] or ""),
+                    "image": oi[5] or "",
+                    "location": {"zone": oi[6], "aisle": oi[7], "shelf": oi[8]},
+                    "category_name": oi[9] or "",
+                    "damage_cost": float(oi[10] or 0),
+                    "deposit": float(oi[10] or 0) / 2 if oi[10] else 0,
+                    "picked_qty": 0,
+                    "status": "pending",
+                })
+        except Exception as _e:
+            # не падаємо — просто повертаємо порожні items
+            pass
+    
     # Enrich with images AND product statuses if db session provided
     if db:
         for item in items:
