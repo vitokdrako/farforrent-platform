@@ -1,0 +1,216 @@
+<!doctype html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8" />
+  <title>Підтвердження замовлення №{{order_number}}</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+</head>
+<body style="margin:0;padding:0;background:#f5f5f5;font-family:Arial,sans-serif;">
+  <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="background:#f5f5f5;padding:20px 0;">
+    <tr>
+      <td align="center">
+        <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="max-width:600px;background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.1);">
+          
+          <!-- Header -->
+          <tr>
+            <td style="padding:24px;text-align:center;background:linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+              <div style="color:#ffffff;font-size:24px;font-weight:bold;margin-bottom:8px;">
+                FarforDecorOrenda
+              </div>
+              <div style="color:#e9d5ff;font-size:14px;">
+                Оренда декору та посуду
+              </div>
+            </td>
+          </tr>
+
+          <!-- Main Content -->
+          <tr>
+            <td style="padding:24px;">
+              
+              <!-- Greeting -->
+              <p style="margin:0 0 16px 0;font-size:16px;color:#111;">
+                Вітаємо, <strong>{{client_name}}</strong>! 👋
+              </p>
+              <p style="margin:0 0 20px 0;font-size:14px;color:#555;line-height:1.6;">
+                Дякуємо за ваше замовлення! Менеджер опрацював деталі та, за потреби, вніс корективи. 
+                Будь ласка, уважно перегляньте інформацію нижче та підтвердьте замовлення.
+              </p>
+
+              <!-- Order Info -->
+              <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:20px;">
+                <tr>
+                  <td style="padding:12px;background:#f8f9fa;border-radius:8px;">
+                    <table width="100%" cellpadding="4" cellspacing="0">
+                      <tr>
+                        <td style="font-size:13px;color:#666;">📋 Номер замовлення:</td>
+                        <td style="font-size:13px;color:#111;font-weight:bold;text-align:right;">{{order_number}}</td>
+                      </tr>
+                      <tr>
+                        <td style="font-size:13px;color:#666;">📅 Дата видачі:</td>
+                        <td style="font-size:13px;color:#111;font-weight:bold;text-align:right;">{{issue_date}}</td>
+                      </tr>
+                      <tr>
+                        <td style="font-size:13px;color:#666;">📅 Дата повернення:</td>
+                        <td style="font-size:13px;color:#111;font-weight:bold;text-align:right;">{{return_date}}</td>
+                      </tr>
+                      <tr>
+                        <td style="font-size:13px;color:#666;">⏱ Кількість діб:</td>
+                        <td style="font-size:13px;color:#111;font-weight:bold;text-align:right;">{{rental_days}}</td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+
+              <!-- Changes block (if any) -->
+              {% if changes and changes|length > 0 %}
+              <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:20px;">
+                <tr>
+                  <td style="padding:12px;background:#fff3cd;border-radius:8px;border-left:4px solid #ffc107;">
+                    <div style="font-size:14px;color:#856404;font-weight:bold;margin-bottom:8px;">
+                      ⚠️ Внесені зміни:
+                    </div>
+                    {% for change in changes %}
+                    <div style="font-size:13px;color:#856404;margin:4px 0;">
+                      • {{change}}
+                    </div>
+                    {% endfor %}
+                  </td>
+                </tr>
+              </table>
+              {% endif %}
+
+              <!-- Items Header -->
+              <h3 style="margin:24px 0 16px 0;font-size:16px;color:#111;border-bottom:2px solid #667eea;padding-bottom:8px;">
+                📦 Позиції замовлення
+              </h3>
+
+              <!-- Items List -->
+              {% for item in items %}
+              <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:16px;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;">
+                <tr>
+                  <td style="padding:12px;">
+                    <table width="100%" cellpadding="0" cellspacing="0">
+                      <tr>
+                        <td width="70" valign="top">
+                          {% if item.image %}
+                          <img src="https://farforrent.com.ua/image/{{item.image}}" alt="{{item.name}}" style="width:60px;height:60px;border-radius:6px;object-fit:cover;">
+                          {% else %}
+                          <div style="width:60px;height:60px;background:#f3f4f6;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:24px;">📦</div>
+                          {% endif %}
+                        </td>
+                        <td valign="top" style="padding-left:12px;">
+                          <div style="font-size:14px;font-weight:bold;color:#111;margin-bottom:4px;">
+                            {{item.name}}
+                          </div>
+                          <div style="font-size:12px;color:#666;margin-bottom:8px;">
+                            Артикул: {{item.sku}}
+                          </div>
+                          <table cellpadding="2" cellspacing="0" style="font-size:12px;color:#555;">
+                            <tr>
+                              <td style="padding-right:16px;">Кількість: <strong>{{item.quantity}}</strong> шт</td>
+                              <td>Ціна/добу: <strong>{{item.price_per_day}}</strong> грн</td>
+                            </tr>
+                            <tr>
+                              <td style="padding-right:16px;color:#dc3545;">Збиток: <strong>{{item.damage_cost}}</strong> грн</td>
+                              <td style="color:#ffc107;">Застава: <strong>{{item.deposit}}</strong> грн</td>
+                            </tr>
+                          </table>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+              {% endfor %}
+
+              <!-- Important Info -->
+              <table width="100%" cellpadding="0" cellspacing="0" style="margin:24px 0;background:#f0f9ff;border-radius:8px;border-left:4px solid #0284c7;">
+                <tr>
+                  <td style="padding:16px;">
+                    <div style="font-size:14px;font-weight:bold;color:#0c4a6e;margin-bottom:12px;">
+                      ℹ️ Важлива інформація
+                    </div>
+                    <div style="font-size:13px;color:#0c4a6e;line-height:1.8;">
+                      <div style="margin-bottom:8px;">
+                        💰 <strong>Передоплата:</strong> {{prepayment}} грн (50% від вартості оренди)
+                      </div>
+                      <div style="margin-bottom:8px;">
+                        🛡 <strong>Застава:</strong> {{total_deposit}} грн (утримується до повернення)
+                      </div>
+                      <div style="margin-bottom:8px;">
+                        📍 <strong>Видача:</strong> м. Київ, вул. Прикладна (точна адреса після підтвердження)
+                      </div>
+                      <div>
+                        ☎️ <strong>Контакт:</strong> +380 XX XXX XX XX
+                      </div>
+                    </div>
+                  </td>
+                </tr>
+              </table>
+
+              <!-- Total -->
+              <table width="100%" cellpadding="0" cellspacing="0" style="margin:24px 0;background:#f8f9fa;border-radius:8px;">
+                <tr>
+                  <td style="padding:16px;">
+                    <table width="100%" cellpadding="4" cellspacing="0">
+                      <tr>
+                        <td style="font-size:14px;color:#666;">Вартість оренди:</td>
+                        <td style="font-size:16px;color:#111;font-weight:bold;text-align:right;">{{total_rental}} грн</td>
+                      </tr>
+                      <tr>
+                        <td style="font-size:14px;color:#666;">Загальна застава:</td>
+                        <td style="font-size:16px;color:#ffc107;font-weight:bold;text-align:right;">{{total_deposit}} грн</td>
+                      </tr>
+                      <tr>
+                        <td colspan="2" style="padding-top:8px;border-top:1px solid #dee2e6;"></td>
+                      </tr>
+                      <tr>
+                        <td style="font-size:16px;color:#111;font-weight:bold;">Передоплата (50%):</td>
+                        <td style="font-size:18px;color:#28a745;font-weight:bold;text-align:right;">{{prepayment}} грн</td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+
+              <!-- Confirmation Button -->
+              <table width="100%" cellpadding="0" cellspacing="0" style="margin:24px 0;">
+                <tr>
+                  <td align="center">
+                    <a href="https://t.me/FarforDecorOrendaBot?start=confirm_{{order_id}}" 
+                       style="display:inline-block;padding:14px 40px;background:linear-gradient(135deg, #667eea 0%, #764ba2 100%);color:#ffffff;text-decoration:none;border-radius:8px;font-size:16px;font-weight:bold;box-shadow:0 4px 12px rgba(102,126,234,0.3);">
+                      ✅ Підтвердити замовлення
+                    </a>
+                  </td>
+                </tr>
+                <tr>
+                  <td align="center" style="padding-top:12px;">
+                    <p style="margin:0;font-size:12px;color:#999;">
+                      Натисніть кнопку щоб підтвердити через Telegram бота
+                    </p>
+                  </td>
+                </tr>
+              </table>
+
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="padding:20px;text-align:center;background:#f8f9fa;border-top:1px solid #e5e7eb;">
+              <p style="margin:0 0 8px 0;font-size:13px;color:#666;">
+                З повагою, команда <strong>FarforDecorOrenda</strong>
+              </p>
+              <p style="margin:0;font-size:12px;color:#999;">
+                📧 info@farforrent.com.ua | 📱 @FarforDecorOrendaBot
+              </p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>

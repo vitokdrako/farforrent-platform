@@ -1,0 +1,63 @@
+{% extends '_base.html' %}
+{% block title %}Рахунок на пошкодження{% endblock %}
+{% block content %}
+<div class="header">
+    <div>
+        <div class="logo">FarforRent</div>
+    </div>
+    <div class="doc-info">
+        <div class="doc-number warning">{{ doc_number }}</div>
+        <div class="doc-date">{{ generated_at }}</div>
+    </div>
+</div>
+
+<h1 class="warning">РАХУНОК НА ПОШКОДЖЕННЯ</h1>
+
+<table class="mb-4">
+    <tr><td style="width:150px">Замовлення:</td><td class="font-bold">{{ order.order_number if order else damage_case.order_number }}</td></tr>
+    <tr><td>Клієнт:</td><td class="font-bold">{{ order.customer_name if order else damage_case.customer_name }}</td></tr>
+</table>
+
+<div class="warning highlight" style="padding:10px; margin-bottom:15px;">
+    <p class="font-bold">⚠️ Сума збитків перевищує заставу!</p>
+</div>
+
+<h2>Пошкодження</h2>
+<table>
+    <thead>
+        <tr><th>Товар</th><th>SKU</th><th>Опис</th><th>Сума</th></tr>
+    </thead>
+    <tbody>
+        {% for item in items or damage_case.items or [] %}
+        <tr>
+            <td>{{ item.get('name', '') }}</td>
+            <td>{{ item.get('sku', '') }}</td>
+            <td>{{ item.damage_description or '' }}</td>
+            <td class="text-right">{{ item.damage_cost|money if item.damage_cost else '0.00' }} ₴</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="4">(Деталі пошкоджень)</td></tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<table class="totals">
+    <tr><td style="width:70%"></td><td>Загальна сума збитків:</td><td class="text-right">{{ damage_case.total_damage|money if damage_case.total_damage else options.total_damage|money if options.total_damage else '______' }} ₴</td></tr>
+    <tr><td></td><td>Покрито заставою:</td><td class="text-right">-{{ totals.deposit|money if totals else '______' }} ₴</td></tr>
+    <tr class="total-row warning"><td></td><td>ДО ДОПЛАТИ:</td><td class="text-right">{{ options.amount_due|money if options.amount_due else '______' }} ₴</td></tr>
+</table>
+
+<h2>Реквізити</h2>
+<table>
+    <tr><td style="width:150px">Отримувач:</td><td>{{ company.legal_name }}</td></tr>
+    <tr><td>IBAN:</td><td>{{ company.iban }}</td></tr>
+    <tr><td>ЄДРПОУ/ІПН:</td><td>{{ company.edrpou }}</td></tr>
+    <tr><td>МФО:</td><td>{{ company.mfo }}</td></tr>
+    <tr><td>Банк:</td><td>{{ company.bank_name }}</td></tr>
+    <tr><td>Призначення:</td><td>Відшкодування збитків, {{ order.order_number if order else '' }}</td></tr>
+</table>
+
+<div class="footer">
+    <p class="text-sm">Прохання сплатити протягом 5 робочих днів.</p>
+</div>
+{% endblock %}

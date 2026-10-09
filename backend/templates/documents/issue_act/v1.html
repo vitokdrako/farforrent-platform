@@ -1,0 +1,145 @@
+{% extends '_base.html' %}
+{% block title %}Акт передачі {{ issue_card.order_number }}{% endblock %}
+{% block extra_styles %}
+<style>
+    .damage-badge { background: #fff3e0; color: #e65100; padding: 2px 8px; border-radius: 4px; font-size: 8pt; }
+    .no-damage { color: #388e3c; }
+    .has-damage { color: #e65100; }
+    .damage-note { background: #fff8e1; border-left: 3px solid #ffc107; padding: 8px 12px; margin-top: 5px; font-size: 9pt; }
+</style>
+{% endblock %}
+{% block content %}
+<div class="header">
+    <div>
+        <div class="logo">FarforRent</div>
+        <div class="logo-sub">Оренда декору</div>
+    </div>
+    <div class="doc-info">
+        <div class="doc-number">{{ doc_number }}</div>
+        <div class="doc-date">{{ generated_at }}</div>
+    </div>
+</div>
+
+<h1>АКТ ПРИЙМАННЯ-ПЕРЕДАЧІ</h1>
+
+<table class="mb-4">
+    <tr><td style="width:150px">Замовлення:</td><td class="font-bold">{{ issue_card.order_number }}</td></tr>
+    <tr><td>Клієнт:</td><td class="font-bold">{{ issue_card.customer_name }}</td></tr>
+    <tr><td>Телефон:</td><td>{{ issue_card.customer_phone }}</td></tr>
+    <tr><td>Період оренди:</td><td>{{ issue_card.rental_start_date }} — {{ issue_card.rental_end_date }}</td></tr>
+    <tr><td>Видача:</td><td>{{ issue_card.issued_at or generated_at }}</td></tr>
+</table>
+
+<h2>Передані товари</h2>
+<table>
+    <thead>
+        <tr>
+            <th style="width:30px">№</th>
+            <th>Найменування</th>
+            <th style="width:70px">SKU</th>
+            <th style="width:50px">К-сть</th>
+            <th style="width:150px">Стан при видачі</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for item in items %}
+        {% set damages = item.get('damage_history', []) or item.get('pre_damage', []) %}
+        <tr>
+            <td class="text-center">{{ loop.index }}</td>
+            <td>{{ item.get('name', '') }}</td>
+            <td>{{ item.get('sku') or item.get('article', '') }}</td>
+            <td class="text-center">{{ item.get('picked_qty') or item.get('quantity') or item.get('qty', 1) }}</td>
+            <td>
+                {% if damages and damages|length > 0 %}
+                    <span class="has-damage">⚠️ {{ damages|length }} дефект(ів)</span>
+                {% else %}
+                    <span class="no-damage">✓ Без дефектів</span>
+                {% endif %}
+            </td>
+        </tr>
+        {% if damages and damages|length > 0 %}
+        <tr>
+            <td colspan="5" style="padding: 0 0 10px 40px;">
+                <div class="damage-note">
+                    <strong>Існуючі дефекти:</strong>
+                    {% for d in damages %}
+                        {{ d.get('damage_type', d.get('type', 'дефект')) }}{% if d.get('note') %} ({{ d.note }}){% endif %}{% if not loop.last %}, {% endif %}
+                    {% endfor %}
+                </div>
+            </td>
+        </tr>
+        {% endif %}
+        {% endfor %}
+    </tbody>
+</table>
+
+<div class="mt-4">
+    <p><strong>Всього позицій:</strong> {{ items|length }}</p>
+    <p><strong>Всього одиниць:</strong> {% set total = namespace(value=0) %}{% for item in items %}{% set total.value = total.value + (item.get('picked_qty') or item.get('quantity') or item.get('qty', 1)) %}{% endfor %}{{ total.value }}</p>
+</div>
+
+{% set items_with_damage = [] %}
+{% for item in items %}
+    {% if (item.get('pre_damage') and item.get('pre_damage')|length > 0) or (item.get('damage_history') and item.get('damage_history')|length > 0) %}
+        {% set _ = items_with_damage.append(item) %}
+    {% endif %}
+{% endfor %}
+
+{% if items_with_damage|length > 0 %}
+<div style="background: #fff3e0; border: 1px solid #ffcc80; border-radius: 8px; padding: 12px; margin-top: 15px;">
+    <p class="font-bold" style="color: #e65100;">⚠️ УВАГА: Зафіксовані існуючі дефекти</p>
+    <p class="text-sm">У {{ items_with_damage|length }} позиції(ях) зафіксовано існуючі дефекти. 
+    Клієнт не несе відповідальності за ці пошкодження при поверненні.</p>
+    
+    <!-- Детальна історія пошкоджень -->
+    <div style="margin-top: 15px;">
+        {% for item in items_with_damage %}
+        <div style="background: #fff; border: 1px solid #ffd54f; border-radius: 6px; padding: 10px; margin-bottom: 10px;">
+            <p class="font-bold" style="margin-bottom: 5px;">{{ item.get('name', '') }} ({{ item.get('sku', '') }})</p>
+            {% set all_damages = (item.get('damage_history') or item.get('pre_damage') or []) %}
+            {% for d in all_damages %}
+            <div style="display: flex; gap: 10px; margin-bottom: 8px; padding: 8px; background: #fffde7; border-radius: 4px;">
+                {% if d.get('photo_url') %}
+                <img src="{{ d.get('photo_url') }}" style="width: 60px; height: 60px; object-fit: cover; border-radius: 4px; border: 1px solid #ffc107;" alt="Фото">
+                {% endif %}
+                <div>
+                    <p style="font-weight: 500; color: #e65100;">{{ d.get('damage_type', d.get('type', 'Дефект')) }}</p>
+                    {% if d.get('note') %}<p style="font-size: 10px; color: #666;">{{ d.get('note') }}</p>{% endif %}
+                    <p style="font-size: 9px; color: #999;">
+                        {% if d.get('order_number') %}Замовлення: {{ d.get('order_number') }} · {% endif %}
+                        {{ d.get('stage_label', d.get('stage', '')) }} · {{ d.get('created_at', '') }}
+                        {% if d.get('created_by') %} · {{ d.get('created_by') }}{% endif %}
+                    </p>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% else %}
+<div style="background: #e8f5e9; border: 1px solid #a5d6a7; border-radius: 8px; padding: 12px; margin-top: 15px;">
+    <p class="font-bold" style="color: #2e7d32;">✓ Всі товари передано без зафіксованих дефектів</p>
+    <p class="text-sm">Орендар підтверджує отримання товарів у належному стані.</p>
+</div>
+{% endif %}
+
+<div class="highlight" style="padding:10px; margin-top:20px;">
+    <p class="font-bold">📋 Умови:</p>
+    <p class="text-sm">Підписуючи цей акт, Орендар підтверджує отримання товарів та бере на себе відповідальність за їх збереження на період оренди.</p>
+</div>
+
+<div class="signatures">
+    <div class="signature-block">
+        <p class="font-bold">ПЕРЕДАВ (Орендодавець):</p>
+        <div class="signature-line"></div>
+        <div class="signature-label">підпис / ПІБ</div>
+    </div>
+    <div class="signature-block">
+        <p class="font-bold">ОТРИМАВ (Орендар):</p>
+        <p class="text-sm">{{ issue_card.customer_name }}</p>
+        <div class="signature-line"></div>
+        <div class="signature-label">підпис</div>
+    </div>
+</div>
+{% endblock %}

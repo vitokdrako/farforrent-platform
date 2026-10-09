@@ -1,0 +1,73 @@
+{% extends '_base.html' %}
+{% block title %}Лист комплектації {{ issue_card.order_number }}{% endblock %}
+{% block extra_styles %}
+<style>
+    .location-badge { background: #e3f2fd; padding: 2px 8px; border-radius: 4px; font-weight: bold; }
+    .qty-box { background: #fff3e0; padding: 4px 12px; font-size: 14pt; font-weight: bold; }
+</style>
+{% endblock %}
+{% block content %}
+<div class="header">
+    <div>
+        <div class="logo">FarforRent</div>
+        <div class="logo-sub">СКЛАД</div>
+    </div>
+    <div class="doc-info">
+        <div class="doc-number">{{ doc_number }}</div>
+        <div class="doc-date">{{ generated_at }}</div>
+    </div>
+</div>
+
+<h1>📦 ЛИСТ КОМПЛЕКТАЦІЇ</h1>
+
+<table class="mb-4">
+    <tr>
+        <td style="width:50%"><strong>Замовлення:</strong> {{ issue_card.order_number }}</td>
+        <td><strong>Клієнт:</strong> {{ issue_card.customer_name }}</td>
+    </tr>
+    <tr>
+        <td><strong>Видача:</strong> {{ issue_card.rental_start_date }}</td>
+        <td><strong>Повернення:</strong> {{ issue_card.rental_end_date }}</td>
+    </tr>
+</table>
+
+<table>
+    <thead>
+        <tr>
+            <th style="width:80px">ЛОКАЦІЯ</th>
+            <th>ТОВАР</th>
+            <th style="width:70px">SKU</th>
+            <th style="width:60px">К-СТЬ</th>
+            <th style="width:50px">✓</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for item in items %}
+        <tr>
+            <td><span class="location-badge">{{ item.get('location', 'N/A') }}</span></td>
+            <td>{{ item.get('name', '') }}</td>
+            <td>{{ item.get('sku') or item.get('article', '') }}</td>
+            <td class="text-center"><span class="qty-box">{{ item.get('quantity') or item.get('qty', 1) }}</span></td>
+            <td class="text-center"><div class="checkbox" style="width:20px;height:20px;"></div></td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<div class="mt-4" style="display:flex; justify-content:space-between;">
+    <div><strong>Всього позицій:</strong> {{ items|length }}</div>
+    <div><strong>Всього одиниць:</strong> {% set total = namespace(value=0) %}{% for item in items %}{% set total.value = total.value + (item.get('quantity') or item.get('qty', 1)) %}{% endfor %}{{ total.value }}</div>
+</div>
+
+<div class="signatures">
+    <div class="signature-block">
+        <p>Зібрав: _______________</p>
+        <p class="text-sm">Час: _______________</p>
+    </div>
+    <div class="signature-block">
+        <p>Перевірив: _______________</p>
+        <p class="text-sm">Час: _______________</p>
+    </div>
+</div>
+{% endblock %}
+<!-- Test modification -->

@@ -1,0 +1,377 @@
+/* Mobile-first responsive styles for RentalHub */
+
+/* Base mobile styles */
+@media (max-width: 640px) {
+  /* Make text more readable on mobile */
+  body {
+    font-size: 14px;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  /* Reduce padding on mobile */
+  .container {
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+
+  /* Make cards more compact */
+  .card {
+    padding: 0.75rem;
+  }
+
+  /* Stack buttons vertically on mobile */
+  .button-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  /* Make modals full-screen on mobile */
+  .modal-content {
+    width: 100vw;
+    height: 100vh;
+    max-height: 100vh;
+    border-radius: 0;
+    margin: 0;
+  }
+
+  /* Optimize images for mobile */
+  img {
+    max-width: 100%;
+    height: auto;
+  }
+
+  /* Touch-friendly tap targets (min 44x44px) */
+  button,
+  a,
+  input[type="button"],
+  input[type="submit"] {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  /* Improve input fields on mobile */
+  input[type="text"],
+  input[type="email"],
+  input[type="tel"],
+  input[type="number"],
+  textarea,
+  select {
+    font-size: 16px; /* Prevents zoom on iOS */
+    padding: 0.75rem;
+  }
+
+  /* Hide desktop-only elements */
+  .desktop-only {
+    display: none !important;
+  }
+
+  /* Show mobile-only elements */
+  .mobile-only {
+    display: block !important;
+  }
+}
+
+/* Tablet styles */
+@media (min-width: 641px) and (max-width: 1024px) {
+  .tablet-only {
+    display: block !important;
+  }
+}
+
+/* Desktop styles */
+@media (min-width: 1025px) {
+  .mobile-only {
+    display: none !important;
+  }
+
+  .desktop-only {
+    display: block !important;
+  }
+}
+
+/* Landscape mobile optimization */
+@media (max-width: 896px) and (orientation: landscape) {
+  /* Reduce header height in landscape */
+  header {
+    padding-top: 0.5rem;
+    padding-bottom: 0.5rem;
+  }
+
+  /* Make content scrollable */
+  .main-content {
+    height: calc(100vh - 60px);
+    overflow-y: auto;
+  }
+}
+
+/* Touch-specific styles */
+@media (hover: none) and (pointer: coarse) {
+  /* Increase touch targets */
+  button,
+  a {
+    padding: 0.75rem 1rem;
+  }
+
+  /* Remove hover states (don't work on touch) */
+  *:hover {
+    /* Remove hover effects on touch devices */
+  }
+
+  /* Add active states instead */
+  button:active,
+  a:active {
+    transform: scale(0.98);
+    opacity: 0.8;
+  }
+}
+
+/* Photo capture optimization */
+.photo-capture-mobile {
+  position: relative;
+  width: 100%;
+}
+
+@media (max-width: 640px) {
+  .photo-capture-mobile button {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .photo-preview-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.5rem;
+  }
+}
+
+/* QR Scanner mobile optimization */
+.qr-scanner-container {
+  position: relative;
+  width: 100%;
+  max-width: 500px;
+  margin: 0 auto;
+}
+
+@media (max-width: 640px) {
+  .qr-scanner-container {
+    max-width: 100%;
+  }
+
+  .qr-scanner-video {
+    width: 100%;
+    height: auto;
+    border-radius: 0.5rem;
+  }
+}
+
+/* Calendar mobile optimization */
+@media (max-width: 768px) {
+  .calendar-grid {
+    font-size: 0.75rem;
+  }
+
+  .calendar-event {
+    padding: 0.25rem;
+    font-size: 0.7rem;
+  }
+
+  /* Hide calendar sidebar on mobile */
+  .calendar-sidebar {
+    display: none;
+  }
+}
+
+/* Table responsive */
+@media (max-width: 768px) {
+  .responsive-table {
+    display: block;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .responsive-table table {
+    min-width: 600px;
+  }
+}
+
+/* Dashboard cards mobile */
+@media (max-width: 640px) {
+  .dashboard-cards {
+    grid-template-columns: 1fr;
+  }
+
+  .dashboard-stat-card {
+    padding: 1rem;
+  }
+
+  .stat-value {
+    font-size: 1.5rem;
+  }
+}
+
+/* Form optimization for mobile */
+@media (max-width: 640px) {
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .form-actions {
+    position: sticky;
+    bottom: 0;
+    background: white;
+    padding: 1rem;
+    box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.1);
+    margin-left: -1rem;
+    margin-right: -1rem;
+    margin-bottom: -1rem;
+  }
+}
+
+/* Loading states mobile */
+.mobile-loading {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 200px;
+}
+
+/* Toast notifications mobile */
+@media (max-width: 640px) {
+  .toast-notification {
+    bottom: 1rem;
+    left: 1rem;
+    right: 1rem;
+    width: auto;
+  }
+}
+
+/* Safe area for notch devices */
+@supports (padding: max(0px)) {
+  body {
+    padding-left: max(0px, env(safe-area-inset-left));
+    padding-right: max(0px, env(safe-area-inset-right));
+  }
+
+  .sticky-header {
+    padding-top: max(0.5rem, env(safe-area-inset-top));
+  }
+
+  .sticky-footer {
+    padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
+  }
+}
+
+/* Pull-to-refresh indicator */
+.ptr-indicator {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 60px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: white;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  transform: translateY(-100%);
+  transition: transform 0.3s;
+}
+
+.ptr-indicator.active {
+  transform: translateY(0);
+}
+
+
+
+/* Corporate colors integration for mobile */
+@media (max-width: 768px) {
+  /* Corporate buttons on mobile */
+  .corp-btn {
+    width: 100%;
+    margin-bottom: 0.5rem;
+  }
+
+  .corp-btn-primary {
+    background: var(--corp-primary);
+  }
+
+  .corp-btn-gold {
+    background: var(--corp-gold);
+  }
+
+  /* Corporate cards on mobile */
+  .corp-card,
+  .corp-card-flat,
+  .corp-stat-card {
+    margin-bottom: 0.75rem;
+  }
+
+  /* Corporate header on mobile */
+  .corp-header {
+    padding: 0.75rem 1rem;
+  }
+
+  .corp-header h1 {
+    font-size: 1.125rem;
+  }
+
+  /* Corporate modal on mobile */
+  .corp-modal-content {
+    max-width: 95vw;
+    padding: 1rem;
+    max-height: 85vh;
+    overflow-y: auto;
+  }
+
+  /* Corporate badges on mobile */
+  .corp-badge {
+    font-size: 0.625rem;
+    padding: 0.25rem 0.5rem;
+  }
+
+  /* Corporate stats on mobile */
+  .corp-stat-value {
+    font-size: 1.5rem;
+  }
+
+  .corp-stat-label {
+    font-size: 0.625rem;
+  }
+
+  /* Hide desktop nav on mobile */
+  .desktop-nav {
+    display: none;
+  }
+
+  /* Mobile navigation */
+  .mobile-nav {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: white;
+    border-top: 1px solid var(--corp-border);
+    padding: 0.5rem;
+    display: flex;
+    justify-content: space-around;
+    z-index: 100;
+  }
+
+  .mobile-nav button {
+    flex: 1;
+    padding: 0.5rem;
+    font-size: 0.75rem;
+  }
+}
+
+/* Touch-friendly corporate elements */
+@media (hover: none) and (pointer: coarse) {
+  .corp-btn:active {
+    transform: scale(0.98);
+    opacity: 0.9;
+  }
+
+  .corp-card:active {
+    transform: scale(0.99);
+  }
+}

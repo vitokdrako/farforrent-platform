@@ -1,0 +1,68 @@
+{% extends '_base.html' %}
+{% block title %}Акт часткового повернення {{ order.order_number }}{% endblock %}
+{% block content %}
+<div class="header">
+    <div>
+        <div class="logo">FarforRent</div>
+    </div>
+    <div class="doc-info">
+        <div class="doc-number">{{ doc_number }}</div>
+        <div class="doc-date">{{ generated_at }}</div>
+    </div>
+</div>
+
+<h1>АКТ ЧАСТКОВОГО ПОВЕРНЕННЯ</h1>
+
+<table class="mb-4">
+    <tr><td style="width:150px">Замовлення:</td><td class="font-bold">{{ order.order_number }}</td></tr>
+    <tr><td>Клієнт:</td><td>{{ order.customer_name }}</td></tr>
+    <tr><td>Дата повернення:</td><td class="font-bold">{{ generated_at }}</td></tr>
+</table>
+
+<h2>Повернуті товари</h2>
+<table>
+    <thead>
+        <tr><th>№</th><th>Найменування</th><th>SKU</th><th>К-сть</th><th>Стан</th></tr>
+    </thead>
+    <tbody>
+        {% for item in options.return_items or items %}
+        <tr>
+            <td class="text-center">{{ loop.index }}</td>
+            <td>{{ item.get('name', '') }}</td>
+            <td>{{ item.get('sku', '') }}</td>
+            <td class="text-center">{{ item.return_qty or item.quantity }}</td>
+            <td>
+                <span class="checkbox"></span> OK
+                <span class="checkbox" style="margin-left:10px;"></span> Пошкодж.
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<div class="mt-4">
+    <h2>Залишок у клієнта</h2>
+    <p class="text-sm">Перелік товарів, які залишаються у клієнта до повного повернення:</p>
+    {% for item in options.remaining_items or [] %}
+    <p>• {{ item.get('name', '') }} ({{ item.get('sku', '') }}) — {{ item.get('quantity') or item.get('qty', 1) }} шт.</p>
+    {% else %}
+    <p class="text-sm" style="color:#666;">Всі товари повернуто</p>
+    {% endfor %}
+</div>
+
+<div class="highlight" style="padding:10px; margin-top:15px;">
+    <p class="text-sm">Цей акт підтверджує часткове повернення. Замовлення залишається активним до повного повернення.</p>
+</div>
+
+<div class="signatures">
+    <div class="signature-block">
+        <p class="font-bold">ПРИЙНЯВ (Орендодавець):</p>
+        <div class="signature-line"></div>
+    </div>
+    <div class="signature-block">
+        <p class="font-bold">ПЕРЕДАВ (Орендар):</p>
+        <p class="text-sm">{{ order.customer_name }}</p>
+        <div class="signature-line"></div>
+    </div>
+</div>
+{% endblock %}

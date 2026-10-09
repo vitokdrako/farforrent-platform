@@ -1,0 +1,228 @@
+/* === BoardItemCard — компактний горизонтальний layout === */
+
+.bi-card {
+    display: flex;
+    gap: 12px;
+    padding: 10px 12px;
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 10px;
+    margin-bottom: 8px;
+    transition: border-color 0.15s;
+}
+
+.bi-card:hover {
+    border-color: #0a3d2e;
+}
+
+/* Мініатюра 56×56 */
+.bi-thumb {
+    flex-shrink: 0;
+    width: 56px;
+    height: 56px;
+    border-radius: 8px;
+    background: #f8fafc;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid #f1f5f9;
+}
+
+.bi-thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    padding: 4px;
+}
+
+.bi-thumb-fallback {
+    font-size: 22px;
+    opacity: 0.5;
+}
+
+/* Тіло картки */
+.bi-body {
+    flex: 1;
+    min-width: 0; /* для overflow ellipsis */
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+/* Перший рядок: назва + кнопка видалення */
+.bi-row1 {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 8px;
+}
+
+.bi-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: #0f172a;
+    margin: 0;
+    line-height: 1.3;
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+}
+
+.bi-remove {
+    flex-shrink: 0;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    border: none;
+    background: #fee2e2;
+    color: #991b1b;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    line-height: 1;
+}
+
+.bi-remove:hover {
+    background: #fecaca;
+}
+
+/* Мета: SKU + доступність */
+.bi-meta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 11px;
+}
+
+.bi-sku {
+    color: #94a3b8;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.bi-availability {
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-weight: 600;
+}
+
+.bi-availability.ok {
+    background: #dcfce7;
+    color: #166534;
+}
+
+.bi-availability.bad {
+    background: #fee2e2;
+    color: #991b1b;
+}
+
+/* Другий рядок: лічильник зліва + ціна справа */
+.bi-row2 {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 6px;
+    gap: 8px;
+}
+
+/* Лічильник */
+.bi-qty {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.bi-qty-btn {
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+    border: 1px solid #cbd5e1;
+    background: #fff;
+    cursor: pointer;
+    font-size: 16px;
+    font-weight: 600;
+    color: #0f172a;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    line-height: 1;
+}
+
+.bi-qty-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+.bi-qty-input {
+    width: 40px;
+    height: 28px;
+    text-align: center;
+    border-radius: 6px;
+    border: 1px solid #cbd5e1;
+    font-size: 13px;
+    font-weight: 600;
+    color: #0f172a;
+    padding: 0;
+    background: #fff;
+    -moz-appearance: textfield;
+}
+
+.bi-qty-input::-webkit-outer-spin-button,
+.bi-qty-input::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+/* Ціна */
+.bi-price {
+    text-align: right;
+}
+
+.bi-price-total {
+    font-size: 15px;
+    font-weight: 700;
+    color: #0a3d2e;
+    line-height: 1.1;
+}
+
+.bi-price-formula {
+    font-size: 10px;
+    color: #94a3b8;
+    margin-top: 1px;
+}
+
+/* Notes */
+.bi-notes {
+    font-size: 11px;
+    color: #64748b;
+    background: #fef9c3;
+    padding: 4px 8px;
+    border-radius: 4px;
+    margin-top: 4px;
+}
+
+/* ---------- МОБІЛЬНИЙ ---------- */
+@media (max-width: 640px) {
+    .bi-card {
+        padding: 8px 10px;
+    }
+    .bi-thumb {
+        width: 48px;
+        height: 48px;
+    }
+    .bi-title {
+        font-size: 12px;
+    }
+    .bi-price-total {
+        font-size: 14px;
+    }
+}

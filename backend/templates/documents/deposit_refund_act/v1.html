@@ -1,0 +1,109 @@
+{% extends '_base.html' %}
+{% block title %}Акт повернення застави {{ order.order_number }}{% endblock %}
+{% block content %}
+<div class="header">
+    <div>
+        <div class="logo">FarforRent</div>
+    </div>
+    <div class="doc-info">
+        <div class="doc-number">{{ doc_number }}</div>
+        <div class="doc-date">{{ generated_at }}</div>
+    </div>
+</div>
+
+<h1>АКТ ПОВЕРНЕННЯ ЗАСТАВИ</h1>
+
+<table class="mb-4">
+    <tr><td style="width:150px">Замовлення:</td><td class="font-bold">{{ order.order_number }}</td></tr>
+    <tr><td>Клієнт:</td><td class="font-bold">{{ order.customer_name }}</td></tr>
+    <tr><td>Телефон:</td><td>{{ order.customer_phone }}</td></tr>
+    <tr><td>Період оренди:</td><td>{{ order.rental_start_date }} — {{ order.rental_end_date }}</td></tr>
+</table>
+
+<h2>Розрахунок застави</h2>
+<table>
+    <tr><td style="width:300px">Застава отримана:</td><td class="font-bold">
+        {% if finance.deposit_currency == 'USD' %}${% elif finance.deposit_currency == 'EUR' %}€{% else %}₴{% endif %}{{ finance.deposit_actual|money }}
+    </td></tr>
+    
+    {% if finance.deposit_used > 0 %}
+    <tr class="warning">
+        <td>Утримано із застави (компенсація шкоди):</td>
+        <td class="font-bold">-{% if finance.deposit_currency == 'USD' %}${% elif finance.deposit_currency == 'EUR' %}€{% else %}₴{% endif %}{{ ((finance.deposit_used / (deposit_data.exchange_rate or 1)) if finance.deposit_currency != 'UAH' else finance.deposit_used)|round(2) }}</td>
+    </tr>
+    {% endif %}
+    
+    {% if finance.deposit_refunded > 0 %}
+    <tr>
+        <td>Раніше повернено:</td>
+        <td>{% if finance.deposit_currency == 'USD' %}${% elif finance.deposit_currency == 'EUR' %}€{% else %}₴{% endif %}{{ ((finance.deposit_refunded / (deposit_data.exchange_rate or 1)) if finance.deposit_currency != 'UAH' else finance.deposit_refunded)|round(2) }}</td>
+    </tr>
+    {% endif %}
+    
+    <tr class="total-row success">
+        <td>ДО ПОВЕРНЕННЯ:</td>
+        <td class="font-bold text-lg">
+            {% set available_original = finance.deposit_actual - ((finance.deposit_used + finance.deposit_refunded) / (deposit_data.exchange_rate or 1) if finance.deposit_currency != 'UAH' else (finance.deposit_used + finance.deposit_refunded)) %}
+            {% if finance.deposit_currency == 'USD' %}${% elif finance.deposit_currency == 'EUR' %}€{% else %}₴{% endif %}{{ available_original|round(2) }}
+        </td>
+    </tr>
+</table>
+
+{% if finance.deposit_used > 0 %}
+<h2>Утримання із застави</h2>
+<div class="info-box" style="padding: 15px; background: #fff3e0; border: 1px solid #ffcc80; border-radius: 8px; margin-bottom: 15px;">
+    <p><strong>Причина утримання:</strong> Компенсація шкоди / пошкоджень</p>
+    <p><strong>Сума утримання:</strong> {{ finance.deposit_used|money }} ₴</p>
+    {% if finance.damage_total > 0 %}
+    <p class="text-sm">Загальна вартість шкоди: {{ finance.damage_total|money }} ₴</p>
+    {% endif %}
+</div>
+{% endif %}
+
+<h2>Спосіб повернення</h2>
+<table>
+    <tr>
+        <td><span class="checkbox">☐</span> Готівка</td>
+        <td><span class="checkbox">☐</span> На карту</td>
+        <td><span class="checkbox">☐</span> Банківський переказ</td>
+    </tr>
+</table>
+
+{% if finance.deposit_currency != 'UAH' %}
+<div class="info-box" style="padding: 15px; background: #e3f2fd; border: 1px solid #90caf9; border-radius: 8px; margin-top: 15px;">
+    <p><strong>ℹ️ Інформація:</strong> Застава була прийнята у валюті {{ finance.deposit_currency }}.</p>
+    <p>Повернення здійснюється у тій самій валюті.</p>
+</div>
+{% endif %}
+
+{% if finance.deposit_used == 0 %}
+<div class="highlight success" style="padding:15px; margin-top:20px; background:#e8f5e9; border: 1px solid #a5d6a7; border-radius: 8px;">
+    <p class="font-bold">✅ Претензій немає</p>
+    <p class="text-sm">Товар повернуто у належному стані. Утримань із застави не проводилось.</p>
+</div>
+{% else %}
+<div class="highlight" style="padding:15px; margin-top:20px; background:#fff8e1; border: 1px solid #ffe082; border-radius: 8px;">
+    <p class="font-bold">⚠️ Часткове повернення</p>
+    <p class="text-sm">Частина застави утримана в якості компенсації за пошкодження/шкоду.</p>
+</div>
+{% endif %}
+
+<p class="text-sm" style="margin-top: 20px;">
+    Підписуючи цей акт, сторони підтверджують відсутність взаємних претензій щодо замовлення {{ order.order_number }}.
+</p>
+
+<div class="signatures">
+    <div class="signature-block">
+        <p class="font-bold">ПОВЕРНУВ (Орендодавець):</p>
+        <p class="text-sm">{{ company.legal_name }}</p>
+        <div class="signature-line"></div>
+        <div class="signature-label">підпис / дата</div>
+    </div>
+    <div class="signature-block">
+        <p class="font-bold">ОТРИМАВ (Орендар):</p>
+        <p class="text-sm">{{ order.customer_name }}</p>
+        <div class="signature-line"></div>
+        <div class="signature-label">підпис</div>
+    </div>
+</div>
+{% endblock %}

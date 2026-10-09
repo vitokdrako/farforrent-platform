@@ -1,0 +1,33 @@
+{
+  "summary": "Backend-only re-test of iteration_7 fixes. Both fixes verified end-to-end: (1) Push-notification SQL crash refactored into services/push_notifications.py with _resolve_event_customer_for_order helper + notify_chat_message — POST /api/admin/orders/7795/chat/messages returns 200 and backend.err.log is completely clean of `1054 Unknown column 'event_tool_customer_id'`, `pymysql.err.OperationalError`, and `chat push notify failed`. (2) decode_token in routes/event_tool.py:152-168 now wraps int(payload['sub']) in try/except (ValueError, TypeError) — GET /api/event/cabinet/profile with the admin/manager JWT now correctly returns 401 with detail 'Customer not found' instead of 500. Regression of iteration_1 data-leak fix verified: GET /api/event/cabinet/profile with an Event Tool client JWT (POST /api/event/auth/login as vitokdrako@gmail.com) still returns 200 with the right email. Test suite test_manager_chat_page.py was updated for iteration_8 (1 test replaced with 2 stricter ones: explicit 401 for admin token, explicit 200+email for event client token) — now 13/13 PASS (was 11/12). Additionally re-ran test_image_url_double_prefix_fix.py + test_cors_new_domain.py — 33/33 PASS. Total 46/46 PASS across all three suites.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_manager_chat_page.py",
+    "/app/test_reports/pytest/iteration_8_manager_chat.xml",
+    "/app/test_reports/pytest/iteration_8_regression.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Admin chat endpoints in routes/order_chat.py admin_router are STILL un-authenticated — explicitly acknowledged in the review request as a separate hardening pass. Anyone with an order_id can read the conversation and post as 'Менеджер'. Track this as tech debt; should be locked behind a manager/admin role check before production traffic.",
+    "Helper _resolve_event_customer_for_order does a feature-detect via `SELECT event_tool_customer_id FROM orders LIMIT 0` on every call (no caching). Cheap on MySQL but still a round-trip per push-notification. Consider memoising the result of the feature-detect at module level.",
+    "notify_chat_message still wraps the whole helper invocation in a broad except inside routes/order_chat.py — if VAPID config silently misfires in prod, the only signal will be a logger.warning. Same risk pattern as the original bug. Surfacing via a metric/alert would help."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_manager_chat_page.py (replaced lenient cabinet/profile smoke with two stricter tests: admin-token → 401 'Customer not found', event-client-token → 200 with caller email)"
+  ],
+  "success_rate": {"backend": "100% (46/46 across test_manager_chat_page.py, test_image_url_double_prefix_fix.py, test_cors_new_domain.py)", "frontend": "skipped per review request (backend only)"},
+  "test_credentials": "vitokdrako@gmail.com / test123 (admin path: POST /api/auth/login; event client path: POST /api/event/auth/login — both work because Vita is also a customer)",
+  "seed_data_creation": "One new test message inserted into order_chat_messages for order_id=7795 with marker prefix TEST_chat_iter7_<unix_ts> by test_send_message_and_persistence; sender_type='manager'. Safe to leave (small, marked, auditable).",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "test_manager_chat_page.py is now the canonical regression suite for /manager/chat backend + the two iteration_8 fixes. The updated TestSmoke class now has 3 tests (was 2): test_event_health, test_cabinet_profile_with_admin_token_returns_401, test_cabinet_profile_with_event_client_token_returns_200. Re-run before any change to routes/order_chat.py admin_router, routes/order_chat_ws.py, services/push_notifications.py, or routes/event_tool.py decode_token/get_current_customer. Test order 7795 (Vita's) is used; if it's archived, swap TEST_ORDER_ID at the top of the file. backend.err.log was truncated at start of run and verified clean afterwards — the helper's feature-detect SELECT does not produce any error rows.",
+  "rca of the issue": "VERIFIED FIXED. (1) Push SQL crash: services/push_notifications.py:124 _resolve_event_customer_for_order first runs `SELECT event_tool_customer_id FROM orders LIMIT 0` to feature-detect the column; on OperationalError it falls back to `orders.customer_email → event_customers.email`. routes/order_chat.py:202-203 and routes/order_chat_ws.py:261-262 both now call notify_chat_message(db, order_id, ...) instead of inline SQL. Verified by truncating backend.err.log, running POST /api/admin/orders/7795/chat/messages, then grepping for '1054|Unknown column|event_tool_customer_id|chat push notify failed|pymysql.err.OperationalError' — zero matches. (2) decode_token 500→401: routes/event_tool.py:158-162 now wraps int(payload['sub']) in `try/except (TypeError, ValueError): pass`. Admin JWT sub=email_string is left as-is and bubbles to get_current_customer → `SELECT * FROM event_customers WHERE customer_id = :id` returns no row → HTTPException(401, 'Customer not found'). Verified by integration test: r.status_code == 401 and 'Customer not found' in r.json()['detail']."
+}

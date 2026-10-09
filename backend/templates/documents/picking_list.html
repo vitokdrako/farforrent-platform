@@ -1,0 +1,312 @@
+<!doctype html>
+<html lang="uk">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Лист комплектації — {{ order.number }}</title>
+  <style>
+    :root{
+      --ink:#111827;
+      --muted:#6B7280;
+      --line:#E5E7EB;
+      --soft:#F3F4F6;
+      --paper:#FFFFFF;
+      --accent:#0F172A;
+    }
+    *{box-sizing:border-box}
+    html,body{margin:0;padding:0;background:#f6f7fb;color:var(--ink);font:14px/1.35 -apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,Arial,sans-serif}
+    .page{
+      width:210mm;
+      min-height:297mm;
+      margin:12mm auto;
+      background:var(--paper);
+      border:1px solid var(--line);
+      border-radius:14px;
+      box-shadow:0 10px 30px rgba(15,23,42,.08);
+      overflow:hidden;
+    }
+    .pad{padding:18mm}
+    .topbar{
+      display:flex;align-items:flex-start;justify-content:space-between;gap:16px;
+      padding:14mm 18mm 12mm 18mm;
+      border-bottom:1px solid var(--line);
+      background:linear-gradient(180deg, #f8f9fa, #f3f4f6);
+    }
+    .brand{display:flex;align-items:flex-start;gap:14px}
+    .logo{width:60px;height:60px;flex:none}
+    .logo img{width:100%;height:100%;object-fit:contain}
+    .brand-info{display:flex;flex-direction:column;gap:2px}
+    .brand h1{margin:0;font-size:18px;letter-spacing:.2px;color:var(--ink);font-weight:800}
+    .brand .address{color:var(--muted);font-size:11px;line-height:1.4}
+    .brand .contacts{color:var(--muted);font-size:11px;line-height:1.4}
+    .brand .contacts a{color:var(--muted);text-decoration:none}
+    .docmeta{min-width:240px;text-align:right}
+    .docmeta .title{font-size:22px;font-weight:800;margin:0;color:var(--ink)}
+    .docmeta .row{margin-top:6px;color:var(--muted);font-size:12px}
+    .docmeta .pill{
+      display:inline-block;margin-top:10px;
+      padding:6px 12px;border-radius:999px;
+      background:#DBEAFE;border:1px solid #93C5FD;
+      color:#1E40AF;font-size:11px;font-weight:600;
+    }
+    .grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px}
+    .card{
+      border:1px solid var(--line);
+      border-radius:12px;
+      padding:14px 16px;
+      background:#fff;
+    }
+    .card h3{
+      margin:0 0 10px 0;
+      font-size:11px;
+      color:var(--muted);
+      text-transform:uppercase;
+      letter-spacing:.1em;
+      font-weight:700;
+    }
+    .kv{display:grid;grid-template-columns:100px 1fr;gap:6px 10px}
+    .k{color:var(--muted);font-size:13px}
+    .v{color:var(--ink);font-weight:600;word-break:break-word;font-size:13px}
+    .v.normal{font-weight:500}
+
+    .sectionTitle{
+      margin:20px 0 12px 0;
+      font-size:13px;
+      font-weight:800;
+      letter-spacing:.02em;
+      color:var(--ink);
+    }
+
+    table{width:100%;border-collapse:separate;border-spacing:0}
+    thead th{
+      position:sticky;top:0;
+      background:#f8f9fa;
+      color:var(--ink);
+      font-size:11px;
+      font-weight:700;
+      padding:12px 10px;
+      text-align:left;
+      border-bottom:2px solid var(--line);
+      text-transform:uppercase;
+      letter-spacing:.05em;
+    }
+    thead th:first-child{border-top-left-radius:10px}
+    thead th:last-child{border-top-right-radius:10px}
+    tbody td{
+      padding:12px 10px;
+      border-bottom:1px solid var(--line);
+      vertical-align:middle;
+    }
+    tbody tr:last-child td{border-bottom:none}
+    .thumb{
+      width:60px;height:60px;border-radius:8px;
+      border:1px solid var(--line);
+      background:#fff;
+      object-fit:cover;
+      display:block;
+    }
+    .name{font-weight:700;margin:0;font-size:13px}
+    .mono{font-variant-numeric:tabular-nums;font-feature-settings:"tnum" 1}
+    .right{text-align:right}
+    .center{text-align:center}
+    .sku{
+      display:inline-block;
+      padding:4px 8px;
+      border-radius:6px;
+      border:1px solid var(--line);
+      background:var(--soft);
+      font-weight:700;
+      font-size:11px;
+    }
+    .loc-badge{
+      display:inline-block;
+      padding:4px 10px;
+      border-radius:6px;
+      background:#DBEAFE;
+      color:#1E40AF;
+      font-weight:700;
+      font-size:11px;
+    }
+    .check-box{
+      width:22px;height:22px;
+      border:2px solid #9CA3AF;
+      border-radius:4px;
+      display:inline-block;
+    }
+
+    .bottomRow{
+      margin-top:20px;
+      display:grid;
+      grid-template-columns:1fr 1fr;
+      gap:14px;
+      align-items:start;
+    }
+    .summaryBox{
+      border:1px solid var(--line);
+      border-radius:14px;
+      padding:16px;
+      background:linear-gradient(180deg,#ffffff,#fafafa);
+    }
+    .summaryBox h3{
+      margin:0 0 12px 0;font-size:11px;color:var(--muted);
+      text-transform:uppercase;letter-spacing:.1em;font-weight:800;
+    }
+    .srow{display:flex;justify-content:space-between;gap:12px;padding:6px 0}
+    .srow .label{color:var(--muted);font-size:13px}
+    .srow .val{font-weight:700;font-size:13px}
+
+    .signatures{
+      margin-top:30px;
+      display:grid;grid-template-columns:1fr 1fr;gap:30px;
+      page-break-inside:avoid;
+    }
+    .sig-block{padding:10px 0}
+    .sig-title{font-weight:800;font-size:12px;color:var(--ink);margin-bottom:16px}
+    .sig-line{border-bottom:1px solid var(--ink);height:1px;margin-bottom:4px}
+    .sig-label{font-size:10px;color:var(--muted)}
+    .sig-time{margin-top:12px;font-size:11px;color:var(--muted)}
+
+    footer{
+      padding:10mm 18mm 14mm 18mm;
+      border-top:1px solid var(--line);
+      color:var(--muted);
+      font-size:10px;
+      display:flex;justify-content:space-between;gap:12px;
+      background:#fff;
+    }
+    footer a{color:var(--muted);text-decoration:none}
+
+    @page{size:A4;margin:10mm}
+    @media print{
+      body{background:#fff}
+      .page{margin:0;border:none;border-radius:0;box-shadow:none}
+      thead{display:table-header-group}
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <div class="topbar">
+      <div class="brand">
+        <div class="logo">
+          <img src="https://customer-assets.emergentagent.com/job_docgen-hub-8/artifacts/qoruqs09_logo%20%281%29.svg" alt="FarforDecorOrenda" />
+        </div>
+        <div class="brand-info">
+          <h1>FarforDecorOrenda</h1>
+          <div class="address">м. Київ, вул. Будіндустрії, 4</div>
+          <div class="contacts">
+            Тел: (097) 123 09 93, (093) 375 09 40<br/>
+            <a href="mailto:info@farforrent.com.ua">info@farforrent.com.ua</a> &bull;
+            <a href="http://www.farforrent.com.ua">www.farforrent.com.ua</a>
+          </div>
+        </div>
+      </div>
+
+      <div class="docmeta">
+        <p class="title">Лист комплектації</p>
+        <div class="row">{{ generated_at }}</div>
+        <div class="pill">{{ order.number }}</div>
+      </div>
+    </div>
+
+    <div class="pad">
+      <div class="grid2">
+        <div class="card">
+          <h3>Замовник</h3>
+          <div class="kv">
+            <div class="k">ПІБ</div><div class="v">{{ order.customer_name or "—" }}</div>
+            <div class="k">Телефон</div><div class="v normal">{{ order.customer_phone or "—" }}</div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>Деталі оренди</h3>
+          <div class="kv">
+            <div class="k">Період</div>
+            <div class="v">
+              <span class="mono">{{ order.rental_start_date }}</span> — <span class="mono">{{ order.rental_end_date }}</span>
+            </div>
+            <div class="k">Діб</div><div class="v"><span class="mono">{{ order.rental_days or "—" }}</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="sectionTitle">Перелік позицій</div>
+
+      <table>
+        <thead>
+          <tr>
+            <th style="width:72px">Фото</th>
+            <th style="width:90px">Локація</th>
+            <th style="width:100px">Артикул</th>
+            <th>Найменування</th>
+            <th style="width:60px" class="center">К-сть</th>
+            <th style="width:50px" class="center">V</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for item in items %}
+            <tr>
+              <td>
+                {% if item.image_url %}
+                  <img class="thumb" src="{{ item.image_url }}" alt="Фото" />
+                {% else %}
+                  <div class="thumb" style="display:flex;align-items:center;justify-content:center;color:#9CA3AF;font-weight:700;">—</div>
+                {% endif %}
+              </td>
+              <td><span class="loc-badge">{{ item.location }}</span></td>
+              <td><span class="sku mono">{{ item.sku }}</span></td>
+              <td><div class="name">{{ item.name }}</div></td>
+              <td class="center mono" style="font-size:16px;font-weight:800">{{ item.quantity }}</td>
+              <td class="center"><div class="check-box"></div></td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+
+      <div class="bottomRow">
+        <div class="summaryBox">
+          <h3>Підсумок</h3>
+          <div class="srow">
+            <div class="label">Найменувань</div>
+            <div class="val mono">{{ totals.items_count }}</div>
+          </div>
+          <div class="srow">
+            <div class="label">Одиниць товару</div>
+            <div class="val mono">{{ totals.quantity }}</div>
+          </div>
+        </div>
+
+        <div></div>
+      </div>
+
+      <div class="signatures">
+        <div class="sig-block">
+          <div class="sig-title">Зібрав:</div>
+          <div class="sig-line"></div>
+          <div class="sig-label">підпис / ПІБ</div>
+          <div class="sig-time">Час: _______________</div>
+        </div>
+        <div class="sig-block">
+          <div class="sig-title">Перевірив:</div>
+          <div class="sig-line"></div>
+          <div class="sig-label">підпис / ПІБ</div>
+          <div class="sig-time">Час: _______________</div>
+        </div>
+      </div>
+    </div>
+
+    <footer>
+      <div>
+        FarforDecorOrenda &bull; Оренда декору для заходів<br/>
+        м. Київ, вул. Будіндустрії, 4<br/>
+        Тел: {{ company.phone }} &bull; {{ company.email }}
+      </div>
+      <div style="text-align:right">
+        Документ згенеровано системою RentalHub<br/>
+        <span class="mono">{{ generated_at }}</span>
+      </div>
+    </footer>
+  </div>
+</body>
+</html>

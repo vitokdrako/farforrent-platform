@@ -1,0 +1,107 @@
+{% extends '_base.html' %}
+{% block title %}Видаткова накладна {{ doc_number }}{% endblock %}
+{% block content %}
+<style>
+    body { font-family: 'Times New Roman', Times, serif; font-size: 12pt; line-height: 1.5; }
+    h1 { font-size: 16pt; font-weight: bold; margin-bottom: 25px; }
+    .header-info { margin-bottom: 15px; line-height: 1.5; }
+    .header-info p { margin: 5px 0; }
+    .buyer-details { font-size: 11pt; margin-left: 80px; line-height: 1.4; }
+    .contract-line { margin: 15px 0; }
+    .contract-label { display: inline-block; width: 80px; }
+    .items-table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+    .items-table th, .items-table td { border: 1px solid #000; padding: 8px; }
+    .items-table th { background: #f5f5f5; font-weight: bold; text-align: center; }
+    .items-table td { text-align: center; }
+    .items-table td:nth-child(2) { text-align: left; }
+    .total-row { margin: 15px 0; text-align: right; font-size: 14pt; }
+    .sum-words { margin: 20px 0; line-height: 1.6; }
+    .sum-bold { font-weight: bold; font-size: 13pt; }
+    .signatures { margin-top: 40px; display: flex; justify-content: space-between; }
+    .sig-block { width: 45%; }
+    .sig-title { font-weight: bold; margin-bottom: 30px; }
+    .sig-line { border-bottom: 1px solid #000; margin-bottom: 20px; height: 30px; }
+    .sig-note { font-size: 9pt; font-style: italic; margin-top: 10px; }
+    .dovirenost { margin-top: 20px; font-size: 11pt; }
+    .dovirenost-line { display: inline-block; width: 60px; border-bottom: 1px solid #000; margin: 0 10px; }
+</style>
+
+{% set is_fop = payer.payer_type == 'fop_general' %}
+{% set is_llc = payer.payer_type == 'llc_general' %}
+
+<h1>Видаткова накладна № {{ doc_number.split('-')[-1] if doc_number and '-' in doc_number else (doc_number or order.order_number) }} від {{ generated_at.split(' ')[0] if ' ' in generated_at else generated_at }} р.</h1>
+
+<div class="header-info">
+    <p><span style="display: inline-block; width: 95px;">Постачальник:</span> <strong>{{ company.legal_name }}</strong></p>
+    <p style="padding-left: 95px;">п/р {{ company.iban }} у банку {{ company.bank_name }},</p>
+    <p style="padding-left: 95px;">код за ДРФО {{ company.edrpou }}</p>
+</div>
+
+<div class="header-info">
+    <p><span style="display: inline-block; width: 80px;">Покупець:</span> <strong>{% if is_fop %}ФОП {% elif is_llc %}ТОВ {% endif %}{{ payer.company_name or order.customer_name }}</strong></p>
+    {% if payer.address or payer.edrpou or payer.iban %}
+    <div class="buyer-details">
+        {% if payer.address %}{{ payer.address }}{% endif %}
+        {% if payer.edrpou %} ЄДРПОУ {{ payer.edrpou }}{% endif %}
+        {% if payer.tax_number %} ІПН {{ payer.tax_number }}{% endif %}
+        {% if payer.iban %}<br>IBAN {{ payer.iban }}{% endif %}
+        {% if payer.bank_name %} в {{ payer.bank_name }}{% endif %}
+    </div>
+    {% endif %}
+</div>
+
+<div class="contract-line">
+    <span class="contract-label">Договір:</span> Основний
+</div>
+
+<div class="contract-line">
+    <span class="contract-label">Склад:</span> Основний
+</div>
+
+<table class="items-table">
+    <thead>
+        <tr>
+            <th style="width: 40px;">№</th>
+            <th>Товар</th>
+            <th style="width: 60px;">Кіл-сть</th>
+            <th style="width: 40px;">Од.</th>
+            <th style="width: 80px;">Ціна</th>
+            <th style="width: 90px;">Сума</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td>1</td>
+            <td style="text-align: left;">Квіткова композиція</td>
+            <td>1</td>
+            <td>шт</td>
+            <td style="text-align: right;">{{ "{:,.2f}".format(totals.rent).replace(",", " ") }}</td>
+            <td style="text-align: right;">{{ "{:,.2f}".format(totals.rent).replace(",", " ") }}</td>
+        </tr>
+    </tbody>
+</table>
+
+<div class="total-row">
+    <strong>Всього:</strong> {{ "{:,.2f}".format(totals.rent).replace(",", " ") }}
+</div>
+
+<div class="sum-words">
+    <p>Всього найменувань 1, на суму {{ "{:,.2f}".format(totals.rent).replace(",", " ") }} грн.</p>
+    <p class="sum-bold">{{ total_words or '' }} гривень 00 копійок</p>
+</div>
+
+<div class="signatures">
+    <div class="sig-block">
+        <div class="sig-title">Від постачальника*</div>
+        <div class="sig-line"></div>
+        <div class="sig-note">* Відповідальний за здійснення господарської операції і правильність її оформлення</div>
+    </div>
+    <div class="sig-block">
+        <div class="sig-title">Отримав(ла)</div>
+        <div class="sig-line"></div>
+        <div class="dovirenost">
+            За довіреністю №<span class="dovirenost-line"></span>від<span class="dovirenost-line"></span>
+        </div>
+    </div>
+</div>
+{% endblock %}

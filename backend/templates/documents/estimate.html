@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <title>Кошторис {{ invoice_number }}</title>
+    <style>
+        @page {
+            size: A4;
+            margin: 15mm;
+        }
+        
+        body {
+            font-family: 'DejaVu Sans', Arial, sans-serif;
+            font-size: 10pt;
+            line-height: 1.4;
+            color: #333;
+            margin: 0;
+            padding: 0;
+        }
+        
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 3px solid #4a7c59;
+        }
+        
+        .logo {
+            font-size: 20pt;
+            font-weight: bold;
+            color: #4a7c59;
+        }
+        
+        .logo-subtitle {
+            font-size: 9pt;
+            color: #888;
+        }
+        
+        .invoice-info {
+            text-align: right;
+        }
+        
+        .invoice-number {
+            font-size: 14pt;
+            font-weight: bold;
+            color: #333;
+        }
+        
+        .invoice-date {
+            font-size: 9pt;
+            color: #666;
+        }
+        
+        .title {
+            text-align: center;
+            font-size: 18pt;
+            font-weight: bold;
+            color: #4a7c59;
+            margin: 20px 0;
+            padding: 10px;
+            background: linear-gradient(90deg, #fff, #e8f5e9, #fff);
+        }
+        
+        .section {
+            margin-bottom: 15px;
+        }
+        
+        .section-title {
+            font-size: 11pt;
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 8px;
+            border-bottom: 1px solid #ddd;
+            padding-bottom: 3px;
+        }
+        
+        .info-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        
+        .info-table td {
+            padding: 5px 10px;
+            border: 1px solid #ddd;
+        }
+        
+        .info-table td:first-child {
+            width: 150px;
+            background: #f9f9f9;
+            font-weight: 500;
+            color: #555;
+        }
+        
+        .items-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+        
+        .items-table th {
+            background: #4a7c59;
+            color: white;
+            padding: 8px 5px;
+            font-size: 9pt;
+            text-align: center;
+            border: 1px solid #3d6b4a;
+        }
+        
+        .items-table td {
+            padding: 8px 5px;
+            border: 1px solid #ddd;
+            vertical-align: middle;
+        }
+        
+        .items-table tr:nth-child(even) {
+            background: #f9f9f9;
+        }
+        
+        .item-image {
+            width: 60px;
+            height: 60px;
+            object-fit: cover;
+            border-radius: 4px;
+            border: 1px solid #ddd;
+        }
+        
+        .item-name {
+            font-weight: 500;
+        }
+        
+        .item-sku {
+            font-size: 8pt;
+            color: #888;
+        }
+        
+        .text-center {
+            text-align: center;
+        }
+        
+        .text-right {
+            text-align: right;
+        }
+        
+        .totals {
+            margin-top: 15px;
+            margin-left: auto;
+            width: 300px;
+        }
+        
+        .totals-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        
+        .totals-table td {
+            padding: 8px 10px;
+            border: 1px solid #ddd;
+        }
+        
+        .totals-table tr:last-child {
+            background: #4a7c59;
+            color: white;
+            font-weight: bold;
+            font-size: 12pt;
+        }
+        
+        .totals-table tr:last-child td {
+            border-color: #3d6b4a;
+        }
+        
+        .deposit-row {
+            background: #e8f5e9;
+        }
+        
+        .deposit-row td:first-child {
+            background: #4a7c59;
+            color: white;
+            font-weight: bold;
+        }
+        
+        .footer {
+            margin-top: 30px;
+            padding-top: 15px;
+            border-top: 1px solid #ddd;
+            font-size: 9pt;
+            color: #888;
+        }
+        
+        .note {
+            background: #fff8e1;
+            padding: 10px;
+            border-radius: 5px;
+            font-size: 9pt;
+            margin-top: 15px;
+        }
+        
+        .currency {
+            font-family: Arial, sans-serif;
+        }
+    </style>
+</head>
+<body>
+    <table style="width: 100%; margin-bottom: 20px;">
+        <tr>
+            <td style="vertical-align: top;">
+                <div class="logo">FarforRent</div>
+                <div class="logo-subtitle">Оренда декору</div>
+            </td>
+            <td style="text-align: right; vertical-align: top;">
+                <div class="invoice-number">{{ invoice_number }}</div>
+                <div class="invoice-date">від {{ invoice_date }}</div>
+            </td>
+        </tr>
+    </table>
+    
+    <div class="title">Кошторис</div>
+    
+    <div class="section">
+        <div class="section-title">Замовник</div>
+        <table class="info-table">
+            <tr>
+                <td>ПІБ:</td>
+                <td><strong>{{ client.name }}</strong></td>
+            </tr>
+            <tr>
+                <td>Телефон:</td>
+                <td>{{ client.phone }}</td>
+            </tr>
+            <tr>
+                <td>Email:</td>
+                <td>{{ client.email }}</td>
+            </tr>
+        </table>
+    </div>
+    
+    <div class="section">
+        <div class="section-title">Деталі оренди</div>
+        <table class="info-table">
+            <tr>
+                <td>Номер замовлення:</td>
+                <td><strong>{{ order.number }}</strong></td>
+            </tr>
+            <tr>
+                <td>Період оренди:</td>
+                <td>{{ order.rental_period }} ({{ order.rental_days }} дн.)</td>
+            </tr>
+            <tr>
+                <td>Спосіб отримання:</td>
+                <td>{{ order.delivery_method }}</td>
+            </tr>
+        </table>
+    </div>
+    
+    <div class="section">
+        <div class="section-title">Товари</div>
+        <table class="items-table">
+            <thead>
+                <tr>
+                    <th style="width: 30px;">№</th>
+                    <th style="width: 70px;">Фото</th>
+                    <th>Найменування</th>
+                    <th style="width: 70px;">SKU</th>
+                    <th style="width: 50px;">К-сть</th>
+                    <th style="width: 90px;">Ціна оренди / день</th>
+                    <th style="width: 90px;">Ціна оренди / весь термін</th>
+                    <th style="width: 90px;">Завдаток</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in items %}
+                <tr>
+                    <td class="text-center">{{ loop.index }}</td>
+                    <td class="text-center">
+                        {% if item.image %}
+                        <img src="{{ item.image }}" class="item-image" alt="{{ item.name }}">
+                        {% else %}
+                        <div style="width:60px;height:60px;background:#f0f0f0;border-radius:4px;"></div>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <div class="item-name">{{ item.name }}</div>
+                    </td>
+                    <td class="text-center item-sku">{{ item.sku }}</td>
+                    <td class="text-center">{{ item.quantity }}</td>
+                    <td class="text-right"><span class="currency">{{ item.price_per_day }}</span> ₴</td>
+                    <td class="text-right"><span class="currency">{{ item.total_rental }}</span> ₴</td>
+                    <td class="text-right"><span class="currency">{{ item.deposit }}</span> ₴</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    
+    <div class="totals">
+        <table class="totals-table">
+            <tr>
+                <td>Оренда:</td>
+                <td class="text-right"><span class="currency">{{ totals.rental }}</span> ₴</td>
+            </tr>
+            <tr class="deposit-row">
+                <td>Завдаток</td>
+                <td class="text-right"><span class="currency">{{ totals.deposit }}</span> ₴</td>
+            </tr>
+            <tr>
+                <td>РАЗОМ:</td>
+                <td class="text-right"><span class="currency">{{ totals.total }}</span> ₴</td>
+            </tr>
+        </table>
+    </div>
+    
+    {% if note %}
+    <div class="note">
+        <strong>Примітка:</strong> {{ note }}
+    </div>
+    {% endif %}
+    
+    <div class="footer">
+        <p>Документ згенеровано системою RentalHub • {{ generated_at }}</p>
+        <p>Цей документ є попереднім кошторисом і не є юридично обов'язковим.</p>
+    </div>
+</body>
+</html>

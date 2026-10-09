@@ -1,0 +1,390 @@
+<!doctype html>
+<html lang="uk">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Акт повернення — {{ order.order_number }}</title>
+  <style>
+    :root{
+      --ink:#111827;--muted:#6B7280;--line:#E5E7EB;--soft:#F3F4F6;
+      --paper:#FFFFFF;--accent:#0F172A;
+      --good:#16A34A;--warn:#B45309;--danger:#DC2626;
+      --blue:#2563EB;--blue-soft:#EFF6FF;--blue-border:#BFDBFE;
+    }
+    *{box-sizing:border-box}
+    html,body{margin:0;padding:0;background:#f6f7fb;color:var(--ink);font:14px/1.35 -apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,Arial,sans-serif}
+    .page{width:210mm;min-height:297mm;margin:12mm auto;background:var(--paper);border:1px solid var(--line);border-radius:14px;box-shadow:0 10px 30px rgba(15,23,42,.08);overflow:hidden}
+    .pad{padding:18mm}
+    .topbar{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;padding:14mm 18mm 12mm 18mm;border-bottom:1px solid var(--line);background:linear-gradient(180deg, #f8f9fa, #f3f4f6)}
+    .brand{display:flex;align-items:flex-start;gap:14px}
+    .logo{width:60px;height:60px;flex:none}
+    .logo img{width:100%;height:100%;object-fit:contain}
+    .brand-info{display:flex;flex-direction:column;gap:2px}
+    .brand h1{margin:0;font-size:18px;letter-spacing:.2px;color:var(--ink);font-weight:800}
+    .brand .address{color:var(--muted);font-size:11px;line-height:1.4}
+    .brand .contacts{color:var(--muted);font-size:11px;line-height:1.4}
+    .brand .contacts a{color:var(--muted);text-decoration:none}
+    .docmeta{min-width:240px;text-align:right}
+    .docmeta .title{font-size:22px;font-weight:800;margin:0;color:var(--ink)}
+    .docmeta .row{margin-top:6px;color:var(--muted);font-size:12px}
+    .docmeta .pill{display:inline-block;margin-top:10px;padding:6px 12px;border-radius:999px;background:var(--soft);border:1px solid var(--line);color:var(--ink);font-size:11px;font-weight:600}
+    .grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px}
+    .card{border:1px solid var(--line);border-radius:12px;padding:14px 16px;background:#fff}
+    .card h3{margin:0 0 10px 0;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;font-weight:700}
+    .kv{display:grid;grid-template-columns:100px 1fr;gap:6px 10px}
+    .k{color:var(--muted);font-size:13px}
+    .v{color:var(--ink);font-weight:600;word-break:break-word;font-size:13px}
+    .v.normal{font-weight:500}
+    .sectionTitle{margin:20px 0 12px 0;font-size:13px;font-weight:800;letter-spacing:.02em;color:var(--ink)}
+    table{width:100%;border-collapse:separate;border-spacing:0}
+    thead th{position:sticky;top:0;background:#f8f9fa;color:var(--ink);font-size:11px;font-weight:700;padding:12px 10px;text-align:left;border-bottom:2px solid var(--line);text-transform:uppercase;letter-spacing:.05em}
+    thead th:first-child{border-top-left-radius:10px}
+    thead th:last-child{border-top-right-radius:10px}
+    tbody td{padding:12px 10px;border-bottom:1px solid var(--line);vertical-align:middle}
+    tbody tr:last-child td{border-bottom:none}
+    .thumb{width:60px;height:60px;border-radius:8px;border:1px solid var(--line);background:#fff;object-fit:cover;display:block}
+    .name{font-weight:700;margin:0;font-size:13px}
+    .subrow{color:var(--muted);font-size:11px;margin-top:2px}
+    .mono{font-variant-numeric:tabular-nums;font-feature-settings:"tnum" 1}
+    .right{text-align:right}
+    .center{text-align:center}
+    .nowrap{white-space:nowrap}
+    .sku{display:inline-block;padding:4px 8px;border-radius:6px;border:1px solid var(--line);background:var(--soft);font-weight:700;font-size:11px}
+    .status-ok{display:inline-block;padding:3px 10px;border-radius:6px;background:#ECFDF5;color:#065F46;font-size:11px;font-weight:600}
+    .status-warn{display:inline-block;padding:3px 10px;border-radius:6px;background:#FEF3C7;color:#92400E;font-size:11px;font-weight:600}
+    .status-danger{display:inline-block;padding:3px 10px;border-radius:6px;background:#FEF2F2;color:#991B1B;font-size:11px;font-weight:600}
+    .status-info{display:inline-block;padding:3px 10px;border-radius:6px;background:var(--blue-soft);color:var(--blue);font-size:11px;font-weight:600}
+    .damage-detail{margin-top:6px;padding:8px 12px;background:#FFFBEB;border:1px solid #FDE68A;border-radius:8px;font-size:11px;color:#92400E}
+    .damage-detail strong{color:#78350F}
+    .damage-photo{margin-top:4px;display:inline-block}
+    .damage-photo img{max-width:120px;max-height:80px;border-radius:6px;border:1px solid #ddd}
+    .compare-block{margin-top:6px;padding:8px 12px;background:#EFF6FF;border:1px solid #BFDBFE;border-radius:8px;font-size:11px;color:#1E40AF}
+    .compare-block strong{color:#1E3A8A}
+    .fixation-block{margin-top:6px;padding:8px 12px;background:#F0FDF4;border:1px solid #BBF7D0;border-radius:8px;font-size:11px;color:#166534}
+    .loss-block{margin-top:6px;padding:8px 12px;background:#FEF2F2;border:1px solid #FECACA;border-radius:8px;font-size:11px;color:#991B1B}
+    .pkg-table{width:auto;border-collapse:collapse;margin-top:8px}
+    .pkg-table th{background:var(--soft);font-size:11px;font-weight:700;padding:8px 14px;text-align:left;border-bottom:2px solid var(--line)}
+    .pkg-table td{padding:8px 14px;border-bottom:1px solid var(--line);font-size:13px}
+    .bottomRow{margin-top:20px;display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:start}
+    .summaryBox{border:1px solid var(--line);border-radius:14px;padding:16px;background:linear-gradient(180deg,#ffffff,#fafafa)}
+    .summaryBox h3{margin:0 0 12px 0;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;font-weight:800}
+    .srow{display:flex;justify-content:space-between;gap:12px;padding:6px 0}
+    .srow .label{color:var(--muted);font-size:13px}
+    .srow .val{font-weight:700;font-size:13px}
+    .legal{margin-top:20px;padding:14px 16px;border:1px dashed var(--line);border-radius:12px;background:#fff;color:var(--muted);font-size:11px;line-height:1.6}
+    .legal strong{color:var(--ink)}
+    .signatures{margin-top:30px;display:grid;grid-template-columns:1fr 1fr;gap:30px;page-break-inside:avoid}
+    .sig-block{padding:10px 0}
+    .sig-title{font-weight:800;font-size:12px;color:var(--ink);margin-bottom:4px}
+    .sig-name{font-size:13px;color:var(--muted);margin-bottom:20px}
+    .sig-line{border-bottom:1px solid var(--ink);height:1px;margin-bottom:4px}
+    .sig-label{font-size:10px;color:var(--muted)}
+    .receivers-badge{display:inline-block;padding:3px 10px;border-radius:6px;background:#ECFDF5;color:#065F46;font-size:11px;font-weight:600;margin-right:4px;margin-bottom:4px}
+    footer{padding:10mm 18mm 14mm 18mm;border-top:1px solid var(--line);color:var(--muted);font-size:10px;display:flex;justify-content:space-between;gap:12px;background:#fff}
+    footer a{color:var(--muted);text-decoration:none}
+    @page{size:A4;margin:10mm}
+    @media print{body{background:#fff}.page{margin:0;border:none;border-radius:0;box-shadow:none}thead{display:table-header-group}}
+  </style>
+</head>
+<body>
+  <div class="page">
+    <div class="topbar">
+      <div class="brand">
+        <div class="logo">
+          <img src="https://customer-assets.emergentagent.com/job_docgen-hub-8/artifacts/qoruqs09_logo%20%281%29.svg" alt="FarforDecorOrenda" />
+        </div>
+        <div class="brand-info">
+          <h1>{{ company.name or company.short_name or "FarforDecorOrenda" }}</h1>
+          <div class="address">{{ company.address or "м. Київ, вул. Будіндустрії, 4" }}</div>
+          <div class="contacts">
+            Тел: {{ company.phone or "(097) 123 09 93" }}<br/>
+            <a href="mailto:{{ company.email }}">{{ company.email or "info@farforrent.com.ua" }}</a> &bull;
+            <a href="{{ company.website or 'http://www.farforrent.com.ua' }}">{{ company.website or "www.farforrent.com.ua" }}</a>
+          </div>
+        </div>
+      </div>
+
+      <div class="docmeta">
+        <p class="title">Акт повернення</p>
+        <div class="row">№ <strong class="mono">{{ doc_number or meta.doc_number or "" }}</strong></div>
+        <div class="row">{{ generated_at }}</div>
+        <div class="pill">{{ order.order_number or order.number }}</div>
+      </div>
+    </div>
+
+    <div class="pad">
+      <div class="grid2">
+        <div class="card">
+          <h3>Замовник</h3>
+          <div class="kv">
+            <div class="k">ПІБ</div><div class="v">{{ client.name or order.customer_name or "—" }}</div>
+            <div class="k">Телефон</div><div class="v normal">{{ client.phone or order.customer_phone or "—" }}</div>
+            {% if agreement.contract_number %}
+            <div class="k">Договір</div><div class="v normal">{{ agreement.contract_number }}</div>
+            {% endif %}
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>Деталі оренди</h3>
+          <div class="kv">
+            <div class="k">Період</div>
+            <div class="v">
+              <span class="mono">{{ order.rental_start_date }}</span> — <span class="mono">{{ order.rental_end_date }}</span>
+            </div>
+            <div class="k">Діб</div><div class="v"><span class="mono">{{ order.rental_days or "—" }}</span></div>
+            <div class="k">Повернено</div><div class="v normal"><span class="mono">{{ return_date or generated_at }}</span></div>
+            {% if late_days and late_days > 0 %}
+            <div class="k" style="color:var(--warn)">Прострочка</div>
+            <div class="v" style="color:var(--warn)"><span class="mono">{{ late_days }} дн.</span></div>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+
+      {% if receivers and receivers|length > 0 %}
+      <div style="margin-top:14px">
+        <span style="font-size:11px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.1em">Прийняли:</span>
+        {% for r in receivers %}
+          <span class="receivers-badge">{{ r.name if r.name is defined else r }}</span>
+        {% endfor %}
+      </div>
+      {% endif %}
+
+      <!-- Returned Items -->
+      <div class="sectionTitle">Повернені товари</div>
+      <table>
+        <thead>
+          <tr>
+            <th style="width:72px">Фото</th>
+            <th style="width:100px">Артикул</th>
+            <th>Найменування</th>
+            <th style="width:55px" class="center">Видано</th>
+            <th style="width:55px" class="center">Прийнято</th>
+            <th style="width:110px">Стан</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for item in items %}
+            <tr>
+              <td>
+                {% if item.image_url %}
+                  <img class="thumb" src="{{ item.image_url }}" alt="Фото" />
+                {% else %}
+                  <div class="thumb" style="display:flex;align-items:center;justify-content:center;color:#9CA3AF;font-weight:700;">—</div>
+                {% endif %}
+              </td>
+              <td><span class="sku mono">{{ item.sku or "—" }}</span></td>
+              <td>
+                <div class="name">{{ item.name }}</div>
+                {% if item.has_packaging and item.packaging_labels %}
+                  <div class="subrow">Тара: {{ item.packaging_labels|join(", ") }}</div>
+                {% endif %}
+                
+                {# Пошкодження при поверненні (всі типи) #}
+                {% if item.damages and item.damages|length > 0 %}
+                  {% for d in item.damages %}
+                    {% if d.is_total_loss %}
+                      <div class="loss-block">
+                        <strong>Повна втрата:</strong> {{ d.damage_type }}{% if d.note %} — {{ d.note }}{% endif %}
+                        {% if d.fee %} | Сума: {{ "%.2f"|format(d.fee) }} грн{% endif %}
+                        {% if d.photo_url %}
+                          <div class="damage-photo"><img src="{{ d.photo_url }}" alt="Фото" /></div>
+                        {% endif %}
+                      </div>
+                    {% elif d.is_photo_only %}
+                      <div class="fixation-block">
+                        <strong>Фіксація (без запису у стан):</strong> {{ d.damage_type }}{% if d.note %} — {{ d.note }}{% endif %}
+                        {% if d.photo_url %}
+                          <div class="damage-photo"><img src="{{ d.photo_url }}" alt="Фото фіксації" /></div>
+                        {% endif %}
+                      </div>
+                    {% else %}
+                      <div class="damage-detail">
+                        <strong>В стан декору:</strong> {{ d.damage_type }}{% if d.note %} — {{ d.note }}{% endif %}
+                        {% if d.fee %} | Сума: {{ "%.2f"|format(d.fee) }} грн{% endif %}
+                        {% if d.photo_url %}
+                          <div class="damage-photo"><img src="{{ d.photo_url }}" alt="Фото пошкодження" /></div>
+                        {% endif %}
+                      </div>
+                    {% endif %}
+                  {% endfor %}
+                {% endif %}
+
+                {# Порівняння: фіксація до видачі #}
+                {% if item.pre_issue_damages and item.pre_issue_damages|length > 0 %}
+                  <div class="compare-block">
+                    <strong>Стан до видачі (для порівняння):</strong><br/>
+                    {% for d in item.pre_issue_damages %}
+                      &bull; {{ d.damage_type }}{% if d.note %} — {{ d.note }}{% endif %}
+                      {% if d.photo_url %}
+                        <div class="damage-photo"><img src="{{ d.photo_url }}" alt="Фото до видачі" /></div>
+                      {% endif %}
+                    {% endfor %}
+                  </div>
+                {% endif %}
+              </td>
+              <td class="center mono">{{ item.issued_qty }}</td>
+              <td class="center mono">{{ item.returned_qty }}</td>
+              <td>
+                {% if item.is_total_loss %}
+                  <span class="status-danger">Втрачено</span>
+                {% elif item.has_return_damage %}
+                  <span class="status-warn">Пошкоджено</span>
+                {% elif item.returned_qty < item.issued_qty %}
+                  <span class="status-warn">Частково</span>
+                {% else %}
+                  <span class="status-ok">Ок</span>
+                {% endif %}
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+
+      {% if not_returned_items and not_returned_items|length > 0 %}
+      <div class="sectionTitle" style="color:var(--danger)">Неповернені позиції</div>
+      <table>
+        <thead>
+          <tr>
+            <th style="width:100px">Артикул</th>
+            <th>Найменування</th>
+            <th style="width:55px" class="center">К-сть</th>
+            <th style="width:100px">Статус</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for item in not_returned_items %}
+          <tr>
+            <td><span class="sku mono">{{ item.sku or "—" }}</span></td>
+            <td><div class="name">{{ item.name }}</div></td>
+            <td class="center mono">{{ item.qty }}</td>
+            <td><span class="status-danger">{{ item.status or "Не повернуто" }}</span></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% endif %}
+
+      <!-- Packaging Return -->
+      {% if has_packaging %}
+      <div class="sectionTitle">Повернення тари</div>
+      <table class="pkg-table">
+        <thead>
+          <tr>
+            <th>Найменування</th>
+            <th class="center" style="width:80px">Видано</th>
+            <th class="center" style="width:80px">Повернуто</th>
+            <th class="center" style="width:80px">Нестача</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for pkg in packaging %}
+          <tr>
+            <td>{{ pkg.label }}</td>
+            <td class="center mono">{{ pkg.issued }}</td>
+            <td class="center mono">{{ pkg.returned }}</td>
+            <td class="center mono" {% if pkg.missing > 0 %}style="color:var(--danger);font-weight:700"{% endif %}>
+              {{ pkg.missing }}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% endif %}
+
+      <!-- Fees -->
+      {% if fees and (fees.damage_fee or fees.cleaning_fee or fees.late_fee) %}
+      <div class="sectionTitle" style="color:var(--warn)">Нарахування</div>
+      <div style="border:1px solid #FDE68A;border-radius:12px;padding:14px 16px;background:#FFFBEB">
+        <div style="display:grid;gap:6px">
+          {% if fees.damage_fee %}
+          <div class="srow"><div class="label">Пошкодження:</div><div class="val mono">{{ "%.2f"|format(fees.damage_fee) }} грн</div></div>
+          {% endif %}
+          {% if fees.cleaning_fee %}
+          <div class="srow"><div class="label">Чистка:</div><div class="val mono">{{ "%.2f"|format(fees.cleaning_fee) }} грн</div></div>
+          {% endif %}
+          {% if fees.late_fee %}
+          <div class="srow"><div class="label">Прострочення:</div><div class="val mono">{{ "%.2f"|format(fees.late_fee) }} грн</div></div>
+          {% endif %}
+          <div style="border-top:1px solid #FDE68A;padding-top:8px;margin-top:4px">
+            <div class="srow"><div class="label" style="font-weight:700;color:var(--warn)">Разом:</div><div class="val mono" style="color:var(--warn);font-size:16px">{{ "%.2f"|format((fees.damage_fee or 0) + (fees.cleaning_fee or 0) + (fees.late_fee or 0)) }} грн</div></div>
+          </div>
+        </div>
+      </div>
+      {% endif %}
+
+      <!-- Summary -->
+      <div class="bottomRow">
+        <div class="summaryBox">
+          <h3>Підсумок повернення</h3>
+          <div class="srow">
+            <div class="label">Позицій повернуто</div>
+            <div class="val mono">{{ totals.returned_items }} / {{ totals.issued_items }}</div>
+          </div>
+          <div class="srow">
+            <div class="label">Одиниць повернуто</div>
+            <div class="val mono">{{ totals.returned_qty }} / {{ totals.issued_qty }}</div>
+          </div>
+          {% if totals.damage_count > 0 %}
+          <div class="srow">
+            <div class="label" style="color:var(--warn)">Пошкоджень зафіксовано</div>
+            <div class="val mono" style="color:var(--warn)">{{ totals.damage_count }}</div>
+          </div>
+          {% endif %}
+          {% if totals.lost_count > 0 %}
+          <div class="srow">
+            <div class="label" style="color:var(--danger)">Втрачено позицій</div>
+            <div class="val mono" style="color:var(--danger)">{{ totals.lost_count }}</div>
+          </div>
+          {% endif %}
+          {% if late_days and late_days > 0 %}
+          <div class="srow" style="border-top:1px solid var(--line);padding-top:8px">
+            <div class="label" style="color:var(--warn)">Прострочка</div>
+            <div class="val mono" style="color:var(--warn)">{{ late_days }} дн.</div>
+          </div>
+          {% endif %}
+        </div>
+
+        <div class="legal">
+          <strong>Умови повернення:</strong><br/>
+          Підписуючи цей акт, Орендодавець підтверджує приймання Майна від Орендаря.<br/><br/>
+          {% if totals.damage_count > 0 or totals.lost_count > 0 %}
+          <strong style="color:var(--warn)">Увага:</strong> При поверненні зафіксовані пошкодження та/або втрати.
+          Умови компенсації визначаються окремим Дефектним актом та/або Актом взаєморозрахунків.<br/><br/>
+          {% endif %}
+          Даний акт складено у двох примірниках — по одному для кожної зі сторін.
+        </div>
+      </div>
+
+      <!-- Signatures -->
+      <div class="signatures">
+        <div class="sig-block">
+          <div class="sig-title">ПРИЙНЯВ (Орендодавець):</div>
+          <div class="sig-name">{{ executor.name or "___________________" }}</div>
+          <div class="sig-line"></div>
+          <div class="sig-label">підпис / ПІБ</div>
+        </div>
+        <div class="sig-block">
+          <div class="sig-title">ПОВЕРНУВ (Орендар):</div>
+          <div class="sig-name">{{ client.name or order.customer_name }}</div>
+          <div class="sig-line"></div>
+          <div class="sig-label">підпис / ПІБ</div>
+        </div>
+      </div>
+    </div>
+
+    <footer>
+      <div>
+        {{ company.name or company.short_name or "FarforDecorOrenda" }} &bull; Оренда декору для заходів<br/>
+        {{ company.address or "м. Київ, вул. Будіндустрії, 4" }}<br/>
+        Тел: {{ company.phone }} &bull; {{ company.email }}
+      </div>
+      <div style="text-align:right">
+        Документ згенеровано системою RentalHub<br/>
+        <span class="mono">{{ generated_at }}</span>
+      </div>
+    </footer>
+  </div>
+</body>
+</html>

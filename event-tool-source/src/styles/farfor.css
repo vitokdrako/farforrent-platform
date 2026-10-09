@@ -1,0 +1,328 @@
+/* FarforDecor Event Planner Styles */
+/* Базується на оригінальному дизайні farforrent.com.ua */
+
+:root {
+  /* Основні кольори */
+  --fd-bg-page: #f3f3f3;
+  --fd-bg-white: #ffffff;
+  --fd-bg-light: #fafafa;
+  --fd-bg-gray-light: #f7f7f7;
+  --fd-bg-gray: #f5f5f5;
+  --fd-bg-button: #eaeaea;
+  
+  /* Текст */
+  --fd-text-primary: #333333;
+  --fd-text-secondary: #555555;
+  --fd-text-muted: #666666;
+  --fd-text-disabled: #999999;
+  --fd-text-light: #9b9b9b;
+  --fd-text-very-light: #c0c0c0;
+  
+  /* Бордери */
+  --fd-border-light: #e6e6e6;
+  --fd-border-medium: #e3e3e3;
+  --fd-border-gray: #dddddd;
+  --fd-border-dark: #d7d7d7;
+  --fd-border-darker: #d3d3d3;
+  --fd-border-darkest: #d0d0d0;
+  
+  /* Шрифти */
+  --fd-font-primary: 'Roboto', Arial, sans-serif;
+  
+  /* Тіні */
+  --fd-shadow-sm: 0 2px 6px rgba(0, 0, 0, 0.03);
+  --fd-shadow-md: 0 2px 8px rgba(0, 0, 0, 0.05);
+  
+  /* Відступи */
+  --fd-radius-sm: 2px;
+  --fd-radius-md: 4px;
+  --fd-radius-lg: 20px;
+  --fd-radius-xl: 30px;
+  
+  /* Переходи */
+  --fd-transition: all 0.2s ease;
+}
+
+/* Глобальні стилі */
+body {
+  font-family: var(--fd-font-primary);
+  color: var(--fd-text-primary);
+  background-color: var(--fd-bg-page);
+}
+
+/* Утиліти */
+.fd-uppercase {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.fd-uppercase-wide {
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+}
+
+/* Кнопки */
+.fd-btn {
+  font-family: var(--fd-font-primary);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border: none;
+  outline: none;
+}
+
+.fd-btn-primary {
+  padding: 9px 12px;
+  border-radius: var(--fd-radius-sm);
+  border: 1px solid var(--fd-border-darkest);
+  background: var(--fd-bg-button);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #444444;
+  transition: var(--fd-transition);
+}
+
+.fd-btn-primary:hover {
+  background: #ddd;
+}
+
+.fd-btn-secondary {
+  padding: 7px 16px;
+  border-radius: var(--fd-radius-lg);
+  border: 1px solid var(--fd-border-darker);
+  background: var(--fd-bg-gray);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--fd-text-secondary);
+}
+
+.fd-btn-secondary:hover {
+  background: #e8e8e8;
+  border-color: #bbb;
+}
+
+.fd-btn-black {
+  padding: 9px 12px;
+  background: #4a4a4a;
+  color: #ffffff;
+  border: none;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  transition: var(--fd-transition);
+}
+
+.fd-btn-black:hover {
+  background: #5a5a5a;
+}
+
+.fd-btn-small {
+  padding: 5px 10px;
+  border-radius: var(--fd-radius-xl);
+  border: 1px solid var(--fd-border-dark);
+  background: var(--fd-bg-white);
+  font-size: 11px;
+  color: var(--fd-text-muted);
+}
+
+.fd-btn-small:hover {
+  border-color: #aaa;
+  color: #333;
+}
+
+/* Інпути */
+.fd-input,
+.fd-select {
+  font-family: var(--fd-font-primary);
+  padding: 7px 10px;
+  font-size: 13px;
+  border-radius: var(--fd-radius-sm);
+  border: 1px solid var(--fd-border-gray);
+  background: var(--fd-bg-white);
+  color: var(--fd-text-primary);
+  outline: none;
+  transition: border-color 0.2s ease;
+}
+
+.fd-input:focus,
+.fd-select:focus {
+  border-color: #999;
+}
+
+/* Пошук */
+.fd-search {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 10px;
+  border-radius: var(--fd-radius-lg);
+  background: var(--fd-bg-gray-light);
+  border: 1px solid var(--fd-border-medium);
+}
+
+.fd-search-icon {
+  font-size: 14px;
+  opacity: 0.6;
+}
+
+.fd-search-input {
+  border: none;
+  outline: none;
+  background: transparent;
+  font-size: 13px;
+  width: 100%;
+  font-family: var(--fd-font-primary);
+}
+
+/* Картки */
+.fd-card {
+  background: var(--fd-bg-light);
+  border-radius: var(--fd-radius-md);
+  border: 1px solid var(--fd-border-light);
+  overflow: hidden;
+  transition: box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+.fd-card:hover {
+  box-shadow: var(--fd-shadow-md);
+  transform: translateY(-2px);
+}
+
+.fd-card-white {
+  background: var(--fd-bg-white);
+  border-radius: var(--fd-radius-md);
+  padding: 22px 26px 28px;
+  box-shadow: var(--fd-shadow-sm);
+}
+
+/* Лейбли */
+.fd-label {
+  display: block;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--fd-text-disabled);
+  margin-bottom: 4px;
+}
+
+/* Розділювачі */
+.fd-divider {
+  height: 1px;
+  background: #f0f0f0;
+  margin: 10px 0;
+}
+
+/* Порожні стани */
+.fd-empty {
+  text-align: center;
+  color: var(--fd-text-light);
+  padding: 40px 20px;
+}
+
+.fd-empty-icon {
+  font-size: 48px;
+  margin-bottom: 16px;
+  opacity: 0.5;
+}
+
+.fd-empty-title {
+  font-size: 16px;
+  font-weight: 500;
+  margin-bottom: 8px;
+  color: var(--fd-text-secondary);
+}
+
+.fd-empty-text {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--fd-text-light);
+}
+
+/* Header */
+.fd-header {
+  background: var(--fd-bg-white);
+  border-bottom: 1px solid var(--fd-border-light);
+  padding: 16px 32px;
+  box-shadow: var(--fd-shadow-sm);
+}
+
+/* Side Panel */
+.fd-side-panel {
+  background: var(--fd-bg-white);
+  border-left: 1px solid var(--fd-border-light);
+  box-shadow: var(--fd-shadow-md);
+}
+
+.fd-side-header {
+  padding: 22px 22px 10px;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.fd-side-title {
+  font-size: 16px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  margin: 0;
+}
+
+/* Бейджи доступності */
+.fd-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border-radius: var(--fd-radius-lg);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.fd-badge-success {
+  background: #e8f5e9;
+  color: #2e7d32;
+}
+
+.fd-badge-warning {
+  background: #fff3e0;
+  color: #ef6c00;
+}
+
+.fd-badge-error {
+  background: #ffebee;
+  color: #c62828;
+}
+
+.fd-badge-info {
+  background: #e3f2fd;
+  color: #1565c0;
+}
+
+/* Ціна */
+.fd-price {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--fd-text-primary);
+}
+
+.fd-price-large {
+  font-size: 18px;
+  font-weight: 600;
+}
+
+/* Адаптив */
+@media (max-width: 1024px) {
+  .fd-card-white {
+    padding: 18px 20px;
+  }
+}
+
+@media (max-width: 768px) {
+  .fd-header {
+    padding: 12px 16px;
+  }
+  
+  .fd-card-white {
+    padding: 16px;
+  }
+}

@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8" />
+  <title>Додаток № {{ meta.annex_number }} до договору № {{ agreement.contract_number }}</title>
+  <style>
+    {% include "_partials/base.css" %}
+  </style>
+</head>
+<body>
+{% if meta.watermark_text %}<div class="watermark">{{ meta.watermark_text }}</div>{% endif %}
+<div class="page">
+  {% include "_partials/header.html" %}
+
+  <h1>Додаток № {{ meta.annex_seq or "___" }}<br/>до договору оренди майна № {{ agreement.contract_number }} від «{{ agreement.contract_day or "___" }}» {{ agreement.contract_month or "____________" }} {{ agreement.contract_year or "202_" }} р.</h1>
+
+  <p class="row">
+    <span>м. Київ</span>
+    <span>«{{ meta.doc_day or "___" }}» {{ meta.doc_month or "____________" }} {{ meta.doc_year or "202_" }} р.</span>
+  </p>
+
+  <p class="indent">
+    <b>{{ landlord.name }}</b>, надалі іменується «Орендодавець», з однієї сторони та
+    <b>{{ tenant.legal_name }}</b>, надалі іменується «Орендар», в особі <b>{{ tenant.signer_role or "" }} {{ tenant.signer_name or "_____________________" }}</b>,
+    з другої сторони, разом іменовані «Сторони», склали даний Додаток про наступне:
+  </p>
+
+  <p class="indent">
+    Відповідно до умов договору оренди майна (надалі – «Договір»), Орендодавець зобов'язується передати в користування,
+    а Орендар прийняти наступне майно:
+  </p>
+
+  <table class="table">
+    <thead>
+      <tr>
+        <th style="width:35px;">№</th>
+        <th>Найменування Майна</th>
+        <th style="width:55px;">К-ть</th>
+        <th style="width:100px;">Вартість оренди, грн</th>
+        <th style="width:90px;">Вид пакування</th>
+        <th style="width:70px;">К-ть днів</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% if items and items|length > 0 %}
+        {% for it in items %}
+        <tr>
+          <td>{{ loop.index }}</td>
+          <td>{{ it.name }}</td>
+          <td>{{ it.qty }}</td>
+          <td>{{ it.rent_price_total or it.total_rental or "" }}</td>
+          <td>{{ it.packaging_type or "" }}</td>
+          <td>{{ it.days or order.days or "" }}</td>
+        </tr>
+        {% endfor %}
+      {% else %}
+        <tr><td colspan="6" class="muted center">Немає позицій</td></tr>
+      {% endif %}
+      <tr style="font-weight: bold;">
+        <td colspan="3">ВСЬОГО</td>
+        <td colspan="3">{{ totals.rent_total }} грн</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <p class="indent">
+    Строк на який Майно передається Орендарю в користування (строк оренди), складає: <b>{{ order.days or "___" }}</b> доби, а саме:
+    з «<b>{{ order.issue_date or "____" }}</b>» до «<b>{{ order.return_date or "____" }}</b>».
+  </p>
+  
+  <p class="indent">Отримання Майна в оренду здійснюється Орендарем не пізніше <b>{{ manual_fields.pickup_time or order.pickup_time or "17:00" }}</b> «{{ order.issue_date or "____" }}».</p>
+  <p class="indent">Орендар зобов'язаний повернути Майно з оренди не пізніше <b>{{ manual_fields.return_time or "10:00" }}</b> «{{ order.return_date or "____" }}».</p>
+  <p class="indent">Отримання та повернення Майна здійснюються за адресою: <b>{{ order.warehouse_address or "м. Київ, вул. Будіндустрії 4" }}</b>.</p>
+
+  <p class="indent">
+    Розмір орендної плати за цим Додатком за весь період користування Майном становить <b>{{ totals.rent_total or "____________" }}</b> грн. без ПДВ.
+  </p>
+  <p class="indent">
+    Забезпечувальний платіж за цим Додатком становить <b>{{ totals.deposit_security or "____________" }}</b> грн. без ПДВ.
+  </p>
+  <p class="indent">
+    Орендна плата та забезпечувальний платіж у повному обсязі мають бути сплачені Орендарем не пізніше передачі Майна в оренду.
+    Оплата здійснюється в безготівковому порядку на поточний рахунок Орендодавця якщо інший порядок оплати не погоджений Сторонами.
+  </p>
+  
+  <p class="indent">Даний Додаток складено у 2-х екземплярах, що мають однакову юридичну силу для кожної із Сторін.</p>
+
+  <div class="hr"></div>
+  
+  <p class="small">
+    Контактна особа зі сторони орендаря є <b>{{ tenant.contact_person or "_____________________________" }}</b>,
+  </p>
+  <p class="small">
+    канал зв'язку з контактною особою (необхідне відмітити):
+    {% set ch = tenant.contact_channel or "" %}
+    <span class="checkbox">{% if ch == "Telegram" %}☑{% else %}☐{% endif %}</span>Telegram
+    <span class="checkbox">{% if ch == "Viber" %}☑{% else %}☐{% endif %}</span>Viber
+    <span class="checkbox">{% if ch == "WhatsApp" %}☑{% else %}☐{% endif %}</span>WhatsApp
+    <span class="checkbox">{% if ch == "Email" %}☑{% else %}☐{% endif %}</span>E-mail
+    за номером/електронною адресою: <b>{{ tenant.contact_value or "_________________________________" }}</b>
+  </p>
+
+  {% include "_partials/footer_sign.html" %}
+</div>
+</body>
+</html>

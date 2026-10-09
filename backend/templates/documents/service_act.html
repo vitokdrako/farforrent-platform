@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <title>Акт надання послуг № {{ act_number }}</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Times New Roman', Times, serif; font-size: 12pt; color: #000; padding: 20mm 15mm; line-height: 1.5; }
+        
+        .approval-row { display: flex; justify-content: space-between; margin-bottom: 20pt; }
+        .approval-block { width: 45%; }
+        .approval-title { font-weight: bold; font-size: 10pt; margin-bottom: 4pt; }
+        .approval-name { font-size: 10pt; margin-bottom: 12pt; }
+        .approval-signature { border-bottom: 1px solid #000; width: 120pt; display: inline-block; margin-bottom: 4pt; }
+        .approval-printed { font-size: 10pt; }
+        
+        .act-title { font-size: 14pt; font-weight: bold; text-align: center; margin: 16pt 0 4pt; }
+        .act-subtitle { font-size: 12pt; text-align: center; margin-bottom: 16pt; }
+        
+        .body-text { font-size: 11pt; text-align: justify; margin-bottom: 12pt; }
+        
+        .items-table { width: 100%; border-collapse: collapse; margin-bottom: 12pt; }
+        .items-table th { background: #e8e8e8; border: 1px solid #000; padding: 5pt 8pt; font-size: 10pt; font-weight: bold; text-align: center; }
+        .items-table td { border: 1px solid #000; padding: 4pt 8pt; font-size: 11pt; }
+        .items-table .num { text-align: center; width: 30pt; }
+        .items-table .qty { text-align: center; width: 50pt; }
+        .items-table .unit { text-align: center; width: 35pt; }
+        .items-table .price { text-align: right; width: 90pt; }
+        .items-table .amount { text-align: right; width: 90pt; }
+        .items-table .total-row td { border-top: 2px solid #000; font-weight: bold; }
+        
+        .summary { font-size: 11pt; margin-bottom: 6pt; }
+        .summary-text { font-size: 11pt; margin-bottom: 6pt; }
+        .no-claims { font-size: 11pt; margin-bottom: 24pt; }
+        
+        .signatures { display: flex; justify-content: space-between; margin-top: 20pt; page-break-inside: avoid; }
+        .sig-block { width: 46%; font-size: 10pt; }
+        .sig-title { font-weight: bold; margin-bottom: 8pt; font-size: 11pt; }
+        .sig-line { border-bottom: 1px solid #000; width: 150pt; display: inline-block; height: 20pt; }
+        .sig-name { margin-top: 4pt; }
+        .sig-note { font-size: 8pt; color: #555; margin-top: 2pt; }
+        .sig-date { margin-top: 8pt; }
+        .sig-details { margin-top: 8pt; font-size: 9pt; line-height: 1.4; }
+        
+        @media print {
+            body { padding: 10mm; }
+        }
+    </style>
+</head>
+<body>
+    <div class="approval-row">
+        <div class="approval-block">
+            <div class="approval-title">ЗАТВЕРДЖУЮ</div>
+            <div class="approval-name">{{ executor.name }}</div>
+            <div><span class="approval-signature"></span></div>
+            <div class="approval-printed">{{ executor.short_name }}</div>
+        </div>
+        <div class="approval-block" style="text-align:right;">
+            <div class="approval-title">ЗАТВЕРДЖУЮ</div>
+            <div class="approval-name">{{ payer.display_name }}</div>
+            <div><span class="approval-signature"></span></div>
+            <div class="approval-printed">{{ payer_initials }}</div>
+        </div>
+    </div>
+    
+    <div class="act-title">АКТ надання послуг</div>
+    <div class="act-subtitle">№ {{ act_number }} від {{ act_date }}</div>
+    
+    <div class="body-text">
+        Ми, що нижче підписалися, представник Замовника {{ payer.display_name }}, з одного боку, і представник Виконавця {{ executor.name }}, з іншого боку, склали цей акт про те, що на підставі наведених документів:
+    </div>
+    <div class="body-text">
+        <strong>Договір:</strong> {{ contract_name }}
+    </div>
+    <div class="body-text">
+        Виконавцем були виконані наступні роботи (надані такі послуги):
+    </div>
+    
+    <table class="items-table">
+        <thead>
+            <tr>
+                <th class="num">№</th>
+                <th>Найменування робіт, послуг</th>
+                <th class="qty">Кіл-сть</th>
+                <th class="unit">Од.</th>
+                <th class="price">Ціна</th>
+                <th class="amount">Сума</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in items %}
+            <tr>
+                <td class="num">{{ item.num }}</td>
+                <td>{{ item.name }}</td>
+                <td class="qty">{{ item.quantity }}</td>
+                <td class="unit">{{ item.unit }}</td>
+                <td class="price">{{ item.price }}</td>
+                <td class="amount">{{ item.amount }}</td>
+            </tr>
+            {% endfor %}
+            <tr class="total-row">
+                <td colspan="5" style="text-align:right;padding-right:8pt;">Всього:</td>
+                <td class="amount">{{ total_fmt }}</td>
+            </tr>
+        </tbody>
+    </table>
+    
+    <div class="summary">
+        Загальна вартість робіт (послуг) склала {{ total_text }}.
+    </div>
+    <div class="no-claims">
+        Замовник претензій по об'єму, якості та строкам виконання робіт (надання послуг) не має.
+    </div>
+    
+    <div class="signatures">
+        <div class="sig-block">
+            <div class="sig-title">Від Виконавця*</div>
+            <div><span class="sig-line"></span></div>
+            <div class="sig-name">{{ executor.short_name }}</div>
+            <div class="sig-note">* Відповідальний за здійснення господарської операції і правильність її оформлення</div>
+            <div class="sig-date">{{ act_date_short }}</div>
+            <div class="sig-details">
+                {{ executor.name }}<br>
+                код за ДРФО {{ executor.edrpou }},<br>
+                п/р {{ executor.iban }} у банку<br>
+                {{ executor.bank }}
+            </div>
+        </div>
+        <div class="sig-block" style="text-align:right;">
+            <div class="sig-title">Від Замовника</div>
+            <div><span class="sig-line"></span></div>
+            <div class="sig-name">{{ payer_initials }}</div>
+            <div class="sig-date" style="margin-top:24pt;">{{ act_date_short }}</div>
+            <div class="sig-details">
+                {{ payer.display_name }},<br>
+                код за ДРФО {{ payer.edrpou }}
+                {% if payer.iban %}<br>п/р {{ payer.iban }}{% endif %}
+            </div>
+        </div>
+    </div>
+</body>
+</html>

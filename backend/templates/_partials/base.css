@@ -1,0 +1,125 @@
+@page { size: A4; margin: 15mm; }
+
+body { font-family: Arial, sans-serif; font-size: 12px; color: #111; }
+h1,h2,h3 { margin: 0 0 10px 0; }
+h1 { font-size: 16px; text-align: center; }
+h2 { font-size: 14px; margin-top: 16px; }
+p { margin: 6px 0; line-height: 1.4; text-align: justify; }
+
+.hr { height: 1px; background: #ddd; margin: 12px 0; }
+
+.small { font-size: 11px; color: #333; }
+.muted { color: #666; }
+
+.row { display: flex; justify-content: space-between; gap: 12px; }
+.col { flex: 1; }
+
+.table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+.table th, .table td { border: 1px solid #333; padding: 6px; vertical-align: top; text-align: left; }
+.table th { background: #f6f6f6; font-weight: 700; }
+
+.sign-grid { margin-top: 24px; display: flex; justify-content: space-between; gap: 20px; }
+.sign-box { flex: 1; padding-top: 8px; }
+.sign-label { font-size: 11px; color: #333; margin-bottom: 4px; font-weight: bold; }
+.sign-line { border-bottom: 1px solid #333; min-height: 50px; margin: 8px 0; }
+
+.badge { display: inline-block; padding: 2px 8px; border-radius: 4px; background: #f2f2f2; font-size: 11px; }
+.badge-ok { background: #e8f7ee; color: #1a7f37; }
+.badge-warn { background: #fff4e5; color: #9a6700; }
+.badge-draft { background: #fff3cd; color: #856404; }
+.badge-signed { background: #d4edda; color: #155724; }
+
+.watermark {
+  position: fixed;
+  top: 40%;
+  left: 50%;
+  transform: translate(-50%,-50%) rotate(-30deg);
+  font-size: 80px;
+  opacity: 0.08;
+  letter-spacing: 10px;
+  z-index: 0;
+  pointer-events: none;
+  white-space: nowrap;
+  font-weight: bold;
+  color: #666;
+}
+
+.page { position: relative; z-index: 1; }
+.checkbox { display: inline-block; width: 16px; text-align: center; margin-right: 4px; }
+
+.center { text-align: center; }
+.bold { font-weight: bold; }
+
+.indent { text-indent: 30px; }
+
+.section-title { 
+  font-weight: bold; 
+  margin-top: 14px; 
+  margin-bottom: 6px;
+}
+
+.signature-image {
+  max-height: 60px;
+  max-width: 200px;
+}
+
+/* ============================================================
+   PRINT STYLES - A4, proper margins, page breaks
+   ============================================================ */
+@media print {
+  @page {
+    size: A4;
+    margin: 15mm 12mm;
+  }
+  
+  body {
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+  
+  .page {
+    width: 100%;
+    max-width: none;
+  }
+  
+  /* Hide print button in print mode */
+  .no-print {
+    display: none !important;
+  }
+  
+  /* Ensure tables don't break mid-row */
+  .table tr {
+    page-break-inside: avoid;
+  }
+  
+  /* Section breaks */
+  .page-break-before {
+    page-break-before: always;
+  }
+  
+  .page-break-after {
+    page-break-after: always;
+  }
+  
+  /* Keep signatures on same page */
+  .sign-grid {
+    page-break-inside: avoid;
+  }
+  
+  /* Watermark visibility in print */
+  .watermark {
+    opacity: 0.05;
+  }
+  
+  /* Print header/footer */
+  .print-header {
+    position: running(header);
+  }
+  
+  .print-footer {
+    position: running(footer);
+    font-size: 9px;
+    color: #999;
+    text-align: center;
+  }
+}

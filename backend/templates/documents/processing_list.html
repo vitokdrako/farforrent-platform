@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="uk">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>{{ title }}{% if batch %} — {{ batch.number }}{% endif %}</title>
+  <style>
+    :root{--ink:#111827;--muted:#6B7280;--line:#E5E7EB;--soft:#F3F4F6;--paper:#FFFFFF}
+    *{box-sizing:border-box}
+    html,body{margin:0;padding:0;background:#f6f7fb;color:var(--ink);font:14px/1.35 -apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,Arial,sans-serif}
+    .page{width:210mm;min-height:297mm;margin:12mm auto;background:var(--paper);border:1px solid var(--line);border-radius:14px;box-shadow:0 10px 30px rgba(15,23,42,.08);overflow:hidden}
+    .pad{padding:18mm}
+    .topbar{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;padding:14mm 18mm 12mm 18mm;border-bottom:1px solid var(--line);background:linear-gradient(180deg,#f8f9fa,#f3f4f6)}
+    .brand{display:flex;align-items:flex-start;gap:14px}
+    .logo{width:60px;height:60px;flex:none}
+    .logo img{width:100%;height:100%;object-fit:contain}
+    .brand-info{display:flex;flex-direction:column;gap:2px}
+    .brand h1{margin:0;font-size:18px;letter-spacing:.2px;color:var(--ink);font-weight:800}
+    .brand .address{color:var(--muted);font-size:11px;line-height:1.4}
+    .brand .contacts{color:var(--muted);font-size:11px;line-height:1.4}
+    .brand .contacts a{color:var(--muted);text-decoration:none}
+    .docmeta{min-width:240px;text-align:right}
+    .docmeta .title{font-size:22px;font-weight:800;margin:0;color:var(--ink)}
+    .docmeta .row{margin-top:6px;color:var(--muted);font-size:12px}
+    .docmeta .pill{display:inline-block;margin-top:10px;padding:6px 12px;border-radius:999px;background:var(--soft);border:1px solid var(--line);color:var(--ink);font-size:11px;font-weight:600}
+    .grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px}
+    .card{border:1px solid var(--line);border-radius:12px;padding:14px 16px;background:#fff}
+    .card h3{margin:0 0 10px 0;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;font-weight:700}
+    .kv{display:grid;grid-template-columns:100px 1fr;gap:6px 10px}
+    .k{color:var(--muted);font-size:13px}
+    .v{color:var(--ink);font-weight:600;font-size:13px}
+    .sectionTitle{margin:20px 0 12px 0;font-size:13px;font-weight:800;letter-spacing:.02em;color:var(--ink)}
+    table{width:100%;border-collapse:separate;border-spacing:0}
+    thead th{position:sticky;top:0;background:#f8f9fa;color:var(--ink);font-size:11px;font-weight:700;padding:12px 10px;text-align:left;border-bottom:2px solid var(--line);text-transform:uppercase;letter-spacing:.05em}
+    thead th:first-child{border-top-left-radius:10px}
+    thead th:last-child{border-top-right-radius:10px}
+    tbody td{padding:12px 10px;border-bottom:1px solid var(--line);vertical-align:middle}
+    tbody tr:last-child td{border-bottom:none}
+    .thumb{width:40px;height:40px;border-radius:8px;border:1px solid var(--line);background:#fff;object-fit:cover;display:block}
+    .name{font-weight:700;margin:0;font-size:13px}
+    .mono{font-variant-numeric:tabular-nums;font-feature-settings:"tnum" 1}
+    .center{text-align:center}
+    .sku{display:inline-block;padding:4px 8px;border-radius:6px;border:1px solid var(--line);background:var(--soft);font-weight:700;font-size:11px}
+    .dmg-badge{display:inline-block;padding:3px 10px;border-radius:6px;background:#FEF3C7;color:#92400E;font-size:11px;font-weight:600}
+    .check-box{width:22px;height:22px;border:2px solid #9CA3AF;border-radius:4px;display:inline-block}
+    .summaryBox{border:1px solid var(--line);border-radius:14px;padding:16px;background:linear-gradient(180deg,#ffffff,#fafafa);margin-top:20px}
+    .summaryBox h3{margin:0 0 12px 0;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;font-weight:800}
+    .srow{display:flex;justify-content:space-between;gap:12px;padding:6px 0}
+    .srow .label{color:var(--muted);font-size:13px}
+    .srow .val{font-weight:700;font-size:13px}
+    .signatures{margin-top:30px;display:grid;grid-template-columns:1fr 1fr;gap:30px;page-break-inside:avoid}
+    .sig-block{padding:10px 0}
+    .sig-title{font-weight:800;font-size:12px;color:var(--ink);margin-bottom:16px}
+    .sig-line{border-bottom:1px solid var(--ink);height:1px;margin-bottom:4px}
+    .sig-label{font-size:10px;color:var(--muted)}
+    footer{padding:10mm 18mm 14mm 18mm;border-top:1px solid var(--line);color:var(--muted);font-size:10px;display:flex;justify-content:space-between;gap:12px;background:#fff}
+    footer a{color:var(--muted);text-decoration:none}
+    @page{size:A4;margin:10mm}
+    @media print{body{background:#fff}.page{margin:0;border:none;border-radius:0;box-shadow:none}thead{display:table-header-group}}
+  </style>
+</head>
+<body>
+  <div class="page">
+    <div class="topbar">
+      <div class="brand">
+        <div class="logo">
+          <img src="https://customer-assets.emergentagent.com/job_docgen-hub-8/artifacts/qoruqs09_logo%20%281%29.svg" alt="FarforDecorOrenda" />
+        </div>
+        <div class="brand-info">
+          <h1>FarforDecorOrenda</h1>
+          <div class="address">м. Київ, вул. Будіндустрії, 4</div>
+          <div class="contacts">
+            Тел: (097) 123 09 93, (093) 375 09 40<br/>
+            <a href="mailto:info@farforrent.com.ua">info@farforrent.com.ua</a>
+          </div>
+        </div>
+      </div>
+      <div class="docmeta">
+        <p class="title">{{ title }}</p>
+        <div class="row">{{ generated_at }}</div>
+        {% if batch %}
+        <div class="pill">{{ batch.number }}</div>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="pad">
+      {% if batch %}
+      <div class="grid2">
+        <div class="card">
+          <h3>Деталі партії</h3>
+          <div class="kv">
+            <div class="k">Компанія</div><div class="v">{{ batch.company }}</div>
+            <div class="k">Тип</div><div class="v">{{ batch.batch_type }}</div>
+            <div class="k">Статус</div><div class="v">{{ batch.status }}</div>
+            <div class="k">Дата відправки</div><div class="v mono">{{ batch.sent_date }}</div>
+          </div>
+        </div>
+        <div class="card">
+          <h3>Кількість</h3>
+          <div class="kv">
+            <div class="k">Позицій</div><div class="v mono">{{ items|length }}</div>
+            <div class="k">Одиниць</div><div class="v mono">{{ total_qty }}</div>
+            <div class="k">Повернуто</div><div class="v mono">{{ total_returned }}</div>
+            <div class="k">Створив</div><div class="v">{{ batch.created_by }}</div>
+          </div>
+        </div>
+      </div>
+      {% endif %}
+
+      <div class="sectionTitle">Перелік позицій</div>
+      <table>
+        <thead>
+          <tr>
+            <th style="width:44px">Фото</th>
+            <th style="width:70px">Артикул</th>
+            <th>Найменування</th>
+            <th style="width:100px">Тип</th>
+            <th style="width:36px" class="center">Шт</th>
+            {% if batch %}
+            <th style="width:36px" class="center">Пов.</th>
+            {% endif %}
+            <th style="width:60px">Зам.</th>
+            <th style="width:70px">Хто</th>
+            <th style="width:28px" class="center">V</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for item in items %}
+          <tr>
+            <td>
+              {% if item.image_url %}
+              <img class="thumb" src="{{ item.image_url }}" alt="" style="width:40px;height:40px" />
+              {% else %}
+              <div class="thumb" style="width:40px;height:40px;display:flex;align-items:center;justify-content:center;color:#9CA3AF;font-weight:700;">—</div>
+              {% endif %}
+            </td>
+            <td><span class="sku mono">{{ item.sku }}</span></td>
+            <td>
+              <div class="name">{{ item.name }}</div>
+              {% if item.note or item.notes %}<div style="font-size:10px;color:var(--muted);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:200px">{{ item.note or item.notes }}</div>{% endif %}
+            </td>
+            <td><span class="dmg-badge" style="font-size:10px;padding:2px 6px">{{ item.damage_type }}</span></td>
+            <td class="center mono" style="font-weight:800">{{ item.qty or item.quantity }}</td>
+            {% if batch %}
+            <td class="center mono">{{ item.returned_qty }}</td>
+            {% endif %}
+            <td class="mono" style="font-size:11px">{{ item.order_number }}</td>
+            <td style="font-size:11px">{{ item.created_by or item.sent_by or "—" }}</td>
+            <td class="center"><div class="check-box" style="width:18px;height:18px"></div></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+
+      <div class="summaryBox" style="max-width:300px">
+        <h3>Підсумок</h3>
+        <div class="srow">
+          <div class="label">Позицій</div>
+          <div class="val mono">{{ items|length }}</div>
+        </div>
+        <div class="srow">
+          <div class="label">Одиниць</div>
+          <div class="val mono">{{ total_qty }}</div>
+        </div>
+        {% if batch %}
+        <div class="srow">
+          <div class="label">Повернуто</div>
+          <div class="val mono">{{ total_returned }}</div>
+        </div>
+        {% endif %}
+      </div>
+
+      <div class="signatures">
+        <div class="sig-block">
+          <div class="sig-title">Передав:</div>
+          <div class="sig-line"></div>
+          <div class="sig-label">підпис / ПІБ</div>
+        </div>
+        <div class="sig-block">
+          <div class="sig-title">Прийняв:</div>
+          <div class="sig-line"></div>
+          <div class="sig-label">підпис / ПІБ</div>
+        </div>
+      </div>
+    </div>
+
+    <footer>
+      <div>FarforDecorOrenda · м. Київ, вул. Будіндустрії, 4</div>
+      <div style="text-align:right">RentalHub · <span class="mono">{{ generated_at }}</span></div>
+    </footer>
+  </div>
+</body>
+</html>

@@ -1,0 +1,28 @@
+<div class="sign-grid">
+  <div class="sign-box">
+    <div class="sign-label">За Орендодавця:</div>
+    <div class="sign-line">
+      {% if signatures and signatures.landlord and signatures.landlord.signed and signatures.landlord.image_url %}
+        <img src="{{ signatures.landlord.image_url }}" alt="Підпис орендодавця" class="signature-image"/>
+      {% endif %}
+    </div>
+    <div class="small">__________________ / {{ landlord.signer_name or landlord.name }} /</div>
+    {% if signatures and signatures.landlord and signatures.landlord.signed_at %}
+      <div class="small muted">Підписано: {{ signatures.landlord.signed_at }}</div>
+    {% endif %}
+  </div>
+
+  <div class="sign-box">
+    <div class="sign-label">За Орендаря:</div>
+    <div class="sign-line">
+      {% if signatures and signatures.tenant and signatures.tenant.signed and signatures.tenant.image_url %}
+        <img src="{{ signatures.tenant.image_url }}" alt="Підпис орендаря" class="signature-image"/>
+      {% endif %}
+    </div>
+    <div class="small">__________________ / {{ tenant.signer_name or tenant.legal_name or "" }} /</div>
+    {% if tenant.signer_role %}<div class="small muted">{{ tenant.signer_role }}</div>{% endif %}
+    {% if signatures and signatures.tenant and signatures.tenant.signed_at %}
+      <div class="small muted">Підписано: {{ signatures.tenant.signed_at }}</div>
+    {% endif %}
+  </div>
+</div>

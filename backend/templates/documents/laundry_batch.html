@@ -1,0 +1,448 @@
+<!doctype html>
+<html lang="uk">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>{{ batch_type_name }} — {{ batch.batch_number }}</title>
+  <style>
+    :root{
+      --ink:#111827;
+      --muted:#6B7280;
+      --line:#E5E7EB;
+      --soft:#F3F4F6;
+      --paper:#FFFFFF;
+      --accent:#0F172A;
+      --good:#16A34A;
+      --warn:#B45309;
+      --washing:#0891b2;
+      --laundry:#9333ea;
+    }
+    *{box-sizing:border-box}
+    html,body{margin:0;padding:0;background:#f6f7fb;color:var(--ink);font:14px/1.35 -apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,Arial,sans-serif}
+    .page{
+      width:210mm;
+      min-height:297mm;
+      margin:12mm auto;
+      background:var(--paper);
+      border:1px solid var(--line);
+      border-radius:14px;
+      box-shadow:0 10px 30px rgba(15,23,42,.08);
+      overflow:hidden;
+    }
+    .pad{padding:18mm}
+    .topbar{
+      display:flex;align-items:flex-start;justify-content:space-between;gap:16px;
+      padding:14mm 18mm 12mm 18mm;
+      border-bottom:1px solid var(--line);
+      background:linear-gradient(180deg, #f8f9fa, #f3f4f6);
+    }
+    .brand{display:flex;align-items:flex-start;gap:14px}
+    .logo{
+      width:60px;
+      height:60px;
+      flex:none;
+    }
+    .logo img{
+      width:100%;
+      height:100%;
+      object-fit:contain;
+    }
+    .brand-info{display:flex;flex-direction:column;gap:2px}
+    .brand h1{margin:0;font-size:18px;letter-spacing:.2px;color:var(--ink);font-weight:800}
+    .brand .address{color:var(--muted);font-size:11px;line-height:1.4}
+    .brand .contacts{color:var(--muted);font-size:11px;line-height:1.4}
+    .brand .contacts a{color:var(--muted);text-decoration:none}
+    .docmeta{min-width:240px;text-align:right}
+    .docmeta .title{font-size:22px;font-weight:800;margin:0;color:var(--ink)}
+    .docmeta .row{margin-top:6px;color:var(--muted);font-size:12px}
+    .docmeta .pill{
+      display:inline-block;margin-top:10px;
+      padding:6px 12px;border-radius:999px;
+      background:var(--soft);border:1px solid var(--line);
+      color:var(--ink);font-size:11px;font-weight:600;
+    }
+    .docmeta .pill.washing{background:#ecfeff;border-color:#a5f3fc;color:#0e7490}
+    .docmeta .pill.laundry{background:#faf5ff;border-color:#e9d5ff;color:#7e22ce}
+    .docmeta .pill.sent{background:#fef3c7;border-color:#fcd34d;color:#92400e}
+    .docmeta .pill.partial{background:#ffedd5;border-color:#fed7aa;color:#c2410c}
+    .docmeta .pill.completed{background:#dcfce7;border-color:#86efac;color:#166534}
+    
+    .grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px}
+    .card{
+      border:1px solid var(--line);
+      border-radius:12px;
+      padding:14px 16px;
+      background:#fff;
+    }
+    .card h3{
+      margin:0 0 10px 0;
+      font-size:11px;
+      color:var(--muted);
+      text-transform:uppercase;
+      letter-spacing:.1em;
+      font-weight:700;
+    }
+    .kv{display:grid;grid-template-columns:120px 1fr;gap:6px 10px}
+    .k{color:var(--muted);font-size:13px}
+    .v{color:var(--ink);font-weight:600;word-break:break-word;font-size:13px}
+    .v.normal{font-weight:500}
+
+    .sectionTitle{
+      margin:20px 0 12px 0;
+      font-size:13px;
+      font-weight:800;
+      letter-spacing:.02em;
+      color:var(--ink);
+    }
+
+    table{width:100%;border-collapse:separate;border-spacing:0}
+    thead th{
+      position:sticky;top:0;
+      background:#f8f9fa;
+      color:var(--ink);
+      font-size:11px;
+      font-weight:700;
+      padding:12px 10px;
+      text-align:left;
+      border-bottom:2px solid var(--line);
+      text-transform:uppercase;
+      letter-spacing:.05em;
+    }
+    thead th:first-child{border-top-left-radius:10px}
+    thead th:last-child{border-top-right-radius:10px}
+    tbody td{
+      padding:12px 10px;
+      border-bottom:1px solid var(--line);
+      vertical-align:middle;
+    }
+    tbody tr:last-child td{border-bottom:none}
+    .thumb{
+      width:50px;height:50px;border-radius:8px;
+      border:1px solid var(--line);
+      background:#fff;
+      object-fit:cover;
+      display:block;
+    }
+    .name{
+      font-weight:700;
+      margin:0;
+      font-size:13px;
+    }
+    .subrow{
+      color:var(--muted);
+      font-size:11px;
+      margin-top:2px;
+    }
+    .mono{font-variant-numeric:tabular-nums; font-feature-settings:"tnum" 1}
+    .right{text-align:right}
+    .center{text-align:center}
+    .nowrap{white-space:nowrap}
+    .sku{
+      display:inline-block;
+      padding:4px 8px;
+      border-radius:6px;
+      border:1px solid var(--line);
+      background:var(--soft);
+      font-weight:700;
+      font-size:11px;
+    }
+    
+    .checkbox{
+      width:20px;height:20px;
+      border:2px solid var(--line);
+      border-radius:4px;
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      background:#fff;
+    }
+    .checkbox.checked{
+      background:var(--good);
+      border-color:var(--good);
+      color:#fff;
+    }
+    .checkbox.checked::after{
+      content:'✓';
+      font-size:12px;
+      font-weight:700;
+    }
+
+    .bottomRow{
+      margin-top:16px;
+      display:grid;
+      grid-template-columns: 1fr 300px;
+      gap:14px;
+      align-items:start;
+    }
+    .signatureArea{
+      border:1px dashed var(--line);
+      border-radius:12px;
+      padding:20px 16px;
+      background:#fff;
+    }
+    .signatureArea h4{
+      margin:0 0 20px 0;
+      font-size:11px;
+      color:var(--muted);
+      text-transform:uppercase;
+      letter-spacing:.1em;
+      font-weight:700;
+    }
+    .sigGrid{
+      display:grid;
+      grid-template-columns:1fr 1fr;
+      gap:30px;
+    }
+    .sigBox{
+      border-top:1px solid var(--ink);
+      padding-top:8px;
+      text-align:center;
+    }
+    .sigBox .label{font-size:11px;color:var(--muted)}
+    .sigBox .name{font-size:12px;color:var(--ink);font-weight:600;margin-top:4px}
+    
+    .totals{
+      border:1px solid var(--line);
+      border-radius:14px;
+      padding:16px;
+      background:linear-gradient(180deg,#ffffff,#fafafa);
+    }
+    .totals h3{
+      margin:0 0 12px 0;
+      font-size:11px;
+      color:var(--muted);
+      text-transform:uppercase;
+      letter-spacing:.1em;
+      font-weight:800;
+    }
+    .trow{display:flex;justify-content:space-between;gap:12px;padding:6px 0}
+    .trow .label{color:var(--muted);font-size:13px}
+    .trow .val{font-weight:700;font-size:13px}
+    .divider{height:1px;background:var(--line);margin:10px 0}
+    .grand{
+      display:flex;justify-content:space-between;align-items:baseline;
+      padding-top:8px;
+    }
+    .grand .label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;font-weight:900}
+    .grand .val{font-size:20px;font-weight:900;color:var(--ink)}
+    .grand .val.good{color:var(--good)}
+    .grand .val.warn{color:var(--warn)}
+
+    footer{
+      padding:10mm 18mm 14mm 18mm;
+      border-top:1px solid var(--line);
+      color:var(--muted);
+      font-size:10px;
+      display:flex;justify-content:space-between;gap:12px;
+      background:#fff;
+    }
+    footer a{color:var(--muted);text-decoration:none}
+    
+    .no-print{display:block}
+    .printBtn{
+      position:fixed;
+      top:20px;
+      right:20px;
+      padding:12px 24px;
+      background:var(--ink);
+      color:#fff;
+      border:none;
+      border-radius:10px;
+      font-size:14px;
+      font-weight:600;
+      cursor:pointer;
+      box-shadow:0 4px 12px rgba(0,0,0,.15);
+      z-index:1000;
+      display:flex;
+      align-items:center;
+      gap:8px;
+    }
+    .printBtn:hover{background:#374151}
+
+    /* Print */
+    @page { size: A4; margin: 10mm; }
+    @media print{
+      body{background:#fff}
+      .page{margin:0;border:none;border-radius:0;box-shadow:none}
+      thead{display:table-header-group;}
+      .docmeta .pill{border:1px solid #ddd}
+      .no-print{display:none !important}
+    }
+  </style>
+</head>
+<body>
+  <button class="printBtn no-print" onclick="window.print()">
+    <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M6 9V2h12v7M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2M6 14h12v8H6v-8z"/></svg>
+    Друкувати
+  </button>
+
+  <div class="page">
+    <div class="topbar">
+      <div class="brand">
+        <div class="logo">
+          <img src="https://customer-assets.emergentagent.com/job_docgen-hub-8/artifacts/qoruqs09_logo%20%281%29.svg" alt="FarforDecorOrenda" />
+        </div>
+        <div class="brand-info">
+          <h1>FarforDecorOrenda</h1>
+          <div class="address">м. Київ, вул. Будіндустрії, 4</div>
+          <div class="contacts">
+            Тел: (097) 123 09 93, (093) 375 09 40<br/>
+            <a href="mailto:info@farforrent.com.ua">info@farforrent.com.ua</a> • 
+            <a href="http://www.farforrent.com.ua">www.farforrent.com.ua</a>
+          </div>
+        </div>
+      </div>
+
+      <div class="docmeta">
+        <p class="title">Акт передачі</p>
+        <div class="row">№ <strong class="mono">{{ batch.batch_number }}</strong></div>
+        <div class="row">Від: <strong class="mono">{{ batch.sent_date }}</strong></div>
+
+        <div class="pill {{ 'washing' if batch.batch_type == 'washing' else 'laundry' }}">
+          {{ batch_type_name }}
+        </div>
+        
+        <div class="pill {% if batch.status == 'completed' %}completed{% elif batch.status == 'partial_return' %}partial{% else %}sent{% endif %}">
+          {% if batch.status == 'sent' %}Відправлено
+          {% elif batch.status == 'partial_return' %}Частково повернено
+          {% elif batch.status == 'completed' %}Завершено
+          {% else %}{{ batch.status }}{% endif %}
+        </div>
+      </div>
+    </div>
+
+    <div class="pad">
+      <div class="grid2">
+        <div class="card">
+          <h3>Інформація про партію</h3>
+          <div class="kv">
+            <div class="k">Виконавець</div><div class="v">{{ batch.laundry_company }}</div>
+            <div class="k">Дата відправки</div><div class="v normal mono">{{ batch.sent_date }}</div>
+            <div class="k">Очікув. поверн.</div><div class="v normal mono">{{ batch.expected_return_date or "—" }}</div>
+            <div class="k">Складність</div>
+            <div class="v normal">
+              {% if batch.complexity == 'light' %}Легка
+              {% elif batch.complexity == 'heavy' %}Важка
+              {% else %}Звичайна{% endif %}
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>Статистика</h3>
+          <div class="kv">
+            <div class="k">Всього позицій</div><div class="v mono">{{ items|length }}</div>
+            <div class="k">Всього одиниць</div><div class="v mono">{{ batch.total_items }} шт</div>
+            <div class="k">Повернуто</div><div class="v mono" style="color:var(--good)">{{ batch.returned_items or 0 }} шт</div>
+            <div class="k">Залишилось</div><div class="v mono" style="color:var(--warn)">{{ batch.total_items - (batch.returned_items or 0) }} шт</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="sectionTitle">Перелік товарів</div>
+
+      <table>
+        <thead>
+          <tr>
+            <th style="width:60px">Фото</th>
+            <th style="width:90px">Артикул</th>
+            <th>Найменування</th>
+            <th style="width:70px" class="center">К-сть</th>
+            <th style="width:90px" class="center">Повернуто</th>
+            <th style="width:50px" class="center">✓</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for item in items %}
+            <tr>
+              <td>
+                {% if item.image_url %}
+                  <img class="thumb" src="{{ item.image_url }}" alt="Фото" />
+                {% else %}
+                  <div class="thumb" style="display:flex;align-items:center;justify-content:center;color:#9CA3AF;font-weight:700;">—</div>
+                {% endif %}
+              </td>
+
+              <td>
+                <span class="sku mono">{{ item.sku or "—" }}</span>
+              </td>
+
+              <td>
+                <div class="name">{{ item.product_name }}</div>
+                {% if item.notes %}
+                  <div class="subrow">{{ item.notes }}</div>
+                {% endif %}
+                {% if item.order_number %}
+                  <div class="subrow">Замовлення: #{{ item.order_number }}</div>
+                {% endif %}
+              </td>
+
+              <td class="center mono">{{ item.quantity }}</td>
+
+              <td class="center mono">
+                <strong>{{ item.returned_quantity or 0 }}</strong> / {{ item.quantity }}
+              </td>
+
+              <td class="center">
+                <span class="checkbox {% if (item.returned_quantity or 0) >= item.quantity %}checked{% endif %}"></span>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+
+      <div class="bottomRow">
+        <div class="signatureArea">
+          <h4>Підписи сторін</h4>
+          <div class="sigGrid">
+            <div class="sigBox">
+              <div class="label">Передав ({{ company_name }})</div>
+              <div class="name">_______________________</div>
+            </div>
+            <div class="sigBox">
+              <div class="label">Прийняв ({{ batch.laundry_company }})</div>
+              <div class="name">_______________________</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="totals">
+          <h3>Підсумок</h3>
+
+          <div class="trow">
+            <div class="label">Всього товарів</div>
+            <div class="val mono">{{ batch.total_items }} шт</div>
+          </div>
+
+          <div class="trow">
+            <div class="label">Повернуто</div>
+            <div class="val mono" style="color:var(--good)">{{ batch.returned_items or 0 }} шт</div>
+          </div>
+
+          <div class="divider"></div>
+
+          <div class="grand">
+            <div class="label">Залишилось</div>
+            {% set remaining = batch.total_items - (batch.returned_items or 0) %}
+            <div class="val mono {% if remaining == 0 %}good{% elif remaining > 0 %}warn{% endif %}">
+              {{ remaining }} шт
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <footer>
+      <div>
+        FarforDecorOrenda • Оренда декору для заходів<br/>
+        м. Київ, вул. Будіндустрії, 4<br/>
+        Тел: (097) 123 09 93 • info@farforrent.com.ua
+      </div>
+      <div style="text-align:right">
+        Документ згенеровано системою RentalHub<br/>
+        <span class="mono">{{ generated_at }}</span>
+      </div>
+    </footer>
+  </div>
+</body>
+</html>

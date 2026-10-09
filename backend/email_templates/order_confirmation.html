@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8" />
+  <title>Підтвердження замовлення №{{order_number}} — FarforRent</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+</head>
+<body style="margin:0;padding:0;background:#f5f5f7;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;">
+  <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="background:#f5f5f7;padding:24px 0;">
+    <tr>
+      <td align="center">
+        <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="max-width:640px;background:#ffffff;border-radius:16px;border:1px solid #e5e7eb;overflow:hidden;">
+          <!-- Header -->
+          <tr>
+            <td style="padding:24px 24px 8px 24px;">
+              <img src="https://farforrent.com.ua/image/catalog/logo.png" alt="FarforRent" style="max-width:180px;height:auto;display:block;margin-bottom:16px;">
+              <div style="font-size:12px;color:#6b7280;text-transform:uppercase;letter-spacing:0.08em;">Підтвердження замовлення</div>
+              <h1 style="margin:4px 0 0 0;font-size:20px;color:#111827;">Нове замовлення • #{{order_number}}</h1>
+            </td>
+          </tr>
+
+          <!-- Greeting -->
+          <tr>
+            <td style="padding:8px 24px 16px 24px;font-size:14px;color:#111827;">
+              <p style="margin:0 0 8px 0;">Вітаємо, {{client_name}} 💐</p>
+              <p style="margin:0;">
+                Ви створили замовлення на оренду декору у FarforRent.
+                Менеджер перевірив деталі та, за потреби, вніс коригування.
+                Будь ласка, уважно перегляньте інформацію нижче та підтвердьте замовлення.
+              </p>
+            </td>
+          </tr>
+
+          <!-- Optional changes block -->
+          {% if changes and changes|length > 0 %}
+          <tr>
+            <td style="padding:0 24px 16px 24px;">
+              <table width="100%" cellpadding="0" cellspacing="0" role="presentation"
+                     style="background:#f9fafb;border-radius:12px;padding:12px 16px;font-size:13px;color:#374151;">
+                <tr>
+                  <td style="font-weight:600;padding-bottom:4px;">Що змінилося в замовленні</td>
+                </tr>
+                {% for change in changes %}
+                <tr>
+                  <td style="padding:2px 0;">
+                    • {{change}}
+                  </td>
+                </tr>
+                {% endfor %}
+              </table>
+            </td>
+          </tr>
+          {% endif %}
+
+          <!-- Order details -->
+          <tr>
+            <td style="padding:0 24px 8px 24px;">
+              <h2 style="margin:0 0 4px 0;font-size:15px;color:#111827;">🗓 Деталі бронювання</h2>
+              <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="font-size:14px;color:#374151;">
+                <tr>
+                  <td style="padding:2px 0;">Статус</td>
+                  <td align="right" style="padding:2px 0;">
+                    <span style="display:inline-block;padding:2px 8px;border-radius:9999px;background:#fef3c7;color:#92400e;font-size:12px;">
+                      Очікує підтвердження клієнта
+                    </span>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding:2px 0;">Клієнт</td>
+                  <td align="right" style="padding:2px 0;">{{client_name}}</td>
+                </tr>
+                <tr>
+                  <td style="padding:2px 0;">Дата видачі</td>
+                  <td align="right" style="padding:2px 0;">{{rent_date}}</td>
+                </tr>
+                <tr>
+                  <td style="padding:2px 0;">Дата повернення</td>
+                  <td align="right" style="padding:2px 0;">{{return_date}}</td>
+                </tr>
+                <tr>
+                  <td style="padding:2px 0;">Кількість діб оренди</td>
+                  <td align="right" style="padding:2px 0;">{{rental_days}}</td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Items -->
+          <tr>
+            <td style="padding:8px 24px 8px 24px;">
+              <h2 style="margin:0 0 4px 0;font-size:15px;color:#111827;">🎀 Обрані позиції</h2>
+              <table width="100%" cellpadding="0" cellspacing="0" role="presentation"
+                     style="font-size:13px;color:#374151;border-collapse:collapse;">
+                <thead>
+                  <tr style="background:#f9fafb;">
+                    <th align="left" style="padding:6px 8px;font-weight:500;">Позиція</th>
+                    <th align="center" style="padding:6px 8px;font-weight:500;">К-сть</th>
+                    <th align="right" style="padding:6px 8px;font-weight:500;">Сума</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for item in items %}
+                  <tr>
+                    <td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;">{{item.name}}</td>
+                    <td align="center" style="padding:6px 8px;border-bottom:1px solid #e5e7eb;">{{item.quantity}}</td>
+                    <td align="right" style="padding:6px 8px;border-bottom:1px solid #e5e7eb;">₴ {{item.total}}</td>
+                  </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Totals -->
+          <tr>
+            <td style="padding:8px 24px 16px 24px;">
+              <h2 style="margin:0 0 4px 0;font-size:15px;color:#111827;">💰 Підсумок</h2>
+              <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="font-size:14px;color:#111827;">
+                <tr>
+                  <td style="padding:2px 0;color:#4b5563;">Оренда</td>
+                  <td align="right" style="padding:2px 0;">₴ {{total_rental}}</td>
+                </tr>
+                <tr>
+                  <td style="padding:2px 0;color:#4b5563;">Застава</td>
+                  <td align="right" style="padding:2px 0;">₴ {{total_deposit}}</td>
+                </tr>
+                {% if prepayment %}
+                <tr>
+                  <td style="padding:2px 0;color:#4b5563;">Рекомендована передплата</td>
+                  <td align="right" style="padding:2px 0;">₴ {{prepayment}}</td>
+                </tr>
+                {% endif %}
+              </table>
+            </td>
+          </tr>
+
+          <!-- CTA button -->
+          <tr>
+            <td align="center" style="padding:8px 24px 4px 24px;">
+              <a href="{{confirmation_link}}"
+                 style="display:inline-block;background:#111827;color:#ffffff;text-decoration:none;
+                        padding:12px 32px;border-radius:9999px;font-size:15px;font-weight:600;">
+                ✅ Підтвердити замовлення
+              </a>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:4px 32px 16px 32px;font-size:12px;color:#6b7280;text-align:center;">
+              Якщо потрібно щось змінити, просто відповідайте на цей лист — менеджер перерахує замовлення та надішле оновлене підтвердження.
+            </td>
+          </tr>
+
+          <!-- Notes -->
+          <tr>
+            <td style="padding:0 24px 16px 24px;font-size:12px;color:#6b7280;">
+              <strong>Важливо:</strong>
+              <ul style="margin:4px 0 0 20px;padding:0;">
+                <li>Бронювання фіксується лише після вашого підтвердження.</li>
+                <li>Застава повертається після своєчасного та належного повернення декору.</li>
+                <li>Повернення після узгодженого часу може спричинити нарахування додаткової доби оренди.</li>
+              </ul>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="padding:16px 24px 20px 24px;background:#f9fafb;font-size:12px;color:#9ca3af;text-align:center;">
+              FarforRent © 2025 • Оренда декору та посуду<br/>
+              <a href="https://farforrent.com.ua" style="color:#6b7280;text-decoration:none;">farforrent.com.ua</a> •
+              <a href="tel:+380971230993" style="color:#6b7280;text-decoration:none;">+38 (097) 123 09 93</a>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>

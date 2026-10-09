@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <title>Договір оренди № {{ contract_number }}</title>
+    <style>
+        @page {
+            size: A4;
+            margin: 20mm 15mm;
+            @top-right {
+                content: "Сторінка " counter(page) " з " counter(pages);
+                font-size: 9pt;
+                color: #666;
+            }
+        }
+        
+        body {
+            font-family: 'DejaVu Sans', Arial, sans-serif;
+            font-size: 11pt;
+            line-height: 1.6;
+            color: #333;
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 25px;
+        }
+        
+        .header h1 {
+            font-size: 14pt;
+            font-weight: bold;
+            margin: 0 0 5px 0;
+        }
+        
+        .header .contract-number {
+            font-size: 12pt;
+            margin-bottom: 10px;
+        }
+        
+        .header .location-date {
+            display: flex;
+            justify-content: space-between;
+            font-size: 11pt;
+            margin-top: 15px;
+        }
+        
+        .parties {
+            margin-bottom: 20px;
+            text-align: justify;
+        }
+        
+        .section {
+            margin-bottom: 15px;
+        }
+        
+        .section-title {
+            font-size: 11pt;
+            font-weight: bold;
+            text-align: center;
+            margin-bottom: 10px;
+        }
+        
+        .section-content {
+            text-align: justify;
+        }
+        
+        .section-content p {
+            margin-bottom: 8px;
+            text-indent: 20px;
+        }
+        
+        .article-num {
+            font-weight: normal;
+        }
+        
+        .signatures {
+            margin-top: 30px;
+            page-break-inside: avoid;
+        }
+        
+        .signatures-title {
+            font-weight: bold;
+            text-align: center;
+            margin-bottom: 15px;
+        }
+        
+        .signature-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        
+        .signature-table td {
+            width: 50%;
+            padding: 10px;
+            vertical-align: top;
+        }
+        
+        .signature-box {
+            border: 1px solid #ccc;
+            padding: 15px;
+            min-height: 180px;
+        }
+        
+        .signature-box .title {
+            font-weight: bold;
+            text-align: center;
+            margin-bottom: 10px;
+            text-decoration: underline;
+        }
+        
+        .signature-line {
+            border-bottom: 1px solid #333;
+            height: 25px;
+            margin: 10px 0 5px 0;
+        }
+        
+        .signature-label {
+            font-size: 9pt;
+            color: #666;
+            text-align: center;
+        }
+        
+        .footer {
+            margin-top: 30px;
+            font-size: 9pt;
+            color: #888;
+            text-align: center;
+        }
+        
+        .status-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 9pt;
+            font-weight: bold;
+        }
+        
+        .status-draft { background: #fff3cd; color: #856404; }
+        .status-signed { background: #d4edda; color: #155724; }
+        
+        .underline-field {
+            border-bottom: 1px solid #333;
+            min-width: 200px;
+            display: inline-block;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>ДОГОВІР ОРЕНДИ</h1>
+        <div class="contract-number">№ {{ contract_number }}</div>
+        {% if status == 'signed' %}
+        <span class="status-badge status-signed">✓ ПІДПИСАНО</span>
+        {% else %}
+        <span class="status-badge status-draft">ЧЕРНЕТКА</span>
+        {% endif %}
+        
+        <div class="location-date">
+            <span>м. Київ</span>
+            <span>{{ contract_date }}</span>
+        </div>
+    </div>
+    
+    <div class="parties">
+        <p>
+            <strong>{{ executor.name }}</strong>, надалі іменується «Орендодавець», 
+            {% if executor.director %}в особі директора {{ executor.director }}, що діє на підставі Статуту, {% endif %}
+            з однієї сторони та
+        </p>
+        <p>
+            <strong>{% if client.payer_type == 'tov' %}{{ client.company_name or client.full_name }}{% else %}{{ client.full_name }}{% endif %}</strong>, 
+            надалі іменується «Орендар»{% if client.payer_type == 'tov' %}, в особі {{ client.director_name or '________________________________' }}, що діє на підставі Статуту{% endif %}, 
+            з іншої сторони, разом іменовані «Сторони», а кожен окремо – «Сторона», уклали цей Договір про наступне:
+        </p>
+    </div>
+    
+    <div class="section">
+        <div class="section-title">1. ПРЕДМЕТ ДОГОВОРУ</div>
+        <div class="section-content">
+            <p><span class="article-num">1.1.</span> Орендодавець зобов'язується за Замовленнями Орендаря надавати у тимчасове платне користування посуд, столові прилади, текстиль, меблі та інше обладнання (далі – «Майно»), а Орендар зобов'язується приймати Майно та своєчасно сплачувати орендну плату.</p>
+            <p><span class="article-num">1.2.</span> Конкретний перелік Майна, терміни та умови оренди визначаються в окремих Додатках (Замовленнях), що є невід'ємною частиною цього Договору.</p>
+            <p><span class="article-num">1.3.</span> Цей Договір є рамковим та встановлює загальні умови співпраці між Сторонами.</p>
+        </div>
+    </div>
+    
+    <div class="section">
+        <div class="section-title">2. ПОРЯДОК ПЕРЕДАЧІ МАЙНА</div>
+        <div class="section-content">
+            <p><span class="article-num">2.1.</span> Передача Майна Орендарю та його повернення Орендодавцю оформлюється Актом прийому-передачі.</p>
+            <p><span class="article-num">2.2.</span> Орендар зобов'язаний перевірити Майно при отриманні. Прийняття Майна без зауважень свідчить про його належний стан.</p>
+            <p><span class="article-num">2.3.</span> Повернення Майна здійснюється у чистому стані, придатному для подальшого використання.</p>
+        </div>
+    </div>
+    
+    <div class="section">
+        <div class="section-title">3. ПРАВА ТА ОБОВ'ЯЗКИ ОРЕНДОДАВЦЯ</div>
+        <div class="section-content">
+            <p><span class="article-num">3.1.</span> Орендодавець зобов'язується:</p>
+            <p style="text-indent: 40px;">- надавати Майно в належному технічному та естетичному стані;</p>
+            <p style="text-indent: 40px;">- здійснювати доставку та вивезення Майна у погоджені терміни;</p>
+            <p style="text-indent: 40px;">- інформувати Орендаря про правила експлуатації Майна.</p>
+            <p><span class="article-num">3.2.</span> Орендодавець має право вимагати повернення Майна після закінчення строку оренди.</p>
+        </div>
+    </div>
+    
+    <div class="section">
+        <div class="section-title">4. ПРАВА ТА ОБОВ'ЯЗКИ ОРЕНДАРЯ</div>
+        <div class="section-content">
+            <p><span class="article-num">4.1.</span> Орендар зобов'язується:</p>
+            <p style="text-indent: 40px;">- своєчасно оплачувати орендну плату;</p>
+            <p style="text-indent: 40px;">- забезпечувати схоронність орендованого Майна;</p>
+            <p style="text-indent: 40px;">- не передавати Майно третім особам без письмової згоди Орендодавця;</p>
+            <p style="text-indent: 40px;">- повернути Майно у стані не гіршому, ніж при отриманні, з урахуванням нормального зносу;</p>
+            <p style="text-indent: 40px;">- негайно повідомляти про пошкодження або втрату Майна.</p>
+            <p><span class="article-num">4.2.</span> Орендар має право використовувати Майно відповідно до його призначення.</p>
+        </div>
+    </div>
+    
+    <div class="section">
+        <div class="section-title">5. ПОРЯДОК РОЗРАХУНКІВ</div>
+        <div class="section-content">
+            <p><span class="article-num">5.1.</span> Вартість оренди визначається у Додатках до цього Договору та/або в рахунках.</p>
+            <p><span class="article-num">5.2.</span> Оплата здійснюється у безготівковій формі на розрахунковий рахунок Орендодавця протягом 3 (трьох) банківських днів з моменту виставлення рахунку, якщо інше не передбачено Замовленням.</p>
+            <p><span class="article-num">5.3.</span> Застава вноситься до початку оренди та повертається після повернення Майна у належному стані.</p>
+        </div>
+    </div>
+    
+    <div class="section">
+        <div class="section-title">6. ВІДПОВІДАЛЬНІСТЬ СТОРІН</div>
+        <div class="section-content">
+            <p><span class="article-num">6.1.</span> У разі пошкодження або втрати Майна Орендар відшкодовує його вартість або вартість ремонту згідно з прейскурантом Орендодавця.</p>
+            <p><span class="article-num">6.2.</span> За порушення строків повернення Майна Орендар сплачує пеню у розмірі 100% від добової вартості оренди за кожен день прострочення.</p>
+            <p><span class="article-num">6.3.</span> Сторони звільняються від відповідальності за невиконання зобов'язань у разі дії форс-мажорних обставин.</p>
+        </div>
+    </div>
+    
+    <div class="section">
+        <div class="section-title">7. КОНФІДЕНЦІЙНІСТЬ</div>
+        <div class="section-content">
+            <p><span class="article-num">7.1.</span> Сторони зобов'язуються не розголошувати комерційну інформацію, отриману в рамках виконання цього Договору.</p>
+        </div>
+    </div>
+    
+    <div class="section">
+        <div class="section-title">8. ВИРІШЕННЯ СПОРІВ</div>
+        <div class="section-content">
+            <p><span class="article-num">8.1.</span> Усі спори вирішуються шляхом переговорів.</p>
+            <p><span class="article-num">8.2.</span> У разі недосягнення згоди спір передається на розгляд суду відповідно до законодавства України.</p>
+        </div>
+    </div>
+    
+    <div class="section">
+        <div class="section-title">9. СТРОК ДОГОВОРУ, УМОВИ ЙОГО ЗМІНИ ТА РОЗІРВАННЯ</div>
+        <div class="section-content">
+            <p><span class="article-num">9.1.</span> Цей Договір набирає чинності з моменту його підписання Сторонами та діє до {{ valid_until }} року.</p>
+            <p><span class="article-num">9.2.</span> Договір може бути пролонгований за взаємною згодою Сторін.</p>
+            <p><span class="article-num">9.3.</span> Кожна зі Сторін може розірвати Договір, повідомивши іншу Сторону не менш ніж за 30 днів.</p>
+            <p><span class="article-num">9.4.</span> Зміни та доповнення до цього Договору оформлюються у вигляді Додатків, що підписуються обома Сторонами.</p>
+        </div>
+    </div>
+    
+    <div class="section">
+        <div class="section-title">10. ІНШІ УМОВИ</div>
+        <div class="section-content">
+            <p><span class="article-num">10.1.</span> Сторони зобов'язуються своєчасно повідомляти одна іншу про зміну місцезнаходження, банківських реквізитів, номерів телефонів.</p>
+            <p><span class="article-num">10.2.</span> Усі додатки та доповнення до цього Договору є його невід'ємними частинами і мають бути укладені у письмовій формі та підписані обома Сторонами.</p>
+            <p><span class="article-num">10.3.</span> Орендодавець є {{ executor.tax_status }}.</p>
+            <p><span class="article-num">10.4.</span> Орендар має статус: <strong>{% if client.payer_type == 'individual' %}фізична особа{% elif client.payer_type == 'fop' or client.payer_type == 'fop_simple' %}ФОП{% elif client.payer_type == 'tov' %}юридична особа (ТОВ){% else %}{{ client.payer_type }}{% endif %}</strong>.</p>
+            <p><span class="article-num">10.5.</span> Договір складено у двох примірниках, що мають однакову юридичну силу, по одному для кожної зі Сторін.</p>
+        </div>
+    </div>
+    
+    <div class="signatures">
+        <div class="signatures-title">11. РЕКВІЗИТИ ТА ПІДПИСИ СТОРІН</div>
+        <table class="signature-table">
+            <tr>
+                <td>
+                    <div class="signature-box">
+                        <div class="title">ОРЕНДОДАВЕЦЬ</div>
+                        <p><strong>{{ executor.name }}</strong></p>
+                        <p>{% if executor.edrpou|length > 8 %}ІПН{% else %}ЄДРПОУ{% endif %}: {{ executor.edrpou }}</p>
+                        <p>Адреса: {{ executor.address }}</p>
+                        <p>Банк: {{ executor.bank }}</p>
+                        <p>IBAN: {{ executor.iban }}</p>
+                        {% if executor.director %}
+                        <p>Директор: {{ executor.director }}</p>
+                        {% endif %}
+                        <br>
+                        <div class="signature-line"></div>
+                        <div class="signature-label">підпис / М.П.</div>
+                    </div>
+                </td>
+                <td>
+                    <div class="signature-box">
+                        <div class="title">ОРЕНДАР</div>
+                        <p><strong>{% if client.payer_type == 'tov' %}{{ client.company_name or client.full_name }}{% else %}{{ client.full_name }}{% endif %}</strong></p>
+                        {% if client.tax_id %}
+                        <p>{% if client.payer_type == 'tov' %}ЄДРПОУ{% else %}ІПН{% endif %}: {{ client.tax_id }}</p>
+                        {% endif %}
+                        {% if client.bank_details and client.bank_details.iban %}
+                        <p>Банк: {{ client.bank_details.bank_name }}</p>
+                        <p>IBAN: {{ client.bank_details.iban }}</p>
+                        {% endif %}
+                        <p>Email: {{ client.email }}</p>
+                        {% if client.phone %}
+                        <p>Тел: {{ client.phone }}</p>
+                        {% endif %}
+                        <br>
+                        {% if signed_by %}
+                        <p>Підписано: {{ signed_by }}</p>
+                        <p>Дата: {{ signed_at }}</p>
+                        {% else %}
+                        <div class="signature-line"></div>
+                        <div class="signature-label">підпис / М.П.</div>
+                        {% endif %}
+                    </div>
+                </td>
+            </tr>
+        </table>
+    </div>
+    
+    <div class="footer">
+        <p>Документ згенеровано системою RentalHub • {{ generated_at }}</p>
+    </div>
+</body>
+</html>

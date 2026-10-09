@@ -1,0 +1,215 @@
+<!-- /backend/templates/documents/quote_email.html - Email version with inline styles -->
+<!doctype html>
+<html lang="uk">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Кошторис — {{ order.order_number }}</title>
+</head>
+<body style="margin:0;padding:0;background:#f6f7fb;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;font-size:14px;line-height:1.4;color:#111827;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f6f7fb;padding:20px;">
+    <tr>
+      <td align="center">
+        <table width="600" cellpadding="0" cellspacing="0" style="background:#ffffff;border:1px solid #E5E7EB;border-radius:12px;overflow:hidden;">
+          
+          <!-- Header -->
+          <tr>
+            <td style="background:linear-gradient(180deg, #f8f9fa, #f3f4f6);padding:24px 30px;border-bottom:1px solid #E5E7EB;">
+              <table width="100%" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td width="60%" valign="top">
+                    <table cellpadding="0" cellspacing="0">
+                      <tr>
+                        <td width="50" valign="top">
+                          <img src="data:image/png;base64,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" width="50" height="50" alt="Logo" style="display:block;" />
+                        </td>
+                        <td style="padding-left:12px;" valign="top">
+                          <div style="font-size:18px;font-weight:800;color:#111827;margin:0;">FarforDecorOrenda</div>
+                          <div style="font-size:11px;color:#6B7280;margin-top:4px;">м. Київ, вул. Будіндустрії, 4</div>
+                          <div style="font-size:11px;color:#6B7280;">Тел: (097) 123 09 93, (093) 375 09 40</div>
+                          <div style="font-size:11px;color:#6B7280;">info@farforrent.com.ua • www.farforrent.com.ua</div>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                  <td width="40%" valign="top" align="right">
+                    <div style="font-size:22px;font-weight:800;color:#111827;">Кошторис</div>
+                    <div style="font-size:12px;color:#6B7280;margin-top:4px;">№ <strong>{{ order.order_number }}</strong></div>
+                    <div style="font-size:12px;color:#6B7280;">{{ generated_at }}</div>
+                    <div style="display:inline-block;margin-top:8px;padding:6px 12px;border-radius:20px;background:#F3F4F6;border:1px solid #E5E7EB;font-size:11px;font-weight:600;color:#111827;">
+                      {% if watermark %}{{ watermark }}{% else %}Попередній кошторис{% endif %}
+                    </div>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Content -->
+          <tr>
+            <td style="padding:24px 30px;">
+              
+              <!-- Customer & Rental Details -->
+              <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:20px;">
+                <tr>
+                  <td width="48%" valign="top" style="border:1px solid #E5E7EB;border-radius:10px;padding:14px 16px;background:#fff;">
+                    <div style="font-size:11px;color:#6B7280;text-transform:uppercase;letter-spacing:1px;font-weight:700;margin-bottom:10px;">ЗАМОВНИК</div>
+                    <table cellpadding="0" cellspacing="0" width="100%">
+                      <tr>
+                        <td width="80" style="font-size:13px;color:#6B7280;padding:3px 0;">ПІБ</td>
+                        <td style="font-size:13px;color:#111827;font-weight:600;padding:3px 0;">{{ order.customer_name or "—" }}</td>
+                      </tr>
+                      <tr>
+                        <td style="font-size:13px;color:#6B7280;padding:3px 0;">Телефон</td>
+                        <td style="font-size:13px;color:#111827;padding:3px 0;">{{ order.customer_phone or order.phone or "—" }}</td>
+                      </tr>
+                      <tr>
+                        <td style="font-size:13px;color:#6B7280;padding:3px 0;">Email</td>
+                        <td style="font-size:12px;color:#111827;padding:3px 0;">{{ order.customer_email or order.email or "—" }}</td>
+                      </tr>
+                    </table>
+                  </td>
+                  <td width="4%"></td>
+                  <td width="48%" valign="top" style="border:1px solid #E5E7EB;border-radius:10px;padding:14px 16px;background:#fff;">
+                    <div style="font-size:11px;color:#6B7280;text-transform:uppercase;letter-spacing:1px;font-weight:700;margin-bottom:10px;">ДЕТАЛІ ОРЕНДИ</div>
+                    <table cellpadding="0" cellspacing="0" width="100%">
+                      <tr>
+                        <td width="80" style="font-size:13px;color:#6B7280;padding:3px 0;">Період</td>
+                        <td style="font-size:13px;color:#111827;font-weight:600;padding:3px 0;">{{ order.rental_start_date }} — {{ order.rental_end_date }}</td>
+                      </tr>
+                      <tr>
+                        <td style="font-size:13px;color:#6B7280;padding:3px 0;">Діб</td>
+                        <td style="font-size:13px;color:#111827;font-weight:600;padding:3px 0;">{{ order.rental_days or "—" }}</td>
+                      </tr>
+                      <tr>
+                        <td style="font-size:13px;color:#6B7280;padding:3px 0;">Отримання</td>
+                        <td style="font-size:13px;color:#111827;padding:3px 0;">{{ order.delivery_type_label or "Самовивіз" }}</td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+
+              <!-- Items Title -->
+              <div style="font-size:13px;font-weight:800;color:#111827;margin:16px 0 12px 0;">Перелік позицій</div>
+
+              <!-- Items Table -->
+              <table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #E5E7EB;border-radius:10px;overflow:hidden;">
+                <tr style="background:#f8f9fa;">
+                  <th style="padding:10px 8px;text-align:left;font-size:11px;font-weight:700;color:#111827;border-bottom:2px solid #E5E7EB;text-transform:uppercase;">Фото</th>
+                  <th style="padding:10px 8px;text-align:left;font-size:11px;font-weight:700;color:#111827;border-bottom:2px solid #E5E7EB;text-transform:uppercase;">Артикул</th>
+                  <th style="padding:10px 8px;text-align:left;font-size:11px;font-weight:700;color:#111827;border-bottom:2px solid #E5E7EB;text-transform:uppercase;">Найменування</th>
+                  <th style="padding:10px 8px;text-align:center;font-size:11px;font-weight:700;color:#111827;border-bottom:2px solid #E5E7EB;text-transform:uppercase;">К-сть</th>
+                  <th style="padding:10px 8px;text-align:right;font-size:11px;font-weight:700;color:#111827;border-bottom:2px solid #E5E7EB;text-transform:uppercase;">Оренда/день</th>
+                  <th style="padding:10px 8px;text-align:right;font-size:11px;font-weight:700;color:#111827;border-bottom:2px solid #E5E7EB;text-transform:uppercase;">Збиток</th>
+                </tr>
+                {% for item in items %}
+                <tr>
+                  <td style="padding:10px 8px;border-bottom:1px solid #E5E7EB;vertical-align:middle;">
+                    {% if item.image_url %}
+                    <img src="{{ item.image_url }}" width="50" height="50" style="border-radius:6px;border:1px solid #E5E7EB;object-fit:cover;" alt="" />
+                    {% else %}
+                    <div style="width:50px;height:50px;background:#F3F4F6;border-radius:6px;border:1px solid #E5E7EB;text-align:center;line-height:50px;color:#9CA3AF;font-weight:700;">—</div>
+                    {% endif %}
+                  </td>
+                  <td style="padding:10px 8px;border-bottom:1px solid #E5E7EB;vertical-align:middle;">
+                    <span style="display:inline-block;padding:4px 8px;border-radius:6px;border:1px solid #E5E7EB;background:#F3F4F6;font-weight:700;font-size:11px;">{{ item.sku or "—" }}</span>
+                  </td>
+                  <td style="padding:10px 8px;border-bottom:1px solid #E5E7EB;vertical-align:middle;">
+                    <div style="font-weight:700;font-size:13px;color:#111827;">{{ item.product_name }}</div>
+                  </td>
+                  <td style="padding:10px 8px;border-bottom:1px solid #E5E7EB;vertical-align:middle;text-align:center;font-weight:600;">{{ item.quantity }}</td>
+                  <td style="padding:10px 8px;border-bottom:1px solid #E5E7EB;vertical-align:middle;text-align:right;">{{ item.rental_price_fmt or item.price_per_day_fmt or "—" }} грн</td>
+                  <td style="padding:10px 8px;border-bottom:1px solid #E5E7EB;vertical-align:middle;text-align:right;">{{ item.loss_fmt or item.deposit_fmt or "—" }} грн</td>
+                </tr>
+                {% endfor %}
+              </table>
+
+              <!-- Bottom Section -->
+              <table width="100%" cellpadding="0" cellspacing="0" style="margin-top:20px;">
+                <tr>
+                  <td width="55%" valign="top" style="padding-right:15px;">
+                    <div style="border:1px dashed #E5E7EB;border-radius:10px;padding:14px 16px;background:#fff;font-size:11px;color:#6B7280;line-height:1.6;">
+                      <strong style="color:#111827;">Умови підтвердження:</strong> кошторис підтверджується менеджером після узгодження наявності, логістики та деталей оренди.<br/><br/>
+                      <strong style="color:#111827;">Оплата:</strong> оренда та завдаток оплачуються згідно домовленостей та рахунку/оферти.<br/><br/>
+                      <strong style="color:#111827;">Збиток:</strong> у разі втрати або пошкодження декору клієнт відшкодовує повну вартість товару.<br/>
+                      <strong style="color:#111827;">Завдаток:</strong> становить 50% від вартості збитку та повертається після повернення майна в належному стані.
+                    </div>
+                  </td>
+                  <td width="45%" valign="top">
+                    <div style="border:1px solid #E5E7EB;border-radius:12px;padding:16px;background:linear-gradient(180deg,#ffffff,#fafafa);">
+                      <div style="font-size:11px;color:#6B7280;text-transform:uppercase;letter-spacing:1px;font-weight:800;margin-bottom:12px;">ПІДСУМОК</div>
+                      
+                      <table width="100%" cellpadding="0" cellspacing="0">
+                        <tr>
+                          <td style="font-size:13px;color:#6B7280;padding:6px 0;">Оренда ({{ order.rental_days or 1 }} {{ 'день' if order.rental_days == 1 else 'днів' }})</td>
+                          <td style="font-size:13px;font-weight:700;text-align:right;padding:6px 0;">{{ totals.rent_total_fmt }} грн</td>
+                        </tr>
+                        {% if totals.discount_fmt or order.discount_percent %}
+                        <tr>
+                          <td style="font-size:13px;color:#6B7280;padding:6px 0;">Знижка {{ order.discount_percent }}%</td>
+                          <td style="font-size:13px;font-weight:700;text-align:right;padding:6px 0;color:#16A34A;">-{{ totals.discount_fmt }} грн</td>
+                        </tr>
+                        {% endif %}
+                        {% if totals.service_fee_fmt or order.service_fee %}
+                        <tr>
+                          <td style="font-size:13px;color:#6B7280;padding:6px 0;">{{ totals.service_fee_name or order.service_fee_name or "Додаткова послуга" }}</td>
+                          <td style="font-size:13px;font-weight:700;text-align:right;padding:6px 0;">{{ totals.service_fee_fmt }} грн</td>
+                        </tr>
+                        {% endif %}
+                      </table>
+                      
+                      <div style="height:1px;background:#E5E7EB;margin:12px 0;"></div>
+                      
+                      <table width="100%" cellpadding="0" cellspacing="0">
+                        <tr>
+                          <td style="font-size:11px;color:#6B7280;text-transform:uppercase;letter-spacing:1px;font-weight:900;padding:6px 0;">Разом за оренду</td>
+                          <td style="font-size:18px;font-weight:900;text-align:right;color:#111827;padding:6px 0;">{{ totals.grand_total_fmt }} грн</td>
+                        </tr>
+                      </table>
+                      
+                      <div style="height:1px;background:#E5E7EB;margin:12px 0;"></div>
+                      
+                      <table width="100%" cellpadding="0" cellspacing="0">
+                        <tr>
+                          <td style="font-size:11px;color:#6B7280;text-transform:uppercase;letter-spacing:1px;font-weight:700;padding:4px 0;">Збиток (повна вартість)</td>
+                          <td style="font-size:14px;font-weight:700;text-align:right;color:#111827;padding:4px 0;">{{ totals.loss_total_fmt }} грн</td>
+                        </tr>
+                        <tr>
+                          <td style="font-size:11px;color:#6B7280;text-transform:uppercase;letter-spacing:1px;font-weight:700;padding:4px 0;">Завдаток (50%)</td>
+                          <td style="font-size:16px;font-weight:800;text-align:right;color:#B45309;padding:4px 0;">{{ totals.deposit_total_fmt }} грн</td>
+                        </tr>
+                      </table>
+                    </div>
+                  </td>
+                </tr>
+              </table>
+
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="padding:16px 30px;border-top:1px solid #E5E7EB;background:#fff;">
+              <table width="100%" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td style="font-size:10px;color:#6B7280;">
+                    FarforDecorOrenda • Оренда декору для заходів<br/>
+                    м. Київ, вул. Будіндустрії, 4<br/>
+                    Тел: {{ company.phone }} • {{ company.email }}
+                  </td>
+                  <td style="font-size:10px;color:#6B7280;text-align:right;">
+                    Документ згенеровано системою RentalHub<br/>
+                    {{ generated_at }}
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>

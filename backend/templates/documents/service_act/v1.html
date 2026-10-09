@@ -1,0 +1,139 @@
+{% extends '_base.html' %}
+{% block title %}Акт надання послуг {{ doc_number }}{% endblock %}
+{% block content %}
+<style>
+    body { font-family: 'Times New Roman', Times, serif; font-size: 12pt; line-height: 1.5; }
+    .approval-header { display: flex; justify-content: space-between; margin-bottom: 30px; }
+    .approval-block { width: 45%; }
+    .approval-title { font-weight: bold; margin-bottom: 10px; }
+    .approval-name { margin-bottom: 5px; }
+    .approval-sig { margin-top: 15px; border-bottom: 1px solid #000; width: 150px; padding-bottom: 20px; }
+    .approval-sig-name { font-size: 11pt; }
+    h1 { font-size: 16pt; font-weight: bold; margin-bottom: 5px; }
+    h2 { font-size: 14pt; font-weight: bold; margin-top: 0; margin-bottom: 25px; }
+    .intro-text { margin: 20px 0; text-align: justify; }
+    .contract-line { margin: 15px 0 15px 40px; }
+    .contract-label { display: inline-block; width: 80px; }
+    .items-table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+    .items-table th, .items-table td { border: 1px solid #000; padding: 8px; }
+    .items-table th { background: #f5f5f5; font-weight: bold; text-align: center; }
+    .items-table td { text-align: center; }
+    .items-table td:nth-child(2) { text-align: left; }
+    .total-row { margin: 15px 0; text-align: right; font-size: 14pt; }
+    .sum-text { margin: 15px 0; }
+    .no-claims { margin: 10px 0; }
+    .signatures { margin-top: 40px; display: flex; justify-content: space-between; }
+    .sig-block { width: 45%; }
+    .sig-title { font-weight: bold; border-bottom: 1px solid #000; padding-bottom: 3px; margin-bottom: 10px; }
+    .sig-line { margin-bottom: 5px; }
+    .sig-name { font-weight: bold; }
+    .sig-note { font-size: 9pt; font-style: italic; margin: 5px 0; }
+    .sig-date { margin: 10px 0; }
+    .sig-company { font-size: 10pt; line-height: 1.4; }
+    .director-title { font-size: 14pt; font-weight: bold; margin-bottom: 5px; }
+    .company-name-big { font-size: 14pt; font-weight: bold; }
+</style>
+
+{% set is_llc = payer.payer_type in ['llc_simple', 'llc_general'] %}
+
+{% if is_llc %}
+<!-- Шапка ЗАТВЕРДЖУЮ для ТОВ -->
+<div class="approval-header">
+    <div class="approval-block">
+        <div class="approval-title">ЗАТВЕРДЖУЮ</div>
+        <div class="approval-name">{{ company.legal_name }}</div>
+        <div class="approval-sig"></div>
+        <div class="approval-sig-name">{{ company.director_name.split()[-1] if company.director_name else '' }} {{ company.director_name.split()[0][0] if company.director_name else '' }}.{{ company.director_name.split()[1][0] if company.director_name and len(company.director_name.split()) > 1 else '' }}.</div>
+    </div>
+    <div class="approval-block" style="text-align: right;">
+        <div class="approval-title">ЗАТВЕРДЖУЮ</div>
+        <div class="company-name-big">{{ payer.company_name }}</div>
+        <div class="approval-sig" style="margin-left: auto;"></div>
+        <div class="director-title">Директор {{ payer.company_name }}</div>
+    </div>
+</div>
+{% endif %}
+
+<h1>АКТ надання послуг</h1>
+<h2>№ {{ doc_number.split('-')[-1] if doc_number and '-' in doc_number else (doc_number or order.order_number) }} від {{ generated_at.split(' ')[0] if ' ' in generated_at else generated_at }} р.</h2>
+
+<div class="intro-text">
+    Ми, що нижче підписалися, представник Замовника 
+    {% if is_llc %}
+    <strong>в особі директора {{ payer.company_name }}</strong>
+    {% else %}
+    <strong>{{ payer.company_name or order.customer_name }}</strong>
+    {% endif %}
+    , з одного боку, і представник Виконавця <strong>{{ company.legal_name }}</strong>, з іншого боку, склали цей акт про те, що на підставі наведених документів:
+</div>
+
+<div class="contract-line">
+    <span class="contract-label">Договір:</span> Основний
+</div>
+
+<p>Виконавцем були виконані наступні роботи (надані такі послуги):</p>
+
+<table class="items-table">
+    <thead>
+        <tr>
+            <th style="width: 40px;">№</th>
+            <th>Найменування робіт, послуг</th>
+            <th style="width: 60px;">Кіл-сть</th>
+            <th style="width: 40px;">Од.</th>
+            <th style="width: 80px;">Ціна</th>
+            <th style="width: 90px;">Сума</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td>1</td>
+            <td style="text-align: left;">Прокат декору</td>
+            <td>1</td>
+            <td>шт</td>
+            <td style="text-align: right;">{{ "{:,.2f}".format(totals.rent).replace(",", " ") }}</td>
+            <td style="text-align: right;">{{ "{:,.2f}".format(totals.rent).replace(",", " ") }}</td>
+        </tr>
+    </tbody>
+</table>
+
+<div class="total-row">
+    <strong>Всього:</strong> {{ "{:,.2f}".format(totals.rent).replace(",", " ") }}
+</div>
+
+<div class="sum-text">
+    Загальна вартість робіт (послуг) склала <strong>{{ total_words or '' }} гривень 00 копійок</strong>.
+</div>
+
+<div class="no-claims">
+    Замовник претензій по об'єму, якості та строкам виконання робіт (надання послуг) не має.
+</div>
+
+<div class="signatures">
+    <div class="sig-block">
+        <div class="sig-title">Від Виконавця*</div>
+        <div class="sig-line"></div>
+        <div class="sig-name">{{ company.director_name.split()[-1] if company.director_name else '' }} {{ company.director_name.split()[0][0] if company.director_name else '' }}.{{ company.director_name.split()[1][0] if company.director_name and len(company.director_name.split()) > 1 else '' }}.</div>
+        <div class="sig-note">* Відповідальний за здійснення господарської операції і правильність її оформлення</div>
+        <div class="sig-date">{{ generated_at.split(' ')[0] if ' ' in generated_at else generated_at }}</div>
+        <div class="sig-company">
+            {{ company.legal_name }},<br>
+            код за ДРФО {{ company.edrpou }},<br>
+            п/р {{ company.iban }} у банку<br>
+            {{ company.bank_name }}
+        </div>
+    </div>
+    <div class="sig-block">
+        <div class="sig-title">Від Замовника</div>
+        {% if is_llc %}
+        <div class="director-title">Директор {{ payer.company_name }}</div>
+        <div class="sig-date">{{ generated_at.split(' ')[0] if ' ' in generated_at else generated_at }}</div>
+        <div class="company-name-big">{{ payer.company_name }}</div>
+        {% else %}
+        <div class="sig-line"></div>
+        <div class="sig-name">{% if payer.director_name %}{{ payer.director_name }}{% else %}{{ order.customer_name }}{% endif %}</div>
+        <div class="sig-date">{{ generated_at.split(' ')[0] if ' ' in generated_at else generated_at }}</div>
+        <div class="sig-company">{{ payer.company_name or order.customer_name }}</div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

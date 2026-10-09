@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <title>Додаток № {{ annex.number }} до договору № {{ agreement.number }}</title>
+    <style>
+        @page {
+            size: A4;
+            margin: 20mm 15mm;
+        }
+        
+        body {
+            font-family: 'DejaVu Sans', Arial, sans-serif;
+            font-size: 11pt;
+            line-height: 1.5;
+            color: #333;
+        }
+        
+        .header {
+            text-align: right;
+            margin-bottom: 15px;
+        }
+        
+        .header h1 {
+            font-size: 14pt;
+            font-weight: bold;
+            margin: 0;
+        }
+        
+        .header .subtitle {
+            font-size: 11pt;
+            margin-top: 5px;
+        }
+        
+        .location-date {
+            display: flex;
+            justify-content: space-between;
+            margin: 20px 0;
+        }
+        
+        .parties {
+            text-align: justify;
+            margin-bottom: 15px;
+        }
+        
+        .parties p {
+            margin-bottom: 10px;
+        }
+        
+        .content {
+            text-align: justify;
+        }
+        
+        .content p {
+            margin-bottom: 8px;
+            text-indent: 0;
+        }
+        
+        .content ol {
+            padding-left: 20px;
+            margin: 0;
+        }
+        
+        .content ol > li {
+            margin-bottom: 8px;
+        }
+        
+        .items-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 15px 0;
+            font-size: 10pt;
+        }
+        
+        .items-table th {
+            background: #f5f5f5;
+            border: 1px solid #333;
+            padding: 8px 5px;
+            font-weight: bold;
+            text-align: center;
+        }
+        
+        .items-table td {
+            border: 1px solid #333;
+            padding: 6px 5px;
+            vertical-align: middle;
+        }
+        
+        .items-table .total-row {
+            font-weight: bold;
+            background: #f9f9f9;
+        }
+        
+        .text-center {
+            text-align: center;
+        }
+        
+        .text-right {
+            text-align: right;
+        }
+        
+        .highlight {
+            background: #fffde7;
+            padding: 0 3px;
+        }
+        
+        .signatures {
+            margin-top: 40px;
+            page-break-inside: avoid;
+        }
+        
+        .signature-table {
+            width: 100%;
+        }
+        
+        .signature-table td {
+            width: 50%;
+            vertical-align: top;
+            padding: 10px;
+        }
+        
+        .signature-title {
+            font-weight: bold;
+            margin-bottom: 30px;
+        }
+        
+        .signature-line {
+            border-bottom: 1px solid #333;
+            height: 30px;
+            margin-top: 20px;
+        }
+        
+        .checkbox {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border: 1px solid #333;
+            margin-right: 5px;
+            vertical-align: middle;
+        }
+        
+        .checkbox.checked::after {
+            content: "✓";
+            font-size: 10pt;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Додаток № <span class="highlight">{{ annex.number }}</span></h1>
+        <div class="subtitle">до договору оренди майна № <span class="highlight">{{ agreement.number }}</span> від <span class="highlight">{{ agreement.date }}</span></div>
+    </div>
+    
+    <table style="width: 100%; margin: 20px 0;">
+        <tr>
+            <td>м. Київ</td>
+            <td style="text-align: right;"><span class="highlight">{{ annex.date }}</span></td>
+        </tr>
+    </table>
+    
+    <div class="parties">
+        <p>
+            <strong><span class="highlight">{{ executor.name }}</span></strong>, надалі іменується «Орендодавець», з однієї сторони та
+        </p>
+        <p>
+            <strong><span class="highlight">{{ client.name }}</span></strong>, надалі іменується «Орендар»{% if client.payer_type == 'tov' %}, в особі <span class="highlight">{{ client.director_name or '________________________________' }}</span>{% endif %}, з другої сторони, разом іменовані «Сторони», а кожна окремо «Сторона», склали даний Додаток № <span class="highlight">{{ annex.number }}</span> про наступне:
+        </p>
+    </div>
+    
+    <div class="content">
+        <ol>
+            <li>Відповідно до умов договору оренди майна (надалі за текстом – «Договір»), Орендодавець зобов'язується передати в користування, а Орендар прийняти наступне майно:
+            
+                <table class="items-table">
+                    <thead>
+                        <tr>
+                            <th style="width: 40px;">№ п/п</th>
+                            <th>Найменування Майна</th>
+                            <th style="width: 70px;">Кількість, шт</th>
+                            <th style="width: 100px;">Вартість оренди, грн.</th>
+                            <th style="width: 90px;">Вид пакування</th>
+                            <th style="width: 80px;">Кількість днів оренди</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in items %}
+                        <tr>
+                            <td class="text-center">{{ loop.index }}</td>
+                            <td>{{ item.name }}</td>
+                            <td class="text-center">{{ item.quantity }}</td>
+                            <td class="text-right">{{ item.total_rental }}</td>
+                            <td class="text-center">{{ item.packing_type or '—' }}</td>
+                            <td class="text-center">{{ rental_days }}</td>
+                        </tr>
+                        {% endfor %}
+                        <tr class="total-row">
+                            <td colspan="2">ВСЬОГО</td>
+                            <td class="text-center">{{ totals.quantity }}</td>
+                            <td class="text-right">{{ totals.rental }}</td>
+                            <td></td>
+                            <td></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </li>
+            
+            <li>Строк на який Майно передається Орендарю в користування (строк оренди), складає: <span class="highlight">{{ rental_days }}</span> доби, а саме: з <span class="highlight">{{ rental_start_date }}</span> до <span class="highlight">{{ rental_end_date }}</span>.</li>
+            
+            <li>Отримання Майна в оренду за цим Договором здійснюється Орендарем не пізніше 17 год. 00 хв. <span class="highlight">{{ issue_date }}</span>.</li>
+            
+            <li>Орендар зобов'язаний повернути Майно з оренди не пізніше <span class="highlight">{{ return_date }}</span>.</li>
+            
+            <li>Отримання та повернення Майна здійснюються за адресою: м. Київ, вул. Будіндустрії 4.</li>
+            
+            <li>Розмір орендної плати за цим Додатком за весь період користування Майном становить <span class="highlight">{{ totals.rental }}</span> грн. без ПДВ.</li>
+            
+            <li>Забезпечувальний платіж за цим Додатком становить <span class="highlight">{{ totals.deposit }}</span> грн. без ПДВ.</li>
+            
+            <li>Орендна плата та забезпечувальний платіж у повному обсязі мають бути сплачені Орендарем не пізніше передачі Майна в оренду. Оплата здійснюється в безготівковому порядку на поточний рахунок Орендодавця якщо інший порядок оплати не погоджений Сторонами.</li>
+            
+            <li>Даний Додаток складено у 2-х екземплярах, що мають однакову юридичну силу для кожної із Сторін.</li>
+            
+            <li>Контактна особа зі сторони орендаря є <span class="highlight">{{ client.contact_person or client.name }}</span>, канал зв'язку з контактною особою (необхідне відмітити): 
+                <span class="checkbox{% if client.contact_channel == 'telegram' %} checked{% endif %}"></span>Telegram, 
+                <span class="checkbox{% if client.contact_channel == 'viber' %} checked{% endif %}"></span>Viber, 
+                <span class="checkbox{% if client.contact_channel == 'whatsapp' %} checked{% endif %}"></span>WhatsApp, 
+                <span class="checkbox{% if client.contact_channel == 'email' %} checked{% endif %}"></span>E-mail 
+                за номером/електронною адресою: <span class="highlight">{{ client.contact_value or client.phone or client.email }}</span>.
+            </li>
+        </ol>
+    </div>
+    
+    <div class="signatures">
+        <table class="signature-table">
+            <tr>
+                <td>
+                    <div class="signature-title">ОРЕНДОДАВЕЦЬ:</div>
+                    <div class="signature-line"></div>
+                </td>
+                <td>
+                    <div class="signature-title">ОРЕНДАР:</div>
+                    <div class="signature-line"></div>
+                </td>
+            </tr>
+        </table>
+    </div>
+</body>
+</html>

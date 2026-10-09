@@ -1,0 +1,45 @@
+{
+  "summary": "Backend CORS testing for new domain farforevent.com.ua. Created /app/backend/tests/test_cors_new_domain.py with 9 tests. 5 passed (health, existing-origins regression x2, disallowed-origin smoke, cabinet profile data-leak regression). 4 FAILED — all 4 new farforevent.com.ua origins are rejected with HTTP 400 'Disallowed CORS origin'. ROOT CAUSE: CORS_ORIGINS env var in /app/backend/.env is non-empty and OVERRIDES the default_origins list that was updated in server.py. The new origins were added to default_origins (server.py lines 47-51) but the runtime path picks env var instead (server.py line 62-64 'elif cors_origins:'). So the code change has NO runtime effect.",
+  "backend_issues": {
+    "critical": [
+      {
+        "endpoint": "OPTIONS /api/event/auth/login (and all /api/event/*)",
+        "issue": "All 4 new farforevent.com.ua origins (https/http + www variants) return HTTP 400 'Disallowed CORS origin' because CORS_ORIGINS env var in /app/backend/.env overrides default_origins. Adding origins only to default_origins in server.py has no effect when CORS_ORIGINS is set.",
+        "priority": "CRITICAL"
+      }
+    ],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_cors_new_domain.py",
+    "/app/test_reports/pytest/cors_results.xml"
+  ],
+  "action_items": [
+    "FIX OPTION A (recommended, simplest): Append the 4 new origins to CORS_ORIGINS in /app/backend/.env so the active runtime list contains them. New value should append: ,https://farforevent.com.ua,https://www.farforevent.com.ua,http://farforevent.com.ua,http://www.farforevent.com.ua  — then restart backend (sudo supervisorctl restart backend).",
+    "FIX OPTION B (more robust): Change server.py logic so default_origins is ALWAYS merged with env-provided origins (union), instead of env replacing defaults. E.g. cors_origins_list = list({*default_origins, *[o.strip() for o in cors_origins.split(',') if o.strip()]}).",
+    "After fix, re-run: pytest /app/backend/tests/test_cors_new_domain.py -v  — all 9 tests must pass."
+  ],
+  "critical_code_review_comments": [
+    "server.py lines 59-68: The CORS_ORIGINS env var fully REPLACES default_origins instead of supplementing it. This is a footgun — every time someone updates default_origins (as in this iteration), the change is silently ignored if CORS_ORIGINS is also set in .env. Recommend merging the two lists (union) and de-duplicating.",
+    "server.py lines 70-72: print() is used for CORS log. Consider logging.info() so it appears in supervisor backend logs consistently and at the right level. Also useful — these prints already show the actual active origins on startup; main agent can verify by `grep '[CORS]' /var/log/supervisor/backend.*.log` and will see the new domains are NOT in the runtime list.",
+    "The dual-source CORS config (env + default_origins) is not documented anywhere — recommend a comment block above default_origins explaining the override behaviour."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_cors_new_domain.py (new)"
+  ],
+  "success_rate": {
+    "backend": "55% (5/9 backend tests passed)",
+    "frontend": "skipped per request"
+  },
+  "test_credentials": "vitokdrako@gmail.com / test123 — works, login + /api/event/cabinet/profile returns matching email (Марина-leak regression PASSED)",
+  "seed_data_creation": "none",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "If main agent applies Option A (.env edit) — remember to restart backend via supervisorctl since .env changes are not hot-reloaded. Re-run pytest /app/backend/tests/test_cors_new_domain.py -v to verify all 4 new-domain tests pass and 5 existing tests still pass. The disallowed-origin test currently passes because evil-domain.example.com isn't in either list; keep it as a guardrail.",
+  "rca of the issue": "REPRODUCTION:  curl -i -X OPTIONS http://localhost:8001/api/event/auth/login -H 'Origin: https://farforevent.com.ua' -H 'Access-Control-Request-Method: POST'  → returns HTTP 400 'Disallowed CORS origin'.  ROOT CAUSE: /app/backend/.env contains CORS_ORIGINS=https://rentalhub.farforrent.com.ua,https://www.rentalhub.farforrent.com.ua,https://events.farforrent.com.ua,http://localhost:3000,https://item-photos.preview.emergentagent.com — this non-empty value enters the elif-branch on server.py line 62-64 and FULLY REPLACES the default_origins list (which is only used in the else-branch line 67). Therefore the 4 new origins added to default_origins at lines 47-51 are effectively dead code at runtime.  MITIGATION: Append the 4 new origins to CORS_ORIGINS in .env AND restart backend; OR refactor server.py to merge env and defaults."
+}

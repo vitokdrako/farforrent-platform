@@ -1,0 +1,154 @@
+{% extends '_base.html' %}
+{% block title %}Акт утримання {{ order.order_number }}{% endblock %}
+
+{% block extra_styles %}
+<style>
+    .damage-table th { background: #fef3c7; }
+    .damage-row:hover { background: #fffbeb; }
+    .severity-low { color: #059669; }
+    .severity-medium { color: #d97706; }
+    .severity-high { color: #dc2626; }
+    .severity-critical { color: #7c2d12; font-weight: bold; }
+    .summary-box { background: #fef3c7; border: 2px solid #f59e0b; border-radius: 8px; padding: 15px; margin: 15px 0; }
+    .refund-box { background: #d1fae5; border: 2px solid #10b981; border-radius: 8px; padding: 15px; }
+    .deduction-box { background: #fee2e2; border: 2px solid #ef4444; border-radius: 8px; padding: 15px; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="header">
+    <div>
+        <div class="logo">FarforRent</div>
+        <div class="text-sm">{{ company.legal_name }}</div>
+    </div>
+    <div class="doc-info">
+        <div class="doc-number">{{ doc_number }}</div>
+        <div class="doc-date">{{ generated_at }}</div>
+    </div>
+</div>
+
+<h1>АКТ УТРИМАННЯ ІЗ ЗАСТАВИ</h1>
+
+<table class="mb-4">
+    <tr><td style="width:150px">Замовлення:</td><td class="font-bold">{{ order.order_number }}</td></tr>
+    <tr><td>Клієнт:</td><td class="font-bold">{{ order.customer_name }}</td></tr>
+    <tr><td>Телефон:</td><td>{{ order.customer_phone }}</td></tr>
+    <tr><td>Період оренди:</td><td>{{ order.rental_start_date }} — {{ order.rental_end_date }}</td></tr>
+</table>
+
+<div class="summary-box">
+    <div class="flex justify-between">
+        <span>Внесена застава:</span>
+        <span class="font-bold text-lg">{{ totals.deposit|money }} ₴</span>
+    </div>
+</div>
+
+{% if damage_items %}
+<h2>📋 Виявлені пошкодження ({{ totals.damage_count }})</h2>
+<table class="damage-table">
+    <thead>
+        <tr>
+            <th style="width:30%">Товар</th>
+            <th>Тип шкоди</th>
+            <th>Серйозність</th>
+            <th class="text-center">К-сть</th>
+            <th class="text-right">Ціна/шт</th>
+            <th class="text-right">Сума</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for item in damage_items %}
+        <tr class="damage-row">
+            <td>
+                <div class="font-medium">{{ item.product_name }}</div>
+                <div class="text-xs text-gray-500">{{ item.sku }}</div>
+            </td>
+            <td>{{ item.damage_type }}</td>
+            <td>
+                <span class="severity-{{ item.severity_code }}">{{ item.severity }}</span>
+            </td>
+            <td class="text-center">{{ item.qty }}</td>
+            <td class="text-right">{{ item.fee_per_item|money }} ₴</td>
+            <td class="text-right font-medium">{{ item.fee|money }} ₴</td>
+        </tr>
+        {% if item.note %}
+        <tr class="damage-row">
+            <td colspan="6" class="text-sm text-gray-600" style="padding-left: 20px;">
+                💬 {{ item.note }}
+            </td>
+        </tr>
+        {% endif %}
+        {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<div class="highlight" style="background: #d1fae5; padding: 15px; margin: 15px 0;">
+    <p class="text-center">✅ Пошкоджень не виявлено</p>
+</div>
+{% endif %}
+
+<h2>💰 Розрахунок утримань</h2>
+<table>
+    <tbody>
+        {% if deductions.damage_amount > 0 %}
+        <tr>
+            <td style="width:70%">Компенсація за пошкодження/втрати</td>
+            <td class="text-right">{{ deductions.damage_amount|money }} ₴</td>
+        </tr>
+        {% endif %}
+        {% if deductions.cleaning_fee > 0 %}
+        <tr>
+            <td>Хімчистка</td>
+            <td class="text-right">{{ deductions.cleaning_fee|money }} ₴</td>
+        </tr>
+        {% endif %}
+        {% if deductions.late_days > 0 %}
+        <tr>
+            <td>Прострочення ({{ deductions.late_days }} дн.)</td>
+            <td class="text-right">{{ deductions.late_fee|money }} ₴</td>
+        </tr>
+        {% endif %}
+    </tbody>
+    <tfoot>
+        <tr class="font-bold" style="border-top: 2px solid #000;">
+            <td>ВСЬОГО УТРИМАНО:</td>
+            <td class="text-right">{{ deductions.total_deduction|money }} ₴</td>
+        </tr>
+    </tfoot>
+</table>
+
+<div class="grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 20px;">
+    <div class="deduction-box">
+        <div class="text-sm">Утримано із застави:</div>
+        <div class="font-bold text-xl">-{{ deductions.total_deduction|money }} ₴</div>
+    </div>
+    <div class="refund-box">
+        <div class="text-sm">До повернення клієнту:</div>
+        <div class="font-bold text-xl">{{ deductions.refund_amount|money }} ₴</div>
+    </div>
+</div>
+
+<div class="highlight" style="padding:12px; margin-top:20px; background: #f3f4f6;">
+    <p class="text-sm">
+        Підписуючи цей акт, сторони підтверджують:<br>
+        • Факт виявлення пошкоджень зафіксовано вірно<br>
+        • Суми компенсацій узгоджені<br>
+        • Розрахунок утримань та повернення застави прийнято
+    </p>
+</div>
+
+<div class="signatures">
+    <div class="signature-block">
+        <p class="font-bold">ОРЕНДОДАВЕЦЬ:</p>
+        <p class="text-sm">{{ company.legal_name }}</p>
+        <div class="signature-line"></div>
+        <p class="text-xs">Дата: _______________</p>
+    </div>
+    <div class="signature-block">
+        <p class="font-bold">ОРЕНДАР:</p>
+        <p class="text-sm">{{ order.customer_name }}</p>
+        <div class="signature-line"></div>
+        <p class="text-xs">Дата: _______________</p>
+    </div>
+</div>
+{% endblock %}

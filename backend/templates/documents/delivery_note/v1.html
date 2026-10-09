@@ -1,0 +1,73 @@
+{% extends '_base.html' %}
+{% block title %}ТТН {{ order.order_number }}{% endblock %}
+{% block content %}
+<div class="header">
+    <div>
+        <div class="logo">FarforRent</div>
+        <div class="logo-sub">Товарно-транспортна накладна</div>
+    </div>
+    <div class="doc-info">
+        <div class="doc-number">{{ doc_number }}</div>
+        <div class="doc-date">{{ generated_at }}</div>
+    </div>
+</div>
+
+<h1>🚚 ТТН / НАКЛАДНА ДОСТАВКИ</h1>
+
+<h2>Відправник</h2>
+<table>
+    <tr><td style="width:150px">Компанія:</td><td>{{ company.legal_name }}</td></tr>
+    <tr><td>Адреса складу:</td><td>{{ company.warehouse }}</td></tr>
+    <tr><td>Телефон:</td><td>{{ company.phone }}</td></tr>
+</table>
+
+<h2>Отримувач</h2>
+<table>
+    <tr><td style="width:150px">ПІБ:</td><td class="font-bold">{{ order.customer_name }}</td></tr>
+    <tr><td>Телефон:</td><td>{{ order.customer_phone }}</td></tr>
+    <tr><td>Адреса доставки:</td><td class="font-bold">{{ order.delivery_address }}</td></tr>
+</table>
+
+<h2>Вантаж</h2>
+<table>
+    <thead>
+        <tr><th>№</th><th>Найменування</th><th>SKU</th><th>К-сть</th><th>Місць</th></tr>
+    </thead>
+    <tbody>
+        {% for item in items %}
+        <tr>
+            <td class="text-center">{{ loop.index }}</td>
+            <td>{{ item.get('name', '') }}</td>
+            <td>{{ item.get('sku', '') }}</td>
+            <td class="text-center">{{ item.get('quantity') or item.get('qty', 1) }}</td>
+            <td class="text-center">1</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<div class="mt-4">
+    <table>
+        <tr><td style="width:200px">Всього місць:</td><td class="font-bold">{{ items|length }}</td></tr>
+        <tr><td>Замовлення:</td><td>{{ order.order_number }}</td></tr>
+    </table>
+</div>
+
+<div class="highlight" style="padding:10px; margin-top:15px;">
+    <p class="font-bold">⚠️ Увага! Вантаж крихкий!</p>
+    <p class="text-sm">Декоративні вироби. Транспортувати обережно. Не кидати!</p>
+</div>
+
+<div class="signatures">
+    <div class="signature-block">
+        <p class="font-bold">ВІДПРАВИВ:</p>
+        <div class="signature-line"></div>
+        <div class="signature-label">підпис / дата / час</div>
+    </div>
+    <div class="signature-block">
+        <p class="font-bold">ОТРИМАВ:</p>
+        <div class="signature-line"></div>
+        <div class="signature-label">підпис / дата / час</div>
+    </div>
+</div>
+{% endblock %}
