@@ -12,6 +12,7 @@ import Dashboard from './pages/Dashboard';
 import ManagerDashboard from './pages/ManagerDashboard';
 import PickingListPage from './pages/PickingListPage';
 import ReturnsListPage from './pages/ReturnsListPage';
+import OverdueListPage from './pages/OverdueListPage';
 import ManagerCabinet from './pages/ManagerCabinet';  // ✅ Новий кабінет менеджера
 import ReauditCabinetFull from './pages/ReauditCabinetFull';
 import DamageHubApp from './pages/DamageHubApp';
@@ -165,6 +166,16 @@ function App() {
             element={
               <ProtectedRoute>
                 <ReturnsListPage />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* Борги (прострочені повернення) */}
+          <Route
+            path="/manager/overdue-list"
+            element={
+              <ProtectedRoute>
+                <OverdueListPage />
               </ProtectedRoute>
             }
           />

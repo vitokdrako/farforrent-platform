@@ -544,6 +544,13 @@ export default function ManagerDashboard() {
               📥 Повернення
             </button>
             <button 
+              className="rounded-lg border border-rose-300 bg-rose-50 px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm font-medium text-rose-700 hover:bg-rose-100 transition-colors"
+              onClick={() => navigate('/manager/overdue-list')}
+              data-testid="overdue-list-nav-btn"
+            >
+              ⚠️ Борги
+            </button>
+            <button 
               className="rounded-lg border border-slate-200 bg-white px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm font-medium text-slate-700 hover:bg-slate-50 hover:border-slate-300 transition-colors"
               onClick={() => navigate('/catalog')}
             >

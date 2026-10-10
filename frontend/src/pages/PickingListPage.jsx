@@ -8,6 +8,7 @@
 import React, { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import CorporateHeader from '../components/CorporateHeader'
+import ImageLightbox from '../components/ImageLightbox'
 import { getImageUrl, FALLBACK_IMAGE, handleImageError } from '../utils/imageHelper'
 import { ChevronLeft, ChevronRight, Printer, Package, AlertTriangle, Phone, Clock, RefreshCw, Plus, CheckSquare, X } from 'lucide-react'
 
@@ -47,6 +48,7 @@ export default function PickingListPage() {
   const [loading, setLoading] = useState(true)
   const [checked, setChecked] = useState({}) // localStorage-backed { card_id: { product_id: true } }
   const [taskModal, setTaskModal] = useState(null) // { order_id, order_number, product_id, product_name, sku }
+  const [lightbox, setLightbox] = useState(null)   // { src, alt }
   const [staff, setStaff] = useState([])
 
   // Load checks once
@@ -165,6 +167,7 @@ export default function PickingListPage() {
                   <CardView key={`o-${card.order_id}`} card={card} cardId={`o-${card.order_id}`} kind="awaiting"
                     onOpenCard={() => navigate(`/order/${card.order_id}/view`)}
                     onCreateTask={setTaskModal}
+                    onImageClick={setLightbox}
                     checked={checked[`o-${card.order_id}`] || {}} onToggle={(pid) => toggleCheck(`o-${card.order_id}`, pid)} />
                 ))}
               </Section>
@@ -177,6 +180,7 @@ export default function PickingListPage() {
                     progress={{ done, total }}
                     onOpenCard={() => navigate(`/issue/${card.id}`)}
                     onCreateTask={setTaskModal}
+                    onImageClick={setLightbox}
                     checked={checked[card.id] || {}} onToggle={(pid) => toggleCheck(card.id, pid)} />
                 })}
               </Section>
@@ -189,6 +193,7 @@ export default function PickingListPage() {
                     progress={{ done, total }}
                     onOpenCard={() => navigate(`/issue/${card.id}`)}
                     onCreateTask={setTaskModal}
+                    onImageClick={setLightbox}
                     checked={checked[card.id] || {}} onToggle={(pid) => toggleCheck(card.id, pid)} />
                 })}
               </Section>
@@ -205,6 +210,10 @@ export default function PickingListPage() {
           onClose={() => setTaskModal(null)}
           onCreated={() => { setTaskModal(null); fetchData(dayOffset) }}
         />
+      )}
+      {/* Image lightbox */}
+      {lightbox && (
+        <ImageLightbox src={lightbox.src} alt={lightbox.alt} onClose={() => setLightbox(null)} />
       )}
     </div>
   )
@@ -243,7 +252,7 @@ function Section({ title, subtitle, tone, children }) {
   )
 }
 
-function CardView({ card, cardId, kind, progress, checked, onToggle, onOpenCard, onCreateTask }) {
+function CardView({ card, cardId, kind, progress, checked, onToggle, onOpenCard, onCreateTask, onImageClick }) {
   return (
     <article className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden break-inside-avoid print:shadow-none print:border print:rounded-none">
       {/* Card header */}
@@ -350,10 +359,25 @@ function CardView({ card, cardId, kind, progress, checked, onToggle, onOpenCard,
                         className="w-5 h-5 sm:w-4 sm:h-4 rounded text-corp-primary focus:ring-1 focus:ring-corp-primary cursor-pointer flex-shrink-0 print:hidden"
                         data-testid={`check-${cardId}-${it.product_id}`} />
                     )}
-                    {/* Image thumb */}
-                    <img src={getImageUrl(it.image_url, 'thumb') || FALLBACK_IMAGE} alt={it.name}
-                      onError={handleImageError}
-                      className="w-12 h-12 sm:w-10 sm:h-10 object-contain rounded bg-white border border-slate-100 flex-shrink-0 print:w-6 print:h-6" />
+                    {/* Image thumb — click to zoom */}
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        if (it.image_url) onImageClick({
+                          src: getImageUrl(it.image_url, 'full') || getImageUrl(it.image_url, 'thumb') || FALLBACK_IMAGE,
+                          alt: `${it.sku || ''} ${it.name}`.trim(),
+                        })
+                      }}
+                      className="focus:outline-none focus:ring-2 focus:ring-corp-primary rounded flex-shrink-0 print:pointer-events-none"
+                      title="Клацни для збільшення"
+                      disabled={!it.image_url}
+                      data-testid={`img-zoom-${it.product_id}`}
+                    >
+                      <img src={getImageUrl(it.image_url, 'thumb') || FALLBACK_IMAGE} alt={it.name}
+                        onError={handleImageError}
+                        className="w-12 h-12 sm:w-10 sm:h-10 object-contain rounded bg-white border border-slate-100 cursor-zoom-in hover:ring-2 hover:ring-corp-primary transition print:w-6 print:h-6 print:cursor-default" />
+                    </button>
                     {/* SKU + Name stacked on mobile, inline on desktop */}
                     <div className="flex-1 min-w-0 flex flex-col sm:flex-row sm:items-center sm:gap-3">
                       {/* SKU — click to open product card */}
