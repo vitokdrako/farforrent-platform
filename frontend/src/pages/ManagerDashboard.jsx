@@ -537,6 +537,13 @@ export default function ManagerDashboard() {
               📋 Збір
             </button>
             <button 
+              className="rounded-lg border border-emerald-300 bg-emerald-50 px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm font-medium text-emerald-700 hover:bg-emerald-100 transition-colors"
+              onClick={() => navigate('/manager/returns-list')}
+              data-testid="returns-list-nav-btn"
+            >
+              📥 Повернення
+            </button>
+            <button 
               className="rounded-lg border border-slate-200 bg-white px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm font-medium text-slate-700 hover:bg-slate-50 hover:border-slate-300 transition-colors"
               onClick={() => navigate('/catalog')}
             >
