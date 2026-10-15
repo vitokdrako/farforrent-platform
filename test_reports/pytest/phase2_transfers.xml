@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="16" time="81.220" timestamp="2026-10-15T16:24:05.924187+00:00" hostname="agent-env-71cc633e-5410-4cac-9285-36c3c023a8c1"><testcase classname="backend.tests.test_warehouse_transfers_phase2" name="test_list_requires_no_auth_but_returns_list" time="3.959" /><testcase classname="backend.tests.test_warehouse_transfers_phase2" name="test_create_requires_auth" time="0.141" /><testcase classname="backend.tests.test_warehouse_transfers_phase2" name="test_create_same_warehouse_fails" time="0.126" /><testcase classname="backend.tests.test_warehouse_transfers_phase2" name="test_create_inactive_warehouse_fails" time="0.761" /><testcase classname="backend.tests.test_warehouse_transfers_phase2" name="test_create_draft_and_details" time="4.329" /><testcase classname="backend.tests.test_warehouse_transfers_phase2" name="test_transfer_number_unique_and_incrementing" time="5.335" /><testcase classname="backend.tests.test_warehouse_transfers_phase2" name="test_update_draft_note_and_items" time="5.353" /><testcase classname="backend.tests.test_warehouse_transfers_phase2" name="test_filter_by_status_and_warehouse" time="5.286" /><testcase classname="backend.tests.test_warehouse_transfers_phase2" name="test_cancel_draft" time="5.580" /><testcase classname="backend.tests.test_warehouse_transfers_phase2" name="test_delete_draft" time="3.338" /><testcase classname="backend.tests.test_warehouse_transfers_phase2" name="test_full_ship_receive_flow" time="7.773" /><testcase classname="backend.tests.test_warehouse_transfers_phase2" name="test_ship_insufficient_stock" time="3.613" /><testcase classname="backend.tests.test_warehouse_transfers_phase2" name="test_ship_empty_transfer_fails" time="3.339" /><testcase classname="backend.tests.test_warehouse_transfers_phase2" name="test_regression_phase1_warehouses_list" time="1.099" /><testcase classname="backend.tests.test_warehouse_transfers_phase2" name="test_regression_warehouses_me_accessible" time="0.829" /><testcase classname="backend.tests.test_warehouse_transfers_phase2" name="test_regression_product_image_upload_and_download" time="30.140"><failure message="requests.exceptions.ReadTimeout: HTTPSConnectionPool(host='item-photos.preview.emergentagent.com', port=443): Read timed out. (read timeout=30)">/root/.venv/lib/python3.11/site-packages/urllib3/connectionpool.py:534: in _make_request
+    response = conn.getresponse()
+               ^^^^^^^^^^^^^^^^^^
+/root/.venv/lib/python3.11/site-packages/urllib3/connection.py:565: in getresponse
+    httplib_response = super().getresponse()
+                       ^^^^^^^^^^^^^^^^^^^^^
+/usr/local/lib/python3.11/http/client.py:1443: in getresponse
+    response.begin()
+/usr/local/lib/python3.11/http/client.py:337: in begin
+    version, status, reason = self._read_status()
+                              ^^^^^^^^^^^^^^^^^^^
+/usr/local/lib/python3.11/http/client.py:298: in _read_status
+    line = str(self.fp.readline(_MAXLINE + 1), "iso-8859-1")
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/local/lib/python3.11/socket.py:718: in readinto
+    return self._sock.recv_into(b)
+           ^^^^^^^^^^^^^^^^^^^^^^^
+/usr/local/lib/python3.11/ssl.py:1327: in recv_into
+    return self.read(nbytes, buffer)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/local/lib/python3.11/ssl.py:1179: in read
+    return self._sslobj.read(len, buffer)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   TimeoutError: The read operation timed out
+
+The above exception was the direct cause of the following exception:
+/root/.venv/lib/python3.11/site-packages/requests/adapters.py:644: in send
+    resp = conn.urlopen(
+/root/.venv/lib/python3.11/site-packages/urllib3/connectionpool.py:841: in urlopen
+    retries = retries.increment(
+/root/.venv/lib/python3.11/site-packages/urllib3/util/retry.py:474: in increment
+    raise reraise(type(error), error, _stacktrace)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/root/.venv/lib/python3.11/site-packages/urllib3/util/util.py:39: in reraise
+    raise value
+/root/.venv/lib/python3.11/site-packages/urllib3/connectionpool.py:787: in urlopen
+    response = self._make_request(
+/root/.venv/lib/python3.11/site-packages/urllib3/connectionpool.py:536: in _make_request
+    self._raise_timeout(err=e, url=url, timeout_value=read_timeout)
+/root/.venv/lib/python3.11/site-packages/urllib3/connectionpool.py:367: in _raise_timeout
+    raise ReadTimeoutError(
+E   urllib3.exceptions.ReadTimeoutError: HTTPSConnectionPool(host='item-photos.preview.emergentagent.com', port=443): Read timed out. (read timeout=30)
+
+During handling of the above exception, another exception occurred:
+backend/tests/test_warehouse_transfers_phase2.py:252: in test_regression_product_image_upload_and_download
+    r = requests.post(f"{BASE_URL}/api/products/upload-image", files=files, headers=h, timeout=30)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/root/.venv/lib/python3.11/site-packages/requests/api.py:115: in post
+    return request("post", url, data=data, json=json, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/root/.venv/lib/python3.11/site-packages/requests/api.py:59: in request
+    return session.request(method=method, url=url, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/root/.venv/lib/python3.11/site-packages/requests/sessions.py:589: in request
+    resp = self.send(prep, **send_kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/root/.venv/lib/python3.11/site-packages/requests/sessions.py:703: in send
+    r = adapter.send(request, **kwargs)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/root/.venv/lib/python3.11/site-packages/requests/adapters.py:690: in send
+    raise ReadTimeout(e, request=request)
+E   requests.exceptions.ReadTimeout: HTTPSConnectionPool(host='item-photos.preview.emergentagent.com', port=443): Read timed out. (read timeout=30)</failure></testcase></testsuite></testsuites>

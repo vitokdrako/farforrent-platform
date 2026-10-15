@@ -18,6 +18,27 @@ See `/app/memory/test_credentials.md`
 
 ---
 
+### 2026-02-26 — ✅ Multi-Warehouse Phase 2 ЗАВЕРШЕНО (Warehouse Transfers)
+- **Нові таблиці** (`add_warehouse_transfers.sql` виконано):
+  - `warehouse_transfers`: id, transfer_number (UNIQUE WT-YYYY-NNNN), from_warehouse_id, to_warehouse_id, status ENUM('draft','in_transit','received','cancelled'), note, created_by/shipped_by/received_by, created_at/shipped_at/received_at/cancelled_at
+  - `warehouse_transfer_items`: transfer_id (FK CASCADE), product_id, quantity, note
+- **Backend** `/api/admin/warehouse-transfers` (`routes/warehouse_transfers.py`):
+  - GET list (фільтри `?status=`, `?warehouse_id=` — показує де склад або `from`, або `to`)
+  - GET /{id} — повні деталі з items (SKU, name, image_url)
+  - POST — створення draft з валідацією (різні склади + активні + items > 0)
+  - PUT /{id} — редагування note/items (лише у статусі draft)
+  - POST /{id}/ship — draft→in_transit, атомарно списує stock з `from_warehouse` з pre-flight перевіркою `quantity - reserved_qty >= qty`
+  - POST /{id}/receive — in_transit→received, UPSERT `product_warehouses` на `to_warehouse` (`ON DUPLICATE KEY UPDATE quantity = quantity + :qty`)
+  - POST /{id}/cancel — draft→cancelled; DELETE /{id} — тільки для draft
+  - Всі endpoint-и захищені JWT (401 для unauth)
+  - Retry-on-duplicate для `transfer_number` (5 спроб) захищає від race condition
+- **Frontend** (`WarehouseTransfersPage.jsx`):
+  - Таблиця переміщень з status-pills, фільтри по статусу/складу
+  - Модалка "Нове переміщення": select from/to warehouse, product search з debounce (300ms, обмежено до from_warehouse), items з редагуванням кількості
+  - Модалка деталей переміщення: показує items, часові мітки, кнопки дій conditional на статус (ship/receive/cancel/delete)
+  - Кнопка "Переміщення" (data-testid=`open-transfers-btn`) на `/admin/warehouses` + маршрут `/admin/warehouses/transfers` у `App.tsx`
+- **testing_agent (iteration_15.json)**: ✅ **16/16 backend PASS + E2E frontend PASS**. 0 critical, 0 minor. Виконано E2E flow: create→ship→receive (stock змінився коректно), idempotency check (повторний receive → 400), фільтри працюють, UI action buttons conditional правильно.
+
 ### 2026-02-26 — ✅ Емігрували завантаження файлів на Emergent Object Storage
 - Усі 8 lint-помилок `[ephemeral-upload-storage]` закрито (`products.py`, `product_images.py` x2, `product_images_multi.py`, `team_chat.py`, `photos.py`, `product_damage_history.py` x2).
 - Новий утиліт-модуль `backend/utils/object_storage.py`: `init_storage()`, `put_object()`, `get_object()`, `build_storage_path()`, `build_public_url()`, `new_filename()`. Усі шляхи у сховищі префіксуються `rentalhub/` щоб ізолювати бакет.

@@ -58,7 +58,7 @@ def _require_auth(user: Optional[dict]) -> int:
 
 
 def _generate_transfer_number(db: Session) -> str:
-    """WT-YYYY-NNN, counter resets each year."""
+    """WT-YYYY-NNNN, counter resets each year. Caller must handle rare 1062 duplicate on insert."""
     year = datetime.now().year
     row = db.execute(
         text("""
@@ -129,6 +129,19 @@ def _load_items(db: Session, transfer_id: int) -> list[dict]:
     ]
 
 
+def _fetch_transfer(db: Session, transfer_id: int) -> dict:
+    """Internal: fetch full transfer dict with items. Raises 404 if missing."""
+    row = db.execute(
+        text(f"{_SELECT_SQL} WHERE t.id = :id"),
+        {"id": transfer_id},
+    ).fetchone()
+    if not row:
+        raise HTTPException(404, "Transfer not found")
+    d = _transfer_row_to_dict(row)
+    d["items"] = _load_items(db, transfer_id)
+    return d
+
+
 # ============================================================================
 # Routes
 # ============================================================================
@@ -138,8 +151,10 @@ async def list_transfers(
     warehouse_id: Optional[int] = Query(None, description="Фільтр: or_from=warehouse_id OR to=warehouse_id"),
     limit: int = Query(100, le=500),
     db: Session = Depends(get_rh_db),
+    user: dict = Depends(get_current_user_dependency),
 ):
     """Список переміщень. warehouse_id — показати лише ті, де цей склад або from, або to."""
+    _require_auth(user)
     where = []
     params: dict = {}
     if status:
@@ -178,16 +193,13 @@ async def list_transfers(
 
 
 @router.get("/{transfer_id}")
-async def get_transfer(transfer_id: int, db: Session = Depends(get_rh_db)):
-    row = db.execute(
-        text(f"{_SELECT_SQL} WHERE t.id = :id"),
-        {"id": transfer_id},
-    ).fetchone()
-    if not row:
-        raise HTTPException(404, "Transfer not found")
-    d = _transfer_row_to_dict(row)
-    d["items"] = _load_items(db, transfer_id)
-    return d
+async def get_transfer(
+    transfer_id: int,
+    db: Session = Depends(get_rh_db),
+    user: dict = Depends(get_current_user_dependency),
+):
+    _require_auth(user)
+    return _fetch_transfer(db, transfer_id)
 
 
 @router.post("", status_code=201)
@@ -213,23 +225,35 @@ async def create_transfer(
         raise HTTPException(400, "Один зі складів не знайдено або неактивний")
 
     try:
-        transfer_number = _generate_transfer_number(db)
-        res = db.execute(
-            text("""
-                INSERT INTO warehouse_transfers
-                    (transfer_number, from_warehouse_id, to_warehouse_id, status, note, created_by)
-                VALUES
-                    (:tn, :from_id, :to_id, 'draft', :note, :uid)
-            """),
-            {
-                "tn": transfer_number,
-                "from_id": payload.from_warehouse_id,
-                "to_id": payload.to_warehouse_id,
-                "note": payload.note,
-                "uid": uid,
-            },
-        )
-        transfer_id = res.lastrowid
+        # UNIQUE index on transfer_number guards against race; retry up to 5x on 1062
+        transfer_id = None
+        for attempt in range(5):
+            transfer_number = _generate_transfer_number(db)
+            try:
+                res = db.execute(
+                    text("""
+                        INSERT INTO warehouse_transfers
+                            (transfer_number, from_warehouse_id, to_warehouse_id, status, note, created_by)
+                        VALUES
+                            (:tn, :from_id, :to_id, 'draft', :note, :uid)
+                    """),
+                    {
+                        "tn": transfer_number,
+                        "from_id": payload.from_warehouse_id,
+                        "to_id": payload.to_warehouse_id,
+                        "note": payload.note,
+                        "uid": uid,
+                    },
+                )
+                transfer_id = res.lastrowid
+                break
+            except Exception as insert_err:
+                if "1062" in str(insert_err) or "Duplicate" in str(insert_err):
+                    db.rollback()
+                    continue
+                raise
+        if transfer_id is None:
+            raise HTTPException(500, "Could not allocate transfer number after 5 attempts")
 
         for item in payload.items:
             db.execute(
@@ -250,7 +274,7 @@ async def create_transfer(
         db.rollback()
         raise HTTPException(500, f"Could not create transfer: {e}")
 
-    return await get_transfer(transfer_id, db)
+    return _fetch_transfer(db, transfer_id)
 
 
 @router.put("/{transfer_id}")
@@ -303,7 +327,7 @@ async def update_transfer(
         db.rollback()
         raise HTTPException(500, f"Could not update transfer: {e}")
 
-    return await get_transfer(transfer_id, db)
+    return _fetch_transfer(db, transfer_id)
 
 
 @router.post("/{transfer_id}/ship")
@@ -376,7 +400,7 @@ async def ship_transfer(
         db.rollback()
         raise HTTPException(500, f"Could not ship transfer: {e}")
 
-    return await get_transfer(transfer_id, db)
+    return _fetch_transfer(db, transfer_id)
 
 
 @router.post("/{transfer_id}/receive")
@@ -429,7 +453,7 @@ async def receive_transfer(
         db.rollback()
         raise HTTPException(500, f"Could not receive transfer: {e}")
 
-    return await get_transfer(transfer_id, db)
+    return _fetch_transfer(db, transfer_id)
 
 
 @router.post("/{transfer_id}/cancel")
@@ -458,7 +482,7 @@ async def cancel_transfer(
         {"id": transfer_id},
     )
     db.commit()
-    return await get_transfer(transfer_id, db)
+    return _fetch_transfer(db, transfer_id)
 
 
 @router.delete("/{transfer_id}")
