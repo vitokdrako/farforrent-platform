@@ -359,9 +359,7 @@ class DecorInventoryExtended(Base):
 """
 Additional models for Issue Cards, Return Cards, and Photos
 """
-from sqlalchemy import Column, Integer, String, Text, DECIMAL, DateTime, Date, Boolean, ForeignKey, JSON
-from sqlalchemy.sql import func
-from database import Base
+from sqlalchemy import Date, Boolean, JSON
 
 
 class DecorProductCatalog(Base):

@@ -169,7 +169,7 @@ async def list_clients(
         if row[14]:
             try:
                 bank_details = json_lib.loads(row[14]) if isinstance(row[14], str) else row[14]
-            except:
+            except Exception:
                 pass
         
         clients.append({

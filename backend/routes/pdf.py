@@ -121,7 +121,7 @@ async def generate_invoice(order_id: int, db: Session = Depends(get_db)):
                 issue = datetime.strptime(simple_fields.rent_issue_date, '%Y-%m-%d')
                 return_date = datetime.strptime(simple_fields.rent_return_date, '%Y-%m-%d')
                 rental_days = max((return_date - issue).days, 1)
-            except:
+            except Exception:
                 pass
         
         # Calculate totals

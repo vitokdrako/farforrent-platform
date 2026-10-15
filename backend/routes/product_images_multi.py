@@ -1,41 +1,25 @@
 """
-Product Images Multi - Підтримка кількох фото на товар
-Використовує нову таблицю product_images
+Product Images Multi - Підтримка кількох фото на товар (Emergent object storage).
+Використовує таблицю product_images.
 """
 from fastapi import APIRouter, UploadFile, File, HTTPException, Depends
 from sqlalchemy import text
 from database_rentalhub import get_rh_db_sync
-from PIL import Image
 import os
 import logging
-import shutil
-import time
 import re
-from pathlib import Path
 from typing import List
 from pydantic import BaseModel
 
+from utils.object_storage import (
+    put_object,
+    build_storage_path,
+    build_public_url,
+    new_filename,
+)
+
 router = APIRouter(prefix="/api/products", tags=["product-images-multi"])
 logger = logging.getLogger(__name__)
-
-# Production path (на VPS)
-PROD_DIR = "/var/www/farforrent/backend/uploads/products"
-# Legacy production path (старий хостинг)
-LEGACY_DIR = "/home/farforre/farforrent.com.ua/rentalhub/backend/uploads/products"
-# Local fallback
-LOCAL_DIR = "/app/backend/uploads/products"
-
-# Auto-detect
-if os.path.exists(os.path.dirname(PROD_DIR)):
-    PRODUCTS_DIR = PROD_DIR
-elif os.path.exists(os.path.dirname(LEGACY_DIR)):
-    PRODUCTS_DIR = LEGACY_DIR
-else:
-    PRODUCTS_DIR = LOCAL_DIR
-
-os.makedirs(PRODUCTS_DIR, exist_ok=True)
-os.makedirs(os.path.join(PRODUCTS_DIR, "thumbnails"), exist_ok=True)
-os.makedirs(os.path.join(PRODUCTS_DIR, "medium"), exist_ok=True)
 
 ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
@@ -58,27 +42,6 @@ def _resolve_product_id(db, product_id_or_sku: str) -> int:
     if not row:
         raise HTTPException(404, f"Товар з SKU/ID '{product_id_or_sku}' не знайдено")
     return int(row[0])
-
-
-def _make_thumb(image_path: str, size: tuple, subdir: str) -> str | None:
-    """Створює thumbnail заданого розміру, повертає шлях"""
-    try:
-        img = Image.open(image_path)
-        if img.mode in ("RGBA", "LA", "P"):
-            bg = Image.new("RGB", img.size, (255, 255, 255))
-            if img.mode == "P":
-                img = img.convert("RGBA")
-            bg.paste(img, mask=img.split()[-1] if img.mode == "RGBA" else None)
-            img = bg
-        img.thumbnail(size, Image.Resampling.LANCZOS)
-
-        filename = os.path.basename(image_path)
-        out_path = os.path.join(PRODUCTS_DIR, subdir, filename)
-        img.save(out_path, quality=85, optimize=True)
-        return out_path
-    except Exception as e:
-        logger.error(f"Thumbnail error: {e}")
-        return None
 
 
 # ─────────────────────────────────────────────────────────────────
@@ -142,7 +105,7 @@ async def upload_product_images(
     files: List[UploadFile] = File(...),
     db=Depends(get_rh_db_sync),
 ):
-    """Завантажити кілька фото одночасно для товара"""
+    """Завантажити кілька фото одночасно (object storage)."""
     try:
         product_id = _resolve_product_id(db, product_id)
         # Перевірка товара + дістати SKU
@@ -152,7 +115,7 @@ async def upload_product_images(
         if not prod:
             raise HTTPException(404, "Товар не знайдено")
 
-        sku = _sanitize_sku(prod[1] or f"id{product_id}")
+        _sanitize_sku(prod[1] or f"id{product_id}")  # kept for backward-compat / future folder naming
 
         # Поточна максимальна sort_order
         max_order = db.execute(text(
@@ -174,26 +137,18 @@ async def upload_product_images(
                     results["failed"].append({"filename": f.filename, "error": f"Формат {ext} не підтримується"})
                     continue
 
-                # Розмір
-                f.file.seek(0, 2)
-                size = f.file.tell()
-                f.file.seek(0)
-                if size > MAX_FILE_SIZE:
+                contents = await f.read()
+                if len(contents) > MAX_FILE_SIZE:
                     results["failed"].append({"filename": f.filename, "error": "Файл завеликий (>10MB)"})
                     continue
 
-                # Зберігаємо
-                ts = int(time.time() * 1000)
-                filename = f"{sku}_{ts}_{next_order}{ext}"
-                file_path = os.path.join(PRODUCTS_DIR, filename)
-                with open(file_path, "wb") as buf:
-                    shutil.copyfileobj(f.file, buf)
+                filename = new_filename(f.filename, default_ext="jpg")
+                storage_path = build_storage_path("products", filename)
+                upload_result = put_object(
+                    storage_path, contents, f.content_type or "image/jpeg"
+                )
+                public_url = build_public_url(upload_result["path"])
 
-                # Thumbnails
-                _make_thumb(file_path, (300, 300), "thumbnails")
-                _make_thumb(file_path, (800, 800), "medium")
-
-                relative_url = f"uploads/products/{filename}"
                 is_primary = 1 if (not has_primary and not results["uploaded"]) else 0
 
                 # INSERT
@@ -201,24 +156,24 @@ async def upload_product_images(
                     INSERT INTO product_images
                     (product_id, image_url, sort_order, is_primary, source)
                     VALUES (:pid, :url, :sort, :prim, 'manual')
-                """), {"pid": product_id, "url": relative_url, "sort": next_order, "prim": is_primary})
+                """), {"pid": product_id, "url": public_url, "sort": next_order, "prim": is_primary})
 
                 # Якщо це первинне фото — оновимо також products.image_url
                 if is_primary == 1:
                     db.execute(text(
                         "UPDATE products SET image_url = :url WHERE product_id = :pid"
-                    ), {"url": relative_url, "pid": product_id})
+                    ), {"url": public_url, "pid": product_id})
                     has_primary = True
 
                 results["uploaded"].append({
                     "filename": filename,
-                    "url": relative_url,
+                    "url": public_url,
                     "sort_order": next_order,
                     "is_primary": bool(is_primary),
                 })
                 next_order += 1
             except Exception as e:
-                logger.error(f"Upload failed for {f.filename}: {e}")
+                logger.error("Upload failed for %s: %s", f.filename, e)
                 results["failed"].append({"filename": f.filename, "error": str(e)})
 
         db.commit()
@@ -227,7 +182,7 @@ async def upload_product_images(
         raise
     except Exception as e:
         db.rollback()
-        logger.error(f"Multi upload error: {e}")
+        logger.error("Multi upload error: %s", e)
         raise HTTPException(500, f"Помилка завантаження: {e}")
     finally:
         db.close()
@@ -241,6 +196,10 @@ delete_router = APIRouter(prefix="/api", tags=["product-images-multi"])
 
 @delete_router.delete("/product-images/{image_id}")
 async def delete_product_image(image_id: int, db=Depends(get_rh_db_sync)):
+    """
+    Видалення запису про фото. Файл в object storage залишається осиротілим
+    (у storage немає API видалення — див. playbook), це нормально.
+    """
     try:
         row = db.execute(text(
             "SELECT product_id, image_url, is_primary FROM product_images WHERE id = :id"
@@ -248,21 +207,7 @@ async def delete_product_image(image_id: int, db=Depends(get_rh_db_sync)):
         if not row:
             raise HTTPException(404, "Фото не знайдено")
 
-        product_id, image_url, was_primary = row[0], row[1], bool(row[2])
-
-        # Видаляємо файл
-        try:
-            full = os.path.join("/var/www/farforrent/backend", image_url) if not os.path.isabs(image_url) else image_url
-            if os.path.exists(full):
-                os.remove(full)
-                # thumbnails
-                base = os.path.basename(image_url)
-                for sub in ("thumbnails", "medium"):
-                    t = os.path.join(PRODUCTS_DIR, sub, base)
-                    if os.path.exists(t):
-                        os.remove(t)
-        except Exception as e:
-            logger.warning(f"File delete warning: {e}")
+        product_id, _image_url, was_primary = row[0], row[1], bool(row[2])
 
         db.execute(text("DELETE FROM product_images WHERE id = :id"), {"id": image_id})
 

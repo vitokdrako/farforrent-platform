@@ -30,7 +30,7 @@ def format_money(value):
     """Форматує суму в гривнях"""
     try:
         return f"{float(value):,.2f}".replace(",", " ")
-    except:
+    except Exception:
         return "0.00"
 
 def format_date(value, fmt="%d.%m.%Y"):

@@ -200,7 +200,7 @@ async def send_to_processing(
     
     # Списання - зменшуємо кількість, не заморожуємо
     if data.action_type == 'write_off':
-        new_qty = max(0, (current_qty or 0) - data.quantity)
+        new_qty = max(0, (quantity or 0) - data.quantity)
         db.execute(text("""
             UPDATE products 
             SET quantity = :new_qty

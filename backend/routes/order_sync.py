@@ -244,7 +244,7 @@ async def get_order_versions(order_id: int, db: Session = Depends(get_rh_db)):
                 "modified_by_name": row[3],
                 "modified_at": row[4].isoformat() if row[4] else None
             }
-    except:
+    except Exception:
         versions = {}
     
     # Додати дефолтні секції якщо немає
@@ -285,7 +285,7 @@ async def update_section_version(
         """), {"order_id": order_id, "section": section}).fetchone()
         
         current_version = current[0] if current else 0
-    except:
+    except Exception:
         # Таблиця може не існувати
         current_version = 0
     

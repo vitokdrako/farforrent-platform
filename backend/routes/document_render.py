@@ -91,7 +91,7 @@ def format_date_ua(d) -> Dict[str, str]:
     if isinstance(d, str):
         try:
             d = datetime.fromisoformat(d.replace("Z", "+00:00")).date()
-        except:
+        except Exception:
             d = date.today()
     elif isinstance(d, datetime):
         d = d.date()

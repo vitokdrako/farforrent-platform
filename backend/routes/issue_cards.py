@@ -102,7 +102,7 @@ def parse_issue_card(row, db: Session = None):
     if row[6]:  # items JSON column
         try:
             items = json.loads(row[6]) if isinstance(row[6], str) else row[6]
-        except:
+        except Exception:
             items = []
     
     # Fallback: якщо в issue_cards.items порожньо — тягнемо з order_items таблиці.
@@ -325,7 +325,7 @@ def parse_issue_card(row, db: Session = None):
     if len(row) > 13 and row[13]:  # checklist column
         try:
             checklist = json.loads(row[13]) if isinstance(row[13], str) else row[13]
-        except:
+        except Exception:
             checklist = None
     
     # Parse manager_notes if exists
@@ -336,7 +336,7 @@ def parse_issue_card(row, db: Session = None):
     if len(row) > 21 and row[21]:
         try:
             requisitors = json.loads(row[21]) if isinstance(row[21], str) else row[21]
-        except:
+        except Exception:
             requisitors = []
     
     return {
@@ -642,7 +642,7 @@ async def get_item_packaging_by_order(order_id: int, db: Session = Depends(get_r
     
     try:
         items_data = json.loads(result[0]) if isinstance(result[0], str) else result[0]
-    except:
+    except Exception:
         return {"packaging": {}}
     
     # Збираємо пакування по product_id/sku

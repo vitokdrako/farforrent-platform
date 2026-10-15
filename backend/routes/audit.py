@@ -246,7 +246,7 @@ async def get_audit_items(
             import json
             try:
                 hashtags = json.loads(hashtags_json) if hashtags_json else []
-            except:
+            except Exception:
                 hashtags = []
             
             cat_full = category_name or "Загальне"
@@ -346,6 +346,16 @@ async def get_audit_item_details(
         zone_display = f"Зона {zone_raw}" if zone_raw else "Склад"
         location_parts = [aisle_raw, shelf_raw]
         location_display = " / ".join(filter(None, location_parts)) if any(location_parts) else "Не вказано"
+        
+        # Legacy variables (compat with older code paths below)
+        product = result
+        extended = None
+        description = None
+        cat_main = result[4] or "Загальне"
+        audit_status = result[16] or 'pending'
+        last_audit_by = None
+        next_audit = None
+        audit_notes = None
         
         cat_full = result[4] or "Загальне"
         if result[5]:
@@ -512,7 +522,7 @@ async def update_product_info(
         }
         
     except Exception as e:
-        db.rollback()
+        rh_db.rollback()
         raise HTTPException(
             status_code=500,
             detail=f"Помилка оновлення: {str(e)}"
@@ -2265,7 +2275,7 @@ async def mark_category_audited(
             'message': f'Категорія "{category_name}" зафіксована як переоблікована',
             'updated_count': updated_count,
             'audit_date': str(datetime.now().date()),
-            'audited_by': audited_by
+            'audited_by': 'system'
         }
         
     except HTTPException:
@@ -2433,7 +2443,7 @@ async def export_audit_to_excel(
                 try:
                     if len(str(cell.value)) > max_length:
                         max_length = len(str(cell.value))
-                except:
+                except Exception:
                     pass
             adjusted_width = min(max_length + 2, 50)
             ws.column_dimensions[column].width = adjusted_width
@@ -2622,7 +2632,7 @@ async def import_audit_from_excel(
             'message': f'Категорія "{category_name}" зафіксована як переоблікована',
             'updated_count': updated_count,
             'audit_date': str(datetime.now().date()),
-            'audited_by': audited_by
+            'audited_by': 'system'
         }
         
     except HTTPException:

@@ -1058,15 +1058,15 @@ async def migrate_tables(db: Session = Depends(get_rh_db)):
         # Rename old tables instead of dropping (to avoid FK issues)
         try:
             db.execute(text("RENAME TABLE hr_employees TO hr_employees_old_backup"))
-        except:
+        except Exception:
             pass
         try:
             db.execute(text("RENAME TABLE hr_payroll TO hr_payroll_old_backup"))
-        except:
+        except Exception:
             pass
         try:
             db.execute(text("RENAME TABLE fin_vendors TO fin_vendors_old_backup"))
-        except:
+        except Exception:
             pass
         db.execute(text("""
             CREATE TABLE rh_employees (
@@ -1177,7 +1177,7 @@ async def list_vendors(vendor_type: Optional[str] = None, db: Session = Depends(
             vendors = [{"id": r[0], "name": r[1], "vendor_type": 'service', "contact_name": None,
                         "phone": None, "email": None, "address": None, "iban": None,
                         "balance": 0, "note": None, "is_active": True, "created_at": None} for r in result]
-        except:
+        except Exception:
             vendors = []
     return {"vendors": vendors}
 
@@ -1313,7 +1313,7 @@ async def list_payroll(employee_id: Optional[int] = None, status: Optional[str] 
                     "status": r[9] or 'pending', "method": r[10] or 'cash',
                     "paid_at": r[11].isoformat() if r[11] else None,
                     "note": r[12], "created_at": r[13].isoformat() if r[13] else None} for r in result]
-    except:
+    except Exception:
         payroll = []
     return {"payroll": payroll}
 
@@ -1967,7 +1967,7 @@ async def list_expense_categories(db: Session = Depends(get_rh_db)):
             ORDER BY type, name
         """))
         return [{"id": r[0], "type": r[1], "code": r[2], "name": r[3], "is_active": bool(r[4])} for r in result]
-    except:
+    except Exception:
         return []
 
 
@@ -3151,7 +3151,7 @@ async def get_kasa_data(
             try:
                 import json as json_mod
                 rd = json_mod.loads(cr[2]) if cr[2] else {}
-            except:
+            except Exception:
                 rd = {}
             cash_reg = rd.get("cash_register", {})
             closed_months_data.append({
@@ -3180,7 +3180,7 @@ async def get_kasa_data(
                 parsed = dt.fromisoformat(d) if isinstance(d, str) else d
                 item["_closed"] = (parsed.year, parsed.month) in closed_periods
                 item["_period"] = f"{parsed.year}-{parsed.month:02d}"
-            except:
+            except Exception:
                 item["_closed"] = False
             return item
         
@@ -3579,7 +3579,6 @@ async def get_monthly_reports(db: Session = Depends(get_rh_db)):
         ORDER BY year DESC, month DESC
     """)).fetchall()
     
-    import json
     return [{
         "id": r[0],
         "year": r[1],
@@ -3605,7 +3604,6 @@ async def get_monthly_report_detail(report_id: int, db: Session = Depends(get_rh
     if not row:
         raise HTTPException(status_code=404, detail="Звіт не знайдено")
     
-    import json
     return {
         "id": row[0],
         "year": row[1],
@@ -3779,7 +3777,6 @@ async def create_cash_summary(data: dict, db: Session = Depends(get_rh_db)):
         """)).fetchone()
         carry_over = 0
         if carry_row and carry_row[0]:
-            import json
             rd = json.loads(carry_row[0]) if isinstance(carry_row[0], str) else carry_row[0]
             cr = rd.get("cash_register", {})
             carry_over = float(cr.get("closing_balance", 0))

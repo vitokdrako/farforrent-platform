@@ -3,11 +3,13 @@
 ⚠️  Створює реальне замовлення → реєструє hard-cleanup на atexit.
 🛑 За замовчуванням НЕ запускається проти прод-БД (см. tests/_safety.py).
 """
-import sys, os
+import sys
+import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from tests._safety import assert_not_production
 assert_not_production()
-import requests, time
+import requests
+import time
 
 BASE = "http://localhost:8001/api"
 EVT = f"{BASE}/event"

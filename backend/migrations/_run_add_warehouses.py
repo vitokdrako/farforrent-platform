@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Run multi-warehouse migration against the configured RH DB."""
-import os, sys, urllib.parse
+import os
+import sys
+import urllib.parse
 from dotenv import load_dotenv
 from sqlalchemy import create_engine, text
 

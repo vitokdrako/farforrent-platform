@@ -201,7 +201,7 @@ async def get_manual_fields_schema(
         try:
             snapshot_data = json.loads(current_snapshot) if isinstance(current_snapshot, str) else current_snapshot
             current_values = snapshot_data.get("manual_fields", {})
-        except:
+        except Exception:
             pass
     
     return {

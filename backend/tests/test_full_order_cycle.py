@@ -10,7 +10,9 @@ Cleanup ОБОВ'ЯЗКОВИЙ навіть при падінні — інак�
 
 🛑 За замовчуванням НЕ запускається проти прод-БД (см. tests/_safety.py).
 """
-import sys, os, atexit
+import sys
+import os
+import atexit
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from tests._safety import assert_not_production
 assert_not_production()

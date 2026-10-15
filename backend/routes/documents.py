@@ -437,7 +437,7 @@ async def send_document_email(
                 VALUES (:doc_id, :email, NOW(), 'failed', :error)
             """), {"doc_id": document_id, "email": request.email, "error": str(e)})
             db.commit()
-        except:
+        except Exception:
             pass
         
         raise HTTPException(status_code=500, detail=f"Помилка відправки email: {str(e)}")
@@ -673,7 +673,7 @@ def _format_date_ua(date_val) -> str:
     if isinstance(date_val, str):
         try:
             date_val = datetime.fromisoformat(date_val.replace('Z', '+00:00'))
-        except:
+        except Exception:
             return date_val
     return date_val.strftime("%d.%m.%Y")
 
@@ -684,7 +684,7 @@ def _format_date_ua_long(date_val) -> str:
     if isinstance(date_val, str):
         try:
             date_val = datetime.fromisoformat(date_val.replace('Z', '+00:00'))
-        except:
+        except Exception:
             return date_val
     months = ['січня', 'лютого', 'березня', 'квітня', 'травня', 'червня',
               'липня', 'серпня', 'вересня', 'жовтня', 'листопада', 'грудня']
@@ -776,7 +776,7 @@ def _enrich_template_with_agreement(db: Session, order, template_data: dict, ord
             ), {"oid": order_id}).fetchone()
             if cuid_row and cuid_row[0]:
                 client_user_id = cuid_row[0]
-        except:
+        except Exception:
             pass
         
         # Fallback: match by customer_name
@@ -787,7 +787,7 @@ def _enrich_template_with_agreement(db: Session, order, template_data: dict, ord
                 ), {"name": customer_name}).fetchone()
                 if cu_row:
                     client_user_id = cu_row[0]
-            except:
+            except Exception:
                 pass
     
     # Load client data
@@ -810,7 +810,7 @@ def _enrich_template_with_agreement(db: Session, order, template_data: dict, ord
                     "director_name": cr[6] or "",
                     "bank_details": cr[7],
                 }
-        except:
+        except Exception:
             pass
     
     # Load active master agreement
@@ -839,7 +839,7 @@ def _enrich_template_with_agreement(db: Session, order, template_data: dict, ord
                 if ma_row[6]:
                     try:
                         snapshot = json.loads(ma_row[6]) if isinstance(ma_row[6], str) else ma_row[6]
-                    except:
+                    except Exception:
                         pass
                 
                 contract_date_raw = snapshot.get("contract_date") or (ma_row[2].isoformat() if ma_row[2] else None)
@@ -860,7 +860,7 @@ def _enrich_template_with_agreement(db: Session, order, template_data: dict, ord
                 executor = snapshot.get("executor") or EXECUTORS.get(executor_type, EXECUTORS.get("tov", {}))
                 agreement_data["executor"] = executor
                 agreement_data["executor_type"] = executor_type
-        except:
+        except Exception:
             pass
     
     # Build mappings
@@ -902,7 +902,7 @@ def _enrich_template_with_agreement(db: Session, order, template_data: dict, ord
         if isinstance(bd, str):
             try:
                 bd = json.loads(bd)
-            except:
+            except Exception:
                 bd = None
         if isinstance(bd, dict):
             template_data["tenant"]["iban"] = bd.get("iban", "")
@@ -914,7 +914,7 @@ def _enrich_template_with_agreement(db: Session, order, template_data: dict, ord
         try:
             snapshot = agreement_data.get("_snapshot", {})
             contract_date_raw = snapshot.get("contract_date") or agreement_data.get("valid_from")
-        except:
+        except Exception:
             pass
     
     meta_day, meta_month, meta_year = "", "", ""
@@ -928,7 +928,7 @@ def _enrich_template_with_agreement(db: Session, order, template_data: dict, ord
                 meta_day = str(d.day)
                 meta_month = months_ua[d.month - 1]
                 meta_year = str(d.year)
-        except:
+        except Exception:
             pass
     
     template_data["meta"] = template_data.get("meta", {})
@@ -1339,7 +1339,7 @@ async def preview_annex(
                 try:
                     snapshot = json.loads(agreement_row[3]) if isinstance(agreement_row[3], str) else agreement_row[3]
                     executor = snapshot.get("executor") or EXECUTORS.get(snapshot.get("executor_type", "tov"), EXECUTORS["tov"])
-                except:
+                except Exception:
                     pass
     
     if not agreement:
@@ -1737,9 +1737,6 @@ def _build_issue_act_data(db: Session, order_id: int, executor_type: str = "fop"
         "totals": {"items_count": len(items), "quantity": total_qty},
         "company": get_company_config(db),
     }
-    
-    _enrich_template_with_agreement(db, order, template_data)
-    return template_data
 
 
 @router.get("/issue-act/{order_id}/preview", response_class=HTMLResponse)
@@ -1853,7 +1850,7 @@ async def download_annex_pdf(order_id: int, agreement_id: Optional[int] = Query(
                 try:
                     snapshot = json.loads(agreement_row[3]) if isinstance(agreement_row[3], str) else agreement_row[3]
                     executor = snapshot.get("executor") or EXECUTORS.get(snapshot.get("executor_type", "tov"), EXECUTORS["tov"])
-                except:
+                except Exception:
                     pass
     
     if not agreement:
@@ -2278,7 +2275,7 @@ def _format_date_ua_long_nominative(date_val) -> str:
     if isinstance(date_val, str):
         try:
             date_val = datetime.fromisoformat(date_val.replace('Z', '+00:00'))
-        except:
+        except Exception:
             return date_val
     months = ['січня', 'лютого', 'березня', 'квітня', 'травня', 'червня',
               'липня', 'серпня', 'вересня', 'жовтня', 'листопада', 'грудня']
@@ -2432,7 +2429,7 @@ async def preview_service_act(
     if act_date:
         try:
             parsed_date = datetime.fromisoformat(act_date)
-        except:
+        except Exception:
             parsed_date = datetime.now()
     else:
         parsed_date = order[6] or order[7] or datetime.now()  # rental_start_date or rental_end_date or now

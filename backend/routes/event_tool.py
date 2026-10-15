@@ -854,7 +854,7 @@ async def check_availability(data: AvailabilityCheck, db: Session = Depends(get_
 
 @router.get("/boards")
 async def get_boards(
-    status: Optional[str] = None,
+    status: Optional[str] = None,  # noqa: F811  intentional - FastAPI query param, shadows fastapi.status
     db: Session = Depends(get_rh_db),
     token: str = Depends(get_token_from_header)
 ):
@@ -2698,11 +2698,15 @@ async def get_my_order_documents(
         #   - 'order' + order_number (рідко, deprecated)
         #   - 'customer' + customer_id (estimate перед оформленням)
         # Шукаємо в усіх варіантах щоб не пропустити нічого.
-        order_number = order_row[1] or ''
+        order_info_row = db.execute(text("""
+            SELECT order_number FROM orders WHERE order_id = :oid LIMIT 1
+        """), {"oid": order_id}).fetchone()
+        order_number = (order_info_row[0] if order_info_row else '') or ''
 
         # Дістаємо customer_id замовлення
+        customer_id_col = "customer_id" if "customer_id" in existing_cols else "NULL"
         customer_id_row = db.execute(text(f"""
-            SELECT {col('customer_id', 'NULL')} FROM orders WHERE order_id = :oid
+            SELECT {customer_id_col} FROM orders WHERE order_id = :oid
         """), {"oid": order_id}).fetchone()
         customer_id_val = customer_id_row[0] if customer_id_row else None
 

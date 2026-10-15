@@ -73,13 +73,13 @@ def parse_return_card(row, db=None):
     if raw_items:
         try:
             items_expected = json.loads(raw_items) if isinstance(raw_items, str) else raw_items
-        except:
+        except Exception:
             pass
     
     if row[10]:  # items_returned
         try:
             items_returned = json.loads(row[10]) if isinstance(row[10], str) else row[10]
-        except:
+        except Exception:
             pass
     
     # ✅ Збагатити items даними про location з products

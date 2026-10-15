@@ -22,7 +22,10 @@ Apply all RentalHub migrations safely (idempotent).
   - Перед запуском робиться mysqldump бекап у /var/www/farforrent/db_backups/
   - У разі помилки міграції — наступні НЕ запускаються (fail-fast)
 """
-import os, sys, argparse, subprocess
+import os
+import sys
+import argparse
+import subprocess
 from pathlib import Path
 from dotenv import load_dotenv
 

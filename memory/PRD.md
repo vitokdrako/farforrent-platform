@@ -16,6 +16,32 @@ See `/app/memory/test_credentials.md`
 
 ---
 
+---
+
+### 2026-02-26 — ✅ Емігрували завантаження файлів на Emergent Object Storage
+- Усі 8 lint-помилок `[ephemeral-upload-storage]` закрито (`products.py`, `product_images.py` x2, `product_images_multi.py`, `team_chat.py`, `photos.py`, `product_damage_history.py` x2).
+- Новий утиліт-модуль `backend/utils/object_storage.py`: `init_storage()`, `put_object()`, `get_object()`, `build_storage_path()`, `build_public_url()`, `new_filename()`. Усі шляхи у сховищі префіксуються `rentalhub/` щоб ізолювати бакет.
+- Публічний route `GET /api/files/{path:path}` стрімить файли з Emergent proxy (CDN-friendly `Cache-Control: public, immutable`). Під'єднаний у `server.py`.
+- `EMERGENT_LLM_KEY` додано в `backend/.env` (використовує існуючий Universal Key).
+- Startup-hook `_init_object_storage` у `server.py` розігріває session key при старті (не fatal якщо впаде — лінивий retry).
+- Thumbnail-генерація прибрана з `product_images.py` та `product_images_multi.py`, оскільки у БД `image_url` зберігає ТІЛЬКИ оригінал — thumbnail-файли на диску ніхто не читав. При потребі додамо on-the-fly resize ендпоїнт пізніше.
+- Delete-ендпоїнти перероблено на soft-delete у БД (object storage не має delete API — файли залишаються осиротілими, це нормально).
+- **Smoke-test**: upload JPG → `GET /api/files/rentalhub/products/<uuid>.jpg` → байти ідентичні, `Content-Type: image/jpeg`. ✅
+- Old API поведінка збережена: endpoint-и повертають поле `url` з повним шляхом `/api/files/...` → фронт просто передає його в `<img src>` з `REACT_APP_BACKEND_URL`-префіксом.
+
+### 2026-02-26 — ✅ Multi-Warehouse Phase 1 ЗАВЕРШЕНО
+- **Backend CRUD** `/api/admin/warehouses` (GET/POST/PUT/DELETE) + `/api/admin/warehouses/_me/accessible` — список доступних поточному юзеру складів.
+- **SQL міграція** `add_warehouses_multi_v1.sql` виконана: створено `warehouses`, `product_warehouses`, `user_warehouses`; усі `orders`/`products`/`clients` вже прив'язані до `warehouse_id=1 (UA Київ)`.
+- **Фронтенд**: `WarehouseProvider` у `App.tsx` огортає admin stack; `<WarehouseSwitcher />` у `CorporateHeader` показується тільки для manager/admin (badge якщо 1 склад → dropdown якщо >=2).
+- **Фільтрація по складу** додана в 4 ключові сторінки — `ManagerDashboard`, `PickingListPage`, `ReturnsListPage`, `OverdueListPage`. Всі `useEffect` слухають `activeWarehouse?.id`, API URL формуються через `withWh()` хелпер (append `?warehouse_id=X`).
+- **CRUD UI**: `/admin/warehouses` показує таблицю з іконками + статистикою (товари/замовлення/клієнти), модалка для створення/редагування складу з усіма полями (code, name, country, city, currency, timezone, phone, email, default/active).
+- **testing_agent (iteration_14.json)**: ✅ **12/12 backend PASS + E2E frontend PASS**. Створено тестовий склад PL2 → badge перетворився на dropdown → переключення на PL2 показало порожній дашборд (коректна фільтрація). Тестовий склад видалено наприкінці.
+
+**Відомі pre-existing lint помилки (не блокують функціонал, виправимо окремо):**
+- 106 lint-помилок у backend: 63 `E722 bare except`, 17 `F821 undefined names` у `audit.py`, `event_tool.py`, `auth.py`, `documents.py` — були до цього форка.
+- Ephemeral upload storage у 6 файлах — слід мігрувати на Emergent Object Storage у майбутньому.
+
+
 ## What's Been Implemented (latest first)
 
 ### 2026-02-25 — Mobile polish + push UX (Event Tool)

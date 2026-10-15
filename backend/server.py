@@ -12,7 +12,8 @@ ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
 # Import route modules AFTER loading env
-from routes import inventory, clients, orders, tasks, damages, finance, test_orders, settings, pdf, users, issue_cards, return_cards, photos, qr_codes, email, catalog, archive, warehouse, extended_catalog, audit, products, auth, image_proxy, price_sync, damage_cases, admin, product_damage_history, product_reservations, inventory_adjustments, sync, product_cleaning, migrations, product_images, product_images_multi, event_tool_integration, user_tracking, laundry, documents, analytics, product_sets, expense_management, export, template_admin, order_modifications, order_internal_notes, order_sync, partial_returns, uploads, payer_profiles, dashboard_overview, calendar_events, return_versions, event_tool, master_agreements, order_annexes, document_policy, document_render, document_signatures, document_pdf, document_manual_fields, document_email, team_chat, cabinet, picking_list, returns_list, overdue_list, warehouses, product_stock, admin_orders, bulk_products, admin_finance, order_chat, order_chat_ws, company_profiles
+from routes import inventory, clients, orders, tasks, damages, finance, test_orders, settings, pdf, users, issue_cards, return_cards, photos, qr_codes, email, catalog, archive, warehouse, extended_catalog, audit, products, auth, image_proxy, price_sync, damage_cases, admin, product_damage_history, product_reservations, inventory_adjustments, sync, product_cleaning, migrations, product_images, product_images_multi, event_tool_integration, user_tracking, laundry, documents, analytics, product_sets, expense_management, export, template_admin, order_modifications, order_internal_notes, order_sync, partial_returns, uploads, payer_profiles, dashboard_overview, calendar_events, return_versions, event_tool, master_agreements, order_annexes, document_policy, document_render, document_signatures, document_pdf, document_manual_fields, document_email, team_chat, cabinet, picking_list, returns_list, overdue_list, warehouses, product_stock, admin_orders, bulk_products, admin_finance, order_chat, order_chat_ws, company_profiles, files as files_route
+from utils.object_storage import init_storage
 
 # Create the main app
 app = FastAPI(title="Rental Hub API")
@@ -170,6 +171,17 @@ app.include_router(document_signatures.router)
 app.include_router(document_pdf.router)
 app.include_router(team_chat.router)
 app.include_router(cabinet.router)
+app.include_router(files_route.router)
+
+
+@app.on_event("startup")
+async def _init_object_storage():
+    """Warm the Emergent object-storage session key once per process."""
+    try:
+        init_storage()
+        logger.info("Object storage initialized at startup")
+    except Exception as e:  # noqa: BLE001 — storage is non-fatal at boot; lazy init will retry
+        logger.error(f"Object storage init failed at startup: {e}")
 
 # Configure logging
 logging.basicConfig(

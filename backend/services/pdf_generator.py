@@ -81,7 +81,7 @@ def format_date_ua(date_str: str) -> str:
         else:
             dt = date_str
         return dt.strftime("%d.%m.%Y")
-    except:
+    except Exception:
         return date_str
 
 
@@ -99,7 +99,7 @@ def format_date_ua_long(date_str: str) -> str:
             'липня', 'серпня', 'вересня', 'жовтня', 'листопада', 'грудня'
         ]
         return f"{dt.day} {months[dt.month - 1]} {dt.year}"
-    except:
+    except Exception:
         return date_str
 
 
@@ -144,7 +144,7 @@ def generate_master_agreement_pdf(
             if isinstance(bank_details, str):
                 try:
                     client["bank_details"] = json.loads(bank_details)
-                except:
+                except Exception:
                     client["bank_details"] = None
             else:
                 client["bank_details"] = bank_details
@@ -243,7 +243,7 @@ def generate_master_agreement_html(
             if isinstance(bank_details, str):
                 try:
                     client["bank_details"] = json.loads(bank_details)
-                except:
+                except Exception:
                     client["bank_details"] = None
             else:
                 client["bank_details"] = bank_details
@@ -323,7 +323,7 @@ def generate_master_agreement_html(
                     meta_day = str(d.day)
                     meta_month = months_ua[d.month - 1]
                     meta_year = str(d.year)
-            except:
+            except Exception:
                 pass
         template_data["meta"] = {
             "watermark_text": "" if agreement_data.get("status") == "signed" else "ЧЕРНЕТКА",

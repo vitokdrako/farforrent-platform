@@ -7,15 +7,13 @@ from pydantic import BaseModel
 from typing import Optional
 from sqlalchemy.orm import Session
 from sqlalchemy import text
-import os, uuid, shutil
+import os
 
 from database_rentalhub import get_rh_db
 from utils.user_tracking_helper import get_current_user_dependency
+from utils.object_storage import put_object, build_storage_path, build_public_url, new_filename
 
 router = APIRouter(prefix="/api/chat", tags=["chat"])
-
-UPLOAD_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "uploads", "chat")
-os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 
 def require_auth(current_user: dict = Depends(get_current_user_dependency)):
@@ -370,12 +368,13 @@ async def upload_chat_file(
     if ext not in ('.jpg', '.jpeg', '.png', '.gif', '.webp', '.heic'):
         raise HTTPException(400, "Підтримуються лише зображення (jpg, png, gif, webp)")
 
-    filename = f"{uuid.uuid4().hex}{ext}"
-    filepath = os.path.join(UPLOAD_DIR, filename)
-    with open(filepath, "wb") as f:
-        shutil.copyfileobj(file.file, f)
-
-    attachment_url = f"/api/uploads/chat/{filename}"
+    contents = await file.read()
+    filename = new_filename(file.filename, default_ext="jpg")
+    storage_path = build_storage_path("chat", filename)
+    upload_result = put_object(
+        storage_path, contents, file.content_type or "image/jpeg"
+    )
+    attachment_url = build_public_url(upload_result["path"])
     attachment_type = "image"
 
     db.execute(text("""

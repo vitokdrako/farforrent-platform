@@ -793,7 +793,7 @@ async def migrate_products_extended_attributes():
                             INSERT INTO product_hashtags_dict (tag, display_name, category)
                             VALUES (:tag, :display, :cat)
                         """), {"tag": tag, "display": display, "cat": cat})
-                    except:
+                    except Exception:
                         pass
                 db.commit()
                 results.append("product_hashtags_dict: populated with base tags")

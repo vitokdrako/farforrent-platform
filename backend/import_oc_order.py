@@ -5,7 +5,9 @@ Usage:
   python3 import_oc_order.py --recent 7  # all OC orders from last 7 days
                                           # that are missing in RH
 """
-import sys, os, argparse
+import sys
+import os
+import argparse
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from dotenv import load_dotenv

@@ -1978,24 +1978,14 @@ async def return_to_stock(damage_id: str, data: dict, db: Session = Depends(get_
 
 # ==================== ЗАВАНТАЖЕННЯ ФОТО ПОШКОДЖЕНЬ ====================
 
-import shutil
 from pathlib import Path
-import os
 
-# Директорія для фото пошкоджень
-# Production path
-PROD_DAMAGE_PHOTOS_DIR = "/home/farforre/farforrent.com.ua/rentalhub/backend/uploads/damage_photos"
-# Local preview path (fallback)
-LOCAL_DAMAGE_PHOTOS_DIR = "/app/backend/uploads/damage_photos"
+from utils.object_storage import (
+    put_object as _dmg_put_object,
+    build_storage_path as _dmg_build_storage_path,
+    build_public_url as _dmg_build_public_url,
+)
 
-# Use production path if exists, otherwise local
-if os.path.exists(os.path.dirname(PROD_DAMAGE_PHOTOS_DIR)):
-    DAMAGE_PHOTOS_DIR = Path(PROD_DAMAGE_PHOTOS_DIR)
-else:
-    DAMAGE_PHOTOS_DIR = Path(LOCAL_DAMAGE_PHOTOS_DIR)
-
-# Create directory if it doesn't exist
-DAMAGE_PHOTOS_DIR.mkdir(parents=True, exist_ok=True)
 
 @router.post("/upload-photo")
 async def upload_damage_photo(
@@ -2005,76 +1995,57 @@ async def upload_damage_photo(
     order_id: Optional[str] = Form(None)
 ):
     """
-    Завантажити фото пошкодження.
-    
+    Завантажити фото пошкодження в Emergent object storage.
+
     Параметри:
     - file: Файл зображення
     - order_number: Номер замовлення (наприклад OC-7217)
     - sku: SKU товару (наприклад PLATE-001)
     - order_id: ID замовлення (опціонально, для зворотної сумісності)
-    
-    Формат імені файлу: {order_number}_{sku}_{timestamp}.{ext}
-    Приклад: OC-7217_PLATE-001_20251228_143000.jpg
+
+    Ім'я файлу в сховищі має префікс `{order_number}_{sku}_{timestamp}` для діагностики.
     """
     try:
-        # Створюємо директорію якщо не існує
-        DAMAGE_PHOTOS_DIR.mkdir(parents=True, exist_ok=True)
-        
-        # Визначаємо розширення файлу
         file_ext = Path(file.filename).suffix.lower() or ".jpg"
         if file_ext not in [".jpg", ".jpeg", ".png", ".webp", ".heic"]:
             file_ext = ".jpg"
-        
-        # Формуємо ім'я файлу з номера замовлення та SKU
+
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        
-        # Очищуємо order_number та sku від небезпечних символів
+
         clean_order = ""
         if order_number:
             clean_order = order_number.replace("/", "-").replace("\\", "-").replace(" ", "_")
-        
+
         clean_sku = ""
         if sku:
             clean_sku = sku.replace("/", "-").replace("\\", "-").replace(" ", "_")
-        
-        # Формуємо ім'я файлу
+
         if clean_order and clean_sku:
-            # Ідеальний варіант: OC-7217_PLATE-001_20251228_143000.jpg
-            filename = f"{clean_order}_{clean_sku}_{timestamp}{file_ext}"
+            base_name = f"{clean_order}_{clean_sku}_{timestamp}"
         elif clean_order:
-            # Тільки замовлення: OC-7217_damage_20251228_143000.jpg
-            filename = f"{clean_order}_damage_{timestamp}{file_ext}"
+            base_name = f"{clean_order}_damage_{timestamp}"
         elif clean_sku:
-            # Тільки SKU: PLATE-001_damage_20251228_143000.jpg
-            filename = f"{clean_sku}_damage_{timestamp}{file_ext}"
+            base_name = f"{clean_sku}_damage_{timestamp}"
         else:
-            # Fallback: damage_20251228_143000_abc123.jpg
-            unique_id = str(uuid.uuid4())[:8]
-            filename = f"damage_{timestamp}_{unique_id}{file_ext}"
-        
-        file_path = DAMAGE_PHOTOS_DIR / filename
-        
-        # Якщо файл з такою назвою існує - додаємо унікальний суфікс
-        if file_path.exists():
-            unique_id = str(uuid.uuid4())[:4]
-            name_without_ext = file_path.stem
-            filename = f"{name_without_ext}_{unique_id}{file_ext}"
-            file_path = DAMAGE_PHOTOS_DIR / filename
-        
-        # Зберігаємо файл
-        with open(file_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
-        
-        # Повертаємо відносний URL для збереження в БД
-        relative_url = f"/uploads/damage_photos/{filename}"
-        
+            base_name = f"damage_{timestamp}_{str(uuid.uuid4())[:8]}"
+
+        # UUID-suffix гарантує унікальність навіть за одного таймстемпа
+        filename = f"{base_name}_{uuid.uuid4().hex[:6]}{file_ext}"
+
+        contents = await file.read()
+        storage_path = _dmg_build_storage_path("damage_photos", filename)
+        upload_result = _dmg_put_object(
+            storage_path, contents, file.content_type or "image/jpeg"
+        )
+        public_url = _dmg_build_public_url(upload_result["path"])
+
         return {
             "success": True,
             "filename": filename,
-            "url": relative_url,
-            "full_path": str(file_path)
+            "url": public_url,
+            "full_path": upload_result["path"],
         }
-        
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Помилка завантаження фото: {str(e)}")
 
@@ -2085,42 +2056,40 @@ async def upload_multiple_damage_photos(
     order_id: Optional[str] = None
 ):
     """
-    Завантажити кілька фото пошкоджень.
+    Завантажити кілька фото пошкоджень (object storage).
     """
     uploaded = []
-    
+
     for file in files:
         try:
-            DAMAGE_PHOTOS_DIR.mkdir(parents=True, exist_ok=True)
-            
             file_ext = Path(file.filename).suffix.lower() or ".jpg"
             if file_ext not in [".jpg", ".jpeg", ".png", ".webp", ".heic"]:
                 file_ext = ".jpg"
-            
+
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             unique_id = str(uuid.uuid4())[:8]
             order_prefix = f"order{order_id}_" if order_id else ""
             filename = f"{order_prefix}damage_{timestamp}_{unique_id}{file_ext}"
-            
-            file_path = DAMAGE_PHOTOS_DIR / filename
-            
-            with open(file_path, "wb") as buffer:
-                shutil.copyfileobj(file.file, buffer)
-            
-            relative_url = f"/uploads/damage_photos/{filename}"
-            
+
+            contents = await file.read()
+            storage_path = _dmg_build_storage_path("damage_photos", filename)
+            upload_result = _dmg_put_object(
+                storage_path, contents, file.content_type or "image/jpeg"
+            )
+            public_url = _dmg_build_public_url(upload_result["path"])
+
             uploaded.append({
                 "original_name": file.filename,
                 "filename": filename,
-                "url": relative_url
+                "url": public_url
             })
-            
+
         except Exception as e:
             uploaded.append({
                 "original_name": file.filename,
                 "error": str(e)
             })
-    
+
     return {
         "success": True,
         "uploaded": uploaded,

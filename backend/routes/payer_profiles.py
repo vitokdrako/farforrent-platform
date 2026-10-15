@@ -145,7 +145,7 @@ def ensure_table_exists(db: Session):
                 ALTER TABLE orders ADD COLUMN payer_profile_id INT NULL,
                 ADD FOREIGN KEY (payer_profile_id) REFERENCES payer_profiles(id) ON DELETE SET NULL
             """))
-        except:
+        except Exception:
             pass  # Поле вже існує
         
         db.commit()

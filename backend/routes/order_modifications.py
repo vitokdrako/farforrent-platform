@@ -246,7 +246,6 @@ def sync_issue_card_items(db: Session, order_id: int):
     Синхронізує items в issue_card з order_items
     Викликати після додавання/видалення товарів через дозамовлення
     """
-    import json
     
     # Отримуємо актуальні items з order_items
     items_result = db.execute(text("""

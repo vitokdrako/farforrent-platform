@@ -20,6 +20,7 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 SECRET_KEY = os.getenv("JWT_SECRET_KEY", "your-secret-key-change-in-production")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 1440  # 24 години
+REFRESH_TOKEN_EXPIRE_DAYS = 7
 
 # ============================================================
 # PYDANTIC MODELS

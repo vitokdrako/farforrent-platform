@@ -17,7 +17,11 @@ Mapping:
 
 Use: python3 migrate_return_cards.py [--dry-run]
 """
-import sys, os, json, argparse, hashlib
+import sys
+import os
+import json
+import argparse
+import hashlib
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from database_rentalhub import RHSessionLocal
 from sqlalchemy import text

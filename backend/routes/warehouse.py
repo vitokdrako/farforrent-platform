@@ -7,7 +7,7 @@ from fastapi import APIRouter, HTTPException, Depends
 from typing import List, Optional
 from sqlalchemy.orm import Session
 from sqlalchemy import func, and_, or_, cast, String, text
-from datetime import datetime, timedelta, date
+from datetime import datetime, timedelta  # date intentionally not imported — collides with route params
 from database_rentalhub import get_rh_db  # ✅ Using RentalHub DB
 import json
 
@@ -122,7 +122,7 @@ async def warehouse_calendar(
             if items_json:
                 try:
                     items = json.loads(items_json) if isinstance(items_json, str) else items_json
-                except:
+                except Exception:
                     items = []
             
             items_count = len(items) if items else 0
@@ -176,7 +176,7 @@ async def warehouse_calendar(
             if items_json:
                 try:
                     items = json.loads(items_json) if isinstance(items_json, str) else items_json
-                except:
+                except Exception:
                     items = []
             
             items_count = len(items) if items else 0
@@ -378,7 +378,7 @@ async def get_packing_orders(
             if items_json:
                 try:
                     items = json.loads(items_json) if isinstance(items_json, str) else items_json
-                except:
+                except Exception:
                     items = []
             
             items_count = sum(item.get('quantity', 0) for item in items) if items else 0
@@ -453,7 +453,7 @@ async def get_packing_order_details(
         if items_json:
             try:
                 items = json.loads(items_json) if isinstance(items_json, str) else items_json
-            except:
+            except Exception:
                 items = []
         
         items_count = sum(item.get('quantity', 0) for item in items) if items else 0

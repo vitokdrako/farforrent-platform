@@ -11,13 +11,9 @@ import base64
 
 from database_rentalhub import get_rh_db  # RentalHub DB
 from utils.image_helper import normalize_image_url
+from utils.object_storage import put_object, build_storage_path, build_public_url, new_filename
 
 router = APIRouter(prefix="/api/products", tags=["products"])
-
-# Директорія для збереження фото
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-UPLOAD_DIR = os.path.join(BASE_DIR, "uploads", "products")
-os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 
 @router.post("/upload-image")
@@ -25,7 +21,7 @@ async def upload_product_image(
     file: UploadFile = File(...)
 ):
     """
-    Завантажити фото товару
+    Завантажити фото товару в Emergent object storage.
     """
     try:
         # Перевірити тип файлу
@@ -33,9 +29,9 @@ async def upload_product_image(
         if file.content_type not in allowed_types:
             raise HTTPException(
                 status_code=400,
-                detail=f"Дозволені тільки зображення: JPG, PNG, WEBP"
+                detail="Дозволені тільки зображення: JPG, PNG, WEBP"
             )
-        
+
         # Перевірити розмір (макс 5MB)
         contents = await file.read()
         if len(contents) > 5 * 1024 * 1024:
@@ -43,27 +39,22 @@ async def upload_product_image(
                 status_code=400,
                 detail="Розмір файлу не повинен перевищувати 5MB"
             )
-        
-        # Генерувати унікальне ім'я файлу
-        file_ext = file.filename.split('.')[-1] if '.' in file.filename else 'jpg'
-        unique_filename = f"{uuid.uuid4().hex[:12]}.{file_ext}"
-        file_path = os.path.join(UPLOAD_DIR, unique_filename)
-        
-        # Зберегти файл
-        with open(file_path, 'wb') as f:
-            f.write(contents)
-        
-        # Повернути шлях для збереження в базі
-        relative_path = f"uploads/products/{unique_filename}"
-        
+
+        # Згенерувати унікальне ім'я й завантажити в object storage
+        filename = new_filename(file.filename, default_ext="jpg")
+        storage_path = build_storage_path("products", filename)
+        result = put_object(storage_path, contents, file.content_type or "image/jpeg")
+
+        public_url = build_public_url(result["path"])
+
         return {
             'success': True,
-            'filename': unique_filename,
-            'path': relative_path,
-            'url': f"/uploads/products/{unique_filename}",
-            'size': len(contents)
+            'filename': filename,
+            'path': result["path"],
+            'url': public_url,
+            'size': result.get("size", len(contents))
         }
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -181,6 +172,55 @@ async def get_categories(
         raise HTTPException(
             status_code=500,
             detail=f"Помилка: {str(e)}"
+        )
+
+
+@router.get("/search")
+async def search_products(
+    q: str,
+    category: str = None,
+    limit: int = 20,
+    db: Session = Depends(get_rh_db)
+):
+    """
+    Пошук товарів за назвою, SKU або категорією
+    """
+    try:
+        sql = """
+            SELECT 
+                product_id, sku, name, category_name, quantity, price
+            FROM products
+            WHERE (name LIKE :query OR sku LIKE :query)
+        """
+        
+        params = {"query": f"%{q}%"}
+        
+        if category:
+            sql += " AND category_name = :category"
+            params["category"] = category
+        
+        sql += " ORDER BY name LIMIT :limit"
+        params["limit"] = limit
+        
+        result = db.execute(text(sql), params)
+        
+        products = []
+        for row in result:
+            products.append({
+                "product_id": row[0],
+                "sku": row[1],
+                "name": row[2],
+                "category_name": row[3],
+                "quantity": row[4] or 0,
+                "price": float(row[5]) if row[5] else 0.0
+            })
+        
+        return products
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Помилка пошуку: {str(e)}"
         )
 
 
@@ -326,54 +366,3 @@ async def get_recounts_batch(
             status_code=500,
             detail=f"Помилка: {str(e)}"
         )
-
-
-
-@router.get("/search")
-async def search_products(
-    q: str,
-    category: str = None,
-    limit: int = 20,
-    db: Session = Depends(get_rh_db)
-):
-    """
-    Пошук товарів за назвою, SKU або категорією
-    """
-    try:
-        sql = """
-            SELECT 
-                product_id, sku, name, category_name, quantity, price
-            FROM products
-            WHERE (name LIKE :query OR sku LIKE :query)
-        """
-        
-        params = {"query": f"%{q}%"}
-        
-        if category:
-            sql += " AND category_name = :category"
-            params["category"] = category
-        
-        sql += " ORDER BY name LIMIT :limit"
-        params["limit"] = limit
-        
-        result = db.execute(text(sql), params)
-        
-        products = []
-        for row in result:
-            products.append({
-                "product_id": row[0],
-                "sku": row[1],
-                "name": row[2],
-                "category_name": row[3],
-                "quantity": row[4] or 0,
-                "price": float(row[5]) if row[5] else 0.0
-            })
-        
-        return products
-        
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Помилка пошуку: {str(e)}"
-        )
-

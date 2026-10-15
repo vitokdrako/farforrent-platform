@@ -183,7 +183,7 @@ def parse_order_row(row, db: Session = None):
                         it['has_damage_history'] = len(it['damage_history']) > 0
                         it['total_damages'] = len(it['damage_history'])
                         it['pre_damage'] = it['damage_history'][:3]  # top 3 for preview
-                except:
+                except Exception:
                     pass
         
         # ✅ Обчислити прогрес комплектації з issue_cards
@@ -793,7 +793,7 @@ async def get_order_details(
         if i_row[2]:
             try:
                 items = json.loads(i_row[2]) if isinstance(i_row[2], str) else i_row[2]
-            except:
+            except Exception:
                 pass
         
         issue_cards.append({

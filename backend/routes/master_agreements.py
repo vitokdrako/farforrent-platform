@@ -599,7 +599,7 @@ async def send_agreement(
     if agreement[7]:  # snapshot_json field
         try:
             snapshot = json.loads(agreement[7]) if isinstance(agreement[7], str) else agreement[7]
-        except:
+        except Exception:
             pass
     
     # Prepare data for PDF
@@ -669,7 +669,7 @@ async def send_agreement(
             WHERE id = :id AND status = 'draft'
         """), {"id": agreement_id})
         db.commit()
-    except:
+    except Exception:
         pass  # Ignore if already sent
     
     return {
@@ -709,7 +709,7 @@ async def preview_agreement(agreement_id: int, db: Session = Depends(get_rh_db))
         if "Підписано:" in note:
             try:
                 signed_by = note.split("Підписано:")[1].strip().split("\n")[0]
-            except:
+            except Exception:
                 pass
     
     # Parse snapshot
@@ -717,7 +717,7 @@ async def preview_agreement(agreement_id: int, db: Session = Depends(get_rh_db))
     if agreement[7]:  # snapshot_json field
         try:
             snapshot = json.loads(agreement[7]) if isinstance(agreement[7], str) else agreement[7]
-        except:
+        except Exception:
             pass
     
     agreement_data = {
@@ -775,7 +775,7 @@ async def download_agreement_pdf(agreement_id: int, db: Session = Depends(get_rh
         if "Підписано:" in note:
             try:
                 signed_by = note.split("Підписано:")[1].strip().split("\n")[0]
-            except:
+            except Exception:
                 pass
     
     # Parse snapshot
@@ -783,7 +783,7 @@ async def download_agreement_pdf(agreement_id: int, db: Session = Depends(get_rh
     if agreement[7]:  # snapshot_json field
         try:
             snapshot = json.loads(agreement[7]) if isinstance(agreement[7], str) else agreement[7]
-        except:
+        except Exception:
             pass
     
     agreement_data = {
@@ -945,7 +945,7 @@ async def termination_act_preview(agreement_id: int, db: Session = Depends(get_r
     if agreement[7]:
         try:
             snapshot = json.loads(agreement[7]) if isinstance(agreement[7], str) else agreement[7]
-        except:
+        except Exception:
             snapshot = {}
     snapshot = snapshot or {}
     
@@ -958,7 +958,7 @@ async def termination_act_preview(agreement_id: int, db: Session = Depends(get_r
         if isinstance(d, str):
             try:
                 d = datetime.fromisoformat(d).date() if 'T' in d else datetime.strptime(d, "%Y-%m-%d").date()
-            except:
+            except Exception:
                 return d
         months = ["січня","лютого","березня","квітня","травня","червня",
                   "липня","серпня","вересня","жовтня","листопада","грудня"]

@@ -702,7 +702,7 @@ def build_defect_act_data(db: Session, order_id: str, options: dict) -> dict:
         agr = db.execute(text("SELECT agreement_number FROM master_agreements WHERE client_name = :name ORDER BY id DESC LIMIT 1"), {"name": order_row[3]}).fetchone()
         if agr:
             agreement_number = agr[0] or ""
-    except:
+    except Exception:
         pass
     
     # Get damage items (ALL types: state write, photo_only, written_off)
@@ -904,7 +904,7 @@ def build_issue_card_data(db: Session, issue_card_id: str, options: dict) -> dic
     if requisitors_json:
         try:
             requisitors = json.loads(requisitors_json) if isinstance(requisitors_json, str) else requisitors_json
-        except:
+        except Exception:
             requisitors = []
     
     # Preparation notes (row[17])

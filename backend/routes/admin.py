@@ -663,7 +663,7 @@ async def get_settings(
     try:
         rows = rh_db.execute(text("SELECT setting_key, setting_value FROM system_settings")).fetchall()
         return {r[0]: r[1] for r in rows}
-    except:
+    except Exception:
         return {
             "name": "Фізична особа-підприємець Николенко Наталя Станіславівна",
             "tax_status": "платник єдиного податку",

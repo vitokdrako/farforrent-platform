@@ -37,7 +37,7 @@ def get_current_user_from_token(authorization: str = Header(None)):
             'email': payload.get('sub'),
             'role': payload.get('role')
         }
-    except:
+    except Exception:
         return None
 
 # ============================================================

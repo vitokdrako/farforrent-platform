@@ -113,7 +113,8 @@ async def get_company_profile(profile_id: int, db: Session = Depends(get_rh_db))
 
 
 def _make_code(display_name: str) -> str:
-    import re, unicodedata
+    import re
+    import unicodedata
     s = unicodedata.normalize('NFKD', display_name).encode('ascii', 'ignore').decode().lower()
     s = re.sub(r'[^a-z0-9]+', '_', s).strip('_') or 'company'
     return s[:48]
