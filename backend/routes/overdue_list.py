@@ -5,10 +5,11 @@ Overdue Returns List API — лист прострочених повернен�
 
 Групує за кількістю днів прострочки: 1-3 дні / 4-7 днів / 8+ днів.
 """
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 from datetime import date, datetime
+from typing import Optional
 
 from database_rentalhub import get_rh_db
 
@@ -78,7 +79,10 @@ def _get_order_items(order_id: int, db: Session) -> list:
 
 
 @router.get("")
-async def get_overdue_list(db: Session = Depends(get_rh_db)):
+async def get_overdue_list(
+    warehouse_id: Optional[int] = Query(None),
+    db: Session = Depends(get_rh_db),
+):
     """
     Лист прострочених повернень.
     Повертає замовлення rental_end_date < today, status NOT IN (returned/completed/cancelled).
@@ -86,6 +90,8 @@ async def get_overdue_list(db: Session = Depends(get_rh_db)):
     """
     today = date.today()
     today_str = today.isoformat()
+    wh_filter_sql = " AND o.warehouse_id = :warehouse_id" if warehouse_id else ""
+    wh_params = {"warehouse_id": warehouse_id} if warehouse_id else {}
 
     # Preload open tasks per order
     tasks_by_order = {}
@@ -114,7 +120,7 @@ async def get_overdue_list(db: Session = Depends(get_rh_db)):
     except Exception:
         tasks_by_order = {}
 
-    orders_query = """
+    orders_query = f"""
         SELECT o.order_id, o.order_number, o.status, o.customer_name, o.customer_phone,
                o.rental_start_date, o.rental_end_date, o.notes, o.total_price,
                DATEDIFF(:today, o.rental_end_date) AS days_overdue
@@ -122,9 +128,10 @@ async def get_overdue_list(db: Session = Depends(get_rh_db)):
         WHERE o.rental_end_date < :today
           AND o.is_archived = 0
           AND o.status NOT IN ('cancelled', 'draft', 'awaiting_customer', 'returned', 'completed')
+          {wh_filter_sql}
         ORDER BY o.rental_end_date ASC, o.order_id DESC
     """
-    order_rows = db.execute(text(orders_query), {"today": today_str}).fetchall()
+    order_rows = db.execute(text(orders_query), {"today": today_str, **wh_params}).fetchall()
 
     buckets = {
         "mild": [],    # 1-3 днів

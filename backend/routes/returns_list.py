@@ -91,6 +91,7 @@ def _get_order_items(order_id: int, db: Session) -> list:
 @router.get("")
 async def get_returns_list(
     date_str: Optional[str] = Query(None, alias="date", description="YYYY-MM-DD. Default: today"),
+    warehouse_id: Optional[int] = Query(None),
     db: Session = Depends(get_rh_db)
 ):
     """
@@ -107,6 +108,8 @@ async def get_returns_list(
         target_date = date.today()
 
     target_str = target_date.isoformat()
+    wh_filter_sql = " AND o.warehouse_id = :warehouse_id" if warehouse_id else ""
+    wh_params = {"warehouse_id": warehouse_id} if warehouse_id else {}
 
     # Preload open tasks per order (ті самі, що й у picking-list)
     tasks_by_order = {}
@@ -144,25 +147,27 @@ async def get_returns_list(
     }
 
     # Знайдемо id карток повернення для замовлень на цю дату (щоб відрізнити in_progress)
-    rc_rows = db.execute(text("""
+    rc_rows = db.execute(text(f"""
         SELECT rc.order_id, rc.id, rc.status
         FROM return_cards rc
         JOIN orders o ON rc.order_id = o.order_id
         WHERE DATE(o.rental_end_date) = :target_date
-    """), {"target_date": target_str}).fetchall()
+          {wh_filter_sql}
+    """), {"target_date": target_str, **wh_params}).fetchall()
     return_card_by_order = {int(r[0]): {"id": r[1], "status": r[2]} for r in rc_rows}
 
     # Головний запит: усі замовлення з rental_end_date = target_date
-    orders_query = """
+    orders_query = f"""
         SELECT o.order_id, o.order_number, o.status, o.customer_name, o.customer_phone,
                o.rental_start_date, o.rental_end_date, o.notes, o.total_price
         FROM orders o
         WHERE DATE(o.rental_end_date) = :target_date
           AND o.is_archived = 0
           AND o.status NOT IN ('cancelled', 'draft', 'awaiting_customer')
+          {wh_filter_sql}
         ORDER BY o.rental_end_date ASC, o.order_id DESC
     """
-    order_rows = db.execute(text(orders_query), {"target_date": target_str}).fetchall()
+    order_rows = db.execute(text(orders_query), {"target_date": target_str, **wh_params}).fetchall()
 
     for row in order_rows:
         (order_id, order_number, status, customer_name, customer_phone,

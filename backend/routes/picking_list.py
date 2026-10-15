@@ -71,6 +71,7 @@ def _enrich_items_with_zone(items: list, db: Session) -> list:
 async def get_picking_list(
     date_str: Optional[str] = Query(None, alias="date", description="YYYY-MM-DD. Default: today"),
     include_awaiting: bool = Query(True, description="Include awaiting_customer orders"),
+    warehouse_id: Optional[int] = Query(None, description="Фільтр по складу. Якщо None — всі склади."),
     db: Session = Depends(get_rh_db)
 ):
     """
@@ -87,6 +88,8 @@ async def get_picking_list(
         target_date = date.today()
 
     target_str = target_date.isoformat()
+    wh_filter_sql = " AND o.warehouse_id = :warehouse_id" if warehouse_id else ""
+    wh_params = {"warehouse_id": warehouse_id} if warehouse_id else {}
 
     # Preload OPEN tasks per order to show in cards
     tasks_by_order = {}
@@ -124,7 +127,7 @@ async def get_picking_list(
     }
 
     # === ISSUE CARDS (preparation + ready) для дати видачі ===
-    cards_query = """
+    cards_query = f"""
         SELECT ic.id, ic.order_id, ic.order_number, ic.status,
                ic.prepared_by, ic.issued_by, ic.items,
                ic.preparation_notes, ic.issue_notes,
@@ -136,9 +139,10 @@ async def get_picking_list(
         WHERE ic.status IN ('preparation', 'ready', 'ready_for_issue')
           AND o.status != 'cancelled' AND o.is_archived = 0
           AND DATE(o.rental_start_date) = :target_date
+          {wh_filter_sql}
         ORDER BY o.rental_start_date ASC, ic.created_at ASC
     """
-    cards_rows = db.execute(text(cards_query), {"target_date": target_str}).fetchall()
+    cards_rows = db.execute(text(cards_query), {"target_date": target_str, **wh_params}).fetchall()
 
     for row in cards_rows:
         items_raw = row[6]
@@ -189,15 +193,16 @@ async def get_picking_list(
 
     # === AWAITING_CUSTOMER orders ===
     if include_awaiting:
-        aw_query = """
+        aw_query = f"""
             SELECT order_id, order_number, customer_name, customer_phone,
                    rental_start_date, rental_end_date, notes, total_price, created_at
-            FROM orders
+            FROM orders o
             WHERE status = 'awaiting_customer' AND is_archived = 0
               AND (DATE(rental_start_date) = :target_date OR rental_start_date IS NULL)
+              {wh_filter_sql}
             ORDER BY created_at DESC
         """
-        aw_rows = db.execute(text(aw_query), {"target_date": target_str}).fetchall()
+        aw_rows = db.execute(text(aw_query), {"target_date": target_str, **wh_params}).fetchall()
         # also fetch order_items per order
         for ar in aw_rows:
             oid = ar[0]

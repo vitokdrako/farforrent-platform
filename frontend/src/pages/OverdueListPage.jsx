@@ -10,6 +10,7 @@ import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import CorporateHeader from '../components/CorporateHeader'
 import ImageLightbox from '../components/ImageLightbox'
+import { useWarehouse } from '../context/WarehouseContext'
 import { getImageUrl, FALLBACK_IMAGE, handleImageError } from '../utils/imageHelper'
 import { Printer, PackageOpen, AlertTriangle, Phone, RefreshCw, Plus, CheckSquare, X, AlertCircle, Flame } from 'lucide-react'
 
@@ -29,6 +30,7 @@ const authFetch = (url, opts = {}) => {
 
 export default function OverdueListPage() {
   const navigate = useNavigate()
+  const { active: activeWarehouse, withWh } = useWarehouse()
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [taskModal, setTaskModal] = useState(null)
@@ -42,13 +44,16 @@ export default function OverdueListPage() {
   const fetchData = async () => {
     setLoading(true)
     try {
-      const res = await authFetch(`${BACKEND_URL}/api/manager/overdue-list`)
+      const res = await authFetch(withWh(`${BACKEND_URL}/api/manager/overdue-list`))
       if (res.ok) setData(await res.json())
     } catch (e) { console.error(e) }
     finally { setLoading(false) }
   }
 
-  useEffect(() => { fetchData() }, [])
+  useEffect(() => {
+    if (!activeWarehouse) return
+    fetchData()
+  }, [activeWarehouse?.id])
 
   const summary = data?.summary || {}
   const hasAny = (summary.total_count || 0) > 0

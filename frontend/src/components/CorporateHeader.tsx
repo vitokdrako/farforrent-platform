@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { LogOut, User, ChevronDown, ArrowLeft, MessageSquare } from 'lucide-react';
+// @ts-ignore
+import WarehouseSwitcher from './WarehouseSwitcher';
 
 interface CorporateHeaderProps {
   cabinetName?: string;
@@ -90,6 +92,9 @@ export default function CorporateHeader({
         
         {/* Right: User Menu */}
         <div className="flex items-center gap-2">
+          {/* Warehouse Switcher — показується тільки для менеджерів/адмінів */}
+          {(user?.role === 'manager' || user?.role === 'admin') && <WarehouseSwitcher />}
+
           {/* Back button (if shown) — видимий і на мобільному (icon-only) */}
           {showBackButton && (
             <button 

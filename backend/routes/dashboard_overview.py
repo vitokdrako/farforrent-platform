@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 from datetime import datetime, timedelta
+from typing import Optional
 import json
 
 from database_rentalhub import get_rh_db
@@ -19,7 +20,7 @@ def parse_issue_card_simple(row, db: Session):
     if row[6]:  # items JSON column
         try:
             items = json.loads(row[6]) if isinstance(row[6], str) else row[6]
-        except:
+        except Exception:
             items = []
     
     # Отримати дані замовлення
@@ -72,6 +73,7 @@ def parse_issue_card_simple(row, db: Session):
 @router.get("/overview")
 async def get_dashboard_overview(
     date: str = "today",
+    warehouse_id: Optional[int] = None,
     db: Session = Depends(get_rh_db)
 ):
     """
@@ -87,10 +89,13 @@ async def get_dashboard_overview(
             "cleaning_stats": {},
             "timestamp": datetime.now().isoformat()
         }
+        wh_filter_sql = " AND warehouse_id = :warehouse_id" if warehouse_id else ""
+        wh_filter_o = " AND o.warehouse_id = :warehouse_id" if warehouse_id else ""
+        wh_params = {"warehouse_id": warehouse_id} if warehouse_id else {}
         
         # 1. Orders awaiting customer confirmation
         try:
-            awaiting_result = db.execute(text("""
+            awaiting_result = db.execute(text(f"""
                 SELECT order_id, order_number, customer_name, customer_phone,
                        total_price, deposit_amount, status, created_at,
                        rental_start_date, rental_end_date, rental_days,
@@ -99,9 +104,10 @@ async def get_dashboard_overview(
                        COALESCE(discount_percent, 0) as discount_percent
                 FROM orders 
                 WHERE status = 'awaiting_customer' AND is_archived = 0
+                  {wh_filter_sql}
                 ORDER BY created_at DESC
                 LIMIT 50
-            """))
+            """), wh_params)
             
             for row in awaiting_result:
                 discount = float(row[15] or 0)
@@ -132,7 +138,7 @@ async def get_dashboard_overview(
         
         # 2. Active decor orders (processing, ready_for_issue, issued, etc.)
         try:
-            decor_result = db.execute(text("""
+            decor_result = db.execute(text(f"""
                 SELECT order_id, order_number, customer_name, customer_phone,
                        total_price, deposit_amount, status, created_at,
                        rental_start_date, rental_end_date, rental_days,
@@ -142,6 +148,7 @@ async def get_dashboard_overview(
                 FROM orders 
                 WHERE status IN ('processing', 'ready_for_issue', 'issued', 'on_rent', 'shipped', 'delivered', 'returning', 'partial_return', 'returned')
                 AND is_archived = 0
+                {wh_filter_sql}
                 ORDER BY 
                     CASE status 
                         WHEN 'returning' THEN 1
@@ -152,7 +159,7 @@ async def get_dashboard_overview(
                     END,
                     created_at DESC
                 LIMIT 100
-            """))
+            """), wh_params)
             
             for row in decor_result:
                 discount = float(row[16] or 0)
@@ -184,16 +191,17 @@ async def get_dashboard_overview(
         
         # 3. Issue cards (з повними даними замовлення)
         try:
-            cards_result = db.execute(text("""
+            cards_result = db.execute(text(f"""
                 SELECT ic.* 
                 FROM issue_cards ic
                 JOIN orders o ON ic.order_id = o.order_id
                 WHERE o.status != 'cancelled' 
                 AND o.is_archived = 0
                 AND ic.status IN ('preparation', 'ready', 'ready_for_issue', 'issued', 'partial_return')
+                {wh_filter_o}
                 ORDER BY ic.created_at DESC
                 LIMIT 500
-            """))
+            """), wh_params)
             
             for row in cards_result:
                 result["issue_cards"].append(parse_issue_card_simple(row, db))

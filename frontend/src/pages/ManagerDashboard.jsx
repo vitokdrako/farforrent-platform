@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import CorporateHeader from '../components/CorporateHeader';
 import { limitedAuthFetch } from '../utils/requestLimiter';  // ✅ Request limiter
+import { useWarehouse } from '../context/WarehouseContext';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || '';
 
@@ -20,6 +21,7 @@ export default function ManagerDashboard() {
   const [financeData, setFinanceData] = useState({ revenue: 0, deposits: 0 });
   const [cleaningStats, setCleaningStats] = useState({ repair: 0 });
   const navigate = useNavigate();
+  const { active: activeWarehouse, withWh } = useWarehouse();
   
   // Стани для розгортання карток
   const [showAllAwaiting, setShowAllAwaiting] = useState(false);
@@ -220,7 +222,7 @@ export default function ManagerDashboard() {
     
     try {
       const data = await fetchWithRetry(
-        `${BACKEND_URL}/api/manager/dashboard/overview`,
+        withWh(`${BACKEND_URL}/api/manager/dashboard/overview`),
         { signal: abortControllerRef.current.signal }
       );
       
@@ -316,15 +318,17 @@ export default function ManagerDashboard() {
   };
 
   useEffect(() => {
+    // Чекаємо поки WarehouseContext ініціалізується
+    if (!activeWarehouse) return;
     fetchAllData();
     
-    // Cleanup - скасовуємо запит при unmount
+    // Cleanup - скасовуємо запит при unmount або зміні складу
     return () => {
       if (abortControllerRef.current) {
         abortControllerRef.current.abort();
       }
     };
-  }, []);
+  }, [activeWarehouse?.id]);
   
   // Manual reload function - оновити ВСІ дані
   const handleReload = () => {

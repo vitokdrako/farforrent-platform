@@ -9,6 +9,7 @@ import React, { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import CorporateHeader from '../components/CorporateHeader'
 import ImageLightbox from '../components/ImageLightbox'
+import { useWarehouse } from '../context/WarehouseContext'
 import { getImageUrl, FALLBACK_IMAGE, handleImageError } from '../utils/imageHelper'
 import { ChevronLeft, ChevronRight, Printer, Package, AlertTriangle, Phone, Clock, RefreshCw, Plus, CheckSquare, X } from 'lucide-react'
 
@@ -43,6 +44,7 @@ const formatLabel = (offset) => {
 
 export default function PickingListPage() {
   const navigate = useNavigate()
+  const { active: activeWarehouse, withWh } = useWarehouse()
   const [dayOffset, setDayOffset] = useState(0)
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -70,13 +72,16 @@ export default function PickingListPage() {
   const fetchData = async (offset) => {
     setLoading(true)
     try {
-      const res = await authFetch(`${BACKEND_URL}/api/manager/picking-list?date=${addDaysStr(offset)}&include_awaiting=true`)
+      const res = await authFetch(withWh(`${BACKEND_URL}/api/manager/picking-list?date=${addDaysStr(offset)}&include_awaiting=true`))
       if (res.ok) setData(await res.json())
     } catch (e) { console.error(e) }
     finally { setLoading(false) }
   }
 
-  useEffect(() => { fetchData(dayOffset) }, [dayOffset])
+  useEffect(() => {
+    if (!activeWarehouse) return
+    fetchData(dayOffset)
+  }, [dayOffset, activeWarehouse?.id])
 
   const toggleCheck = (cardId, productId) => {
     setChecked(prev => {

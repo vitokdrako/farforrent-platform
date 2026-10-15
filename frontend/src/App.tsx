@@ -45,6 +45,9 @@ import DocumentTemplatesAdmin from './pages/DocumentTemplatesAdmin';
 import UnifiedCalendar from './pages/UnifiedCalendarNew';
 // @ts-ignore
 import ChatPage from './pages/ChatPage';  // ✅ Чат з клієнтами на окремій сторінці
+// @ts-ignore
+import WarehousesPage from './pages/WarehousesPage';
+import { WarehouseProvider } from './context/WarehouseContext';
 
 // Декодування JWT без бібліотеки
 function parseJwt(token: string) {
@@ -129,6 +132,7 @@ function App() {
   
   return (
     <Router basename={process.env.PUBLIC_URL || '/'}>
+      <WarehouseProvider>
       <div className="min-h-screen bg-gray-50 flex flex-col">
         <div className="flex-1">
         <Routes>
@@ -474,6 +478,16 @@ function App() {
             } 
           />
           
+          {/* Склади (CRUD) */}
+          <Route
+            path="/admin/warehouses"
+            element={
+              <ProtectedRoute>
+                <WarehousesPage />
+              </ProtectedRoute>
+            }
+          />
+
           {/* Default redirect */}
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
@@ -482,6 +496,7 @@ function App() {
         {/* Legal Footer - показується на всіх сторінках, крім кабінету на мобільному */}
         <FooterWrapper />
       </div>
+      </WarehouseProvider>
     </Router>
   );
 }
