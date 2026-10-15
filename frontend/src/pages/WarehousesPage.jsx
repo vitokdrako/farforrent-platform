@@ -4,8 +4,9 @@
  * Доступ: super_admin.
  */
 import React, { useState, useEffect } from 'react'
+import { Link } from 'react-router-dom'
 import CorporateHeader from '../components/CorporateHeader'
-import { Plus, Edit3, Archive, X, Package, Users, ShoppingCart } from 'lucide-react'
+import { Plus, Edit3, Archive, X, Package, Users, ShoppingCart, ArrowLeftRight } from 'lucide-react'
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || ''
 
@@ -69,13 +70,22 @@ export default function WarehousesPage() {
       <main className="max-w-6xl mx-auto px-4 py-6">
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-2xl font-bold text-slate-800">Склади та філії</h1>
-          <button
-            onClick={() => setModal('new')}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-sky-600 hover:bg-sky-700 text-white font-semibold shadow-sm"
-            data-testid="new-warehouse-btn"
-          >
-            <Plus className="w-4 h-4" /> Новий склад
-          </button>
+          <div className="flex gap-2">
+            <Link
+              to="/admin/warehouses/transfers"
+              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-semibold shadow-sm"
+              data-testid="open-transfers-btn"
+            >
+              <ArrowLeftRight className="w-4 h-4" /> Переміщення
+            </Link>
+            <button
+              onClick={() => setModal('new')}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-sky-600 hover:bg-sky-700 text-white font-semibold shadow-sm"
+              data-testid="new-warehouse-btn"
+            >
+              <Plus className="w-4 h-4" /> Новий склад
+            </button>
+          </div>
         </div>
 
         {loading ? (

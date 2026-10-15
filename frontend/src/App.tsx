@@ -47,6 +47,8 @@ import UnifiedCalendar from './pages/UnifiedCalendarNew';
 import ChatPage from './pages/ChatPage';  // ✅ Чат з клієнтами на окремій сторінці
 // @ts-ignore
 import WarehousesPage from './pages/WarehousesPage';
+// @ts-ignore
+import WarehouseTransfersPage from './pages/WarehouseTransfersPage';
 import { WarehouseProvider } from './context/WarehouseContext';
 
 // Декодування JWT без бібліотеки
@@ -484,6 +486,16 @@ function App() {
             element={
               <ProtectedRoute>
                 <WarehousesPage />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* Переміщення між складами */}
+          <Route
+            path="/admin/warehouses/transfers"
+            element={
+              <ProtectedRoute>
+                <WarehouseTransfersPage />
               </ProtectedRoute>
             }
           />
