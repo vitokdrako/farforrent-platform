@@ -93,15 +93,17 @@ CREATE TABLE storefront_warehouses (
   PRIMARY KEY (storefront_id, warehouse_id)
 );
 
--- Переклади назв і описів товарів
-CREATE TABLE product_translations (
-  product_id INT NOT NULL,
-  language VARCHAR(5) NOT NULL,
-  name VARCHAR(500),
-  description TEXT,
-  short_description VARCHAR(1000),
-  PRIMARY KEY (product_id, language)
-);
+-- Переклади назв і описів товарів зберігаємо денормалізовано
+-- прямо в `products`, щоб уникнути JOIN і спростити SELECT.
+ALTER TABLE products
+  ADD COLUMN name_en VARCHAR(500) NULL AFTER name,
+  ADD COLUMN name_es VARCHAR(500) NULL AFTER name_en,
+  ADD COLUMN description_en TEXT NULL AFTER description,
+  ADD COLUMN description_es TEXT NULL AFTER description_en;
+
+-- Фронт сам визначає локаль і просить відповідну колонку
+--   GET /api/event/products?lang=en  →  name=name_en, description=description_en
+--   fallback на name (UK) якщо порожньо.
 
 -- Доступ менеджера до складу (M2M з ролями)
 CREATE TABLE user_warehouses (
